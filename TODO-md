@@ -10,3 +10,5 @@ quand on passe d'une fenêtre flottante à ouvrir une nouvelle fenêtre dans un 
 - Quand on est dans une fenêtre flottante, le menu flottant se trouve dans la fenêtre. Il faudrait que le menu flottant
 soit endehors de la fenêtre principale.
 - Quand on est dans une fenêtre flottante, le bouton de fermeture ne fonctione pas.
+- Corrections du nom de l'application qui s'affiche dans le navigateur.
+- Corriger les fautes dans les textes du menu.
