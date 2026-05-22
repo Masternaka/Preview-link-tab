@@ -4,6 +4,7 @@ const statusEl = document.querySelector("#status");
 const saveToast = document.querySelector("#save-toast");
 
 loadSettings();
+initSectionNav();
 
 form.addEventListener("submit", event => {
   event.preventDefault();
@@ -14,13 +15,31 @@ form.addEventListener("change", () => {
   applyThemePresetToFields();
   updateAdvancedGroups();
   updateColorSwatches();
-  showStatus("Modifications non sauvegardees");
+  showStatus("Modifications non sauvegardées");
 });
 
 form.addEventListener("input", () => {
   updateColorSwatches();
-  showStatus("Modifications non sauvegardees");
+  showStatus("Modifications non sauvegardées");
 });
+
+function initSectionNav() {
+  document.querySelectorAll(".section-nav-btn").forEach(btn => {
+    btn.addEventListener("click", () => switchSection(btn.dataset.section));
+  });
+}
+
+function switchSection(sectionId) {
+  document.querySelectorAll(".section-nav-btn").forEach(btn => {
+    const active = btn.dataset.section === sectionId;
+    btn.classList.toggle("section-nav-btn-active", active);
+  });
+  document.querySelectorAll(".form-section").forEach(section => {
+    const active = section.dataset.section === sectionId;
+    section.classList.toggle("form-section-active", active);
+    section.hidden = !active;
+  });
+}
 
 function saveSettings() {
   if (!form.checkValidity()) {
@@ -31,7 +50,7 @@ function saveSettings() {
   chrome.storage.local.set(settings, () => {
     updateAdvancedGroups();
     updateColorSwatches();
-    showStatus("Sauvegarde");
+    showStatus("Sauvegardé");
     showSaveNotification();
   });
 }
@@ -39,7 +58,7 @@ function saveSettings() {
 resetButton.addEventListener("click", () => {
   chrome.storage.local.set(PEEK_DEFAULT_SETTINGS, () => {
     setFormSettings(PEEK_DEFAULT_SETTINGS);
-    showStatus("Parametres remis par defaut");
+    showStatus("Paramètres réinitialisés");
   });
 });
 
@@ -49,16 +68,28 @@ function loadSettings() {
   });
 }
 
+function getRadioValue(name) {
+  const checked = form.querySelector(`input[type="radio"][name="${name}"]:checked`);
+  return checked?.value;
+}
+
+function setRadioValue(name, value) {
+  const input = form.querySelector(`input[type="radio"][name="${name}"][value="${value}"]`);
+  if (input) {
+    input.checked = true;
+  }
+}
+
 function getFormSettings() {
   return cleanPeekSettings({
     openMode: form.elements.openMode.value,
-    size: form.elements.size.value,
+    size: getRadioValue("size"),
     customWidth: form.elements.customWidth.value,
     customHeight: form.elements.customHeight.value,
     position: form.elements.position.value,
     customLeft: form.elements.customLeft.value,
     customTop: form.elements.customTop.value,
-    trigger: form.elements.trigger.value,
+    trigger: getRadioValue("trigger"),
     theme: form.elements.theme.value,
     customAccent: form.elements.customAccent.value,
     customBackground: form.elements.customBackground.value,
@@ -70,8 +101,12 @@ function getFormSettings() {
     customBackdrop: form.elements.customBackdrop.value,
     customBackdropOpacity: form.elements.customBackdropOpacity.value,
     animation: form.elements.animation.value,
-    animationSpeed: form.elements.animationSpeed.value,
+    animationSpeed: getRadioValue("animationSpeed"),
     frameStyle: form.elements.frameStyle.value,
+    panelShadow: form.elements.panelShadow.value,
+    domainListMode: form.elements.domainListMode.value,
+    domainList: form.elements.domainList.value,
+    middleClick: form.elements.middleClick.checked,
     closeOutside: form.elements.closeOutside.checked,
     closeWithEsc: form.elements.closeWithEsc.checked,
     dimBackdrop: form.elements.dimBackdrop.checked,
@@ -85,14 +120,14 @@ function setFormSettings(settings) {
     ...clean,
     ...(PEEK_THEME_PRESETS[clean.theme] || {})
   };
-  form.elements.size.value = clean.size;
+  setRadioValue("size", clean.size);
   form.elements.openMode.value = clean.openMode;
   form.elements.customWidth.value = clean.customWidth;
   form.elements.customHeight.value = clean.customHeight;
   form.elements.position.value = clean.position;
   form.elements.customLeft.value = clean.customLeft;
   form.elements.customTop.value = clean.customTop;
-  form.elements.trigger.value = clean.trigger;
+  setRadioValue("trigger", clean.trigger);
   form.elements.theme.value = clean.theme;
   form.elements.customAccent.value = display.customAccent;
   form.elements.customBackground.value = display.customBackground;
@@ -104,8 +139,12 @@ function setFormSettings(settings) {
   form.elements.customBackdrop.value = display.customBackdrop;
   form.elements.customBackdropOpacity.value = display.customBackdropOpacity;
   form.elements.animation.value = clean.animation;
-  form.elements.animationSpeed.value = clean.animationSpeed;
+  setRadioValue("animationSpeed", clean.animationSpeed);
   form.elements.frameStyle.value = clean.frameStyle;
+  form.elements.panelShadow.value = clean.panelShadow;
+  form.elements.domainListMode.value = clean.domainListMode;
+  form.elements.domainList.value = clean.domainList;
+  form.elements.middleClick.checked = clean.middleClick;
   form.elements.closeOutside.checked = clean.closeOutside;
   form.elements.closeWithEsc.checked = clean.closeWithEsc;
   form.elements.dimBackdrop.checked = clean.dimBackdrop;
@@ -127,9 +166,16 @@ function applyThemePresetToFields() {
 }
 
 function updateAdvancedGroups() {
+  const sizeValue = getRadioValue("size");
   document.querySelectorAll(".advanced-group").forEach(group => {
-    const controller = form.elements[group.dataset.enabledBy];
-    const isEnabled = controller?.value === group.dataset.enabledValue;
+    const controllerName = group.dataset.enabledBy;
+    let controllerValue = null;
+    if (controllerName === "size") {
+      controllerValue = sizeValue;
+    } else if (form.elements[controllerName]) {
+      controllerValue = form.elements[controllerName].value;
+    }
+    const isEnabled = controllerValue === group.dataset.enabledValue;
     group.dataset.active = String(isEnabled);
     group.disabled = !isEnabled;
   });

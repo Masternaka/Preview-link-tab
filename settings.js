@@ -20,10 +20,14 @@ const PEEK_DEFAULT_SETTINGS = {
   animation: "slide",
   animationSpeed: "normal",
   frameStyle: "soft",
+  panelShadow: "default",
   closeOutside: true,
   closeWithEsc: true,
   dimBackdrop: true,
-  closeAfterOpen: false
+  closeAfterOpen: false,
+  domainListMode: "off",
+  domainList: "",
+  middleClick: false
 };
 
 const PEEK_SETTING_OPTIONS = {
@@ -32,10 +36,28 @@ const PEEK_SETTING_OPTIONS = {
   position: ["right", "left", "center", "viewportCenter", "bottom", "custom"],
   trigger: ["alt", "meta", "shift"],
   theme: ["system", "light", "dark", "graphite", "mint", "catppuccin", "gruvbox", "dracula", "custom"],
-  animation: ["slide", "scale", "fade", "none"],
-  animationSpeed: ["quick", "normal", "slow"],
-  frameStyle: ["soft", "crisp", "floating", "minimal"]
+  animation: ["slide", "slideUp", "slideDown", "scale", "fade", "bounce", "blur", "none"],
+  animationSpeed: ["instant", "quick", "normal", "relaxed", "slow", "leisurely"],
+  frameStyle: ["soft", "crisp", "floating", "minimal", "rounded", "glass", "outlined", "elevated", "flat"],
+  panelShadow: ["default", "none", "subtle", "medium", "strong", "dramatic", "glow"],
+  domainListMode: ["off", "blacklist", "whitelist"]
 };
+
+const PEEK_ANIMATION_SPEED_MS = {
+  instant: 70,
+  quick: 110,
+  normal: 180,
+  relaxed: 260,
+  slow: 340,
+  leisurely: 480
+};
+
+function peekAnimationDurationMs(settings) {
+  if (!settings || settings.animation === "none") {
+    return 0;
+  }
+  return PEEK_ANIMATION_SPEED_MS[settings.animationSpeed] ?? PEEK_ANIMATION_SPEED_MS.normal;
+}
 
 const PEEK_THEME_PRESETS = {
   light: {
@@ -130,6 +152,11 @@ function cleanPeekSettings(settings) {
   next.closeWithEsc = Boolean(next.closeWithEsc);
   next.dimBackdrop = Boolean(next.dimBackdrop);
   next.closeAfterOpen = Boolean(next.closeAfterOpen);
+  next.middleClick = Boolean(next.middleClick);
+  next.domainList = typeof next.domainList === "string" ? next.domainList : PEEK_DEFAULT_SETTINGS.domainList;
+  if (!PEEK_SETTING_OPTIONS.domainListMode.includes(next.domainListMode)) {
+    next.domainListMode = PEEK_DEFAULT_SETTINGS.domainListMode;
+  }
   next.customWidth = clampNumber(next.customWidth, 320, 1800, PEEK_DEFAULT_SETTINGS.customWidth);
   next.customHeight = clampNumber(next.customHeight, 240, 1200, PEEK_DEFAULT_SETTINGS.customHeight);
   next.customLeft = clampNumber(next.customLeft, 0, 4000, PEEK_DEFAULT_SETTINGS.customLeft);
@@ -169,4 +196,183 @@ function hexToRgbParts(hex) {
     parseInt(clean.slice(2, 4), 16),
     parseInt(clean.slice(4, 6), 16)
   ];
+}
+
+function parseDomainList(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    return [];
+  }
+  return value
+    .split(/[\n,;]+/)
+    .map(entry => entry.trim().toLowerCase())
+    .filter(Boolean)
+    .map(entry => entry.replace(/^\*\./, ""));
+}
+
+function hostMatchesDomain(host, domain) {
+  if (!host || !domain) {
+    return false;
+  }
+  return host === domain || host.endsWith(`.${domain}`);
+}
+
+function peekGetDisplayBounds(sourceWindow, displays) {
+  if (!displays?.length) {
+    return { left: 0, top: 0, width: 1280, height: 900 };
+  }
+
+  const center = {
+    x: (sourceWindow?.left ?? 0) + Math.round((sourceWindow?.width ?? 1280) / 2),
+    y: (sourceWindow?.top ?? 0) + Math.round((sourceWindow?.height ?? 900) / 2)
+  };
+  const display =
+    displays.find(item => {
+      const bounds = item.workArea || item.bounds;
+      return (
+        center.x >= bounds.left &&
+        center.x <= bounds.left + bounds.width &&
+        center.y >= bounds.top &&
+        center.y <= bounds.top + bounds.height
+      );
+    }) || displays[0];
+  const bounds = display.workArea || display.bounds;
+  return {
+    left: bounds.left,
+    top: bounds.top,
+    width: bounds.width,
+    height: bounds.height
+  };
+}
+
+/** Screen coordinates for overlay/compact panel (same rules as background getPosition). */
+const PEEK_OVERLAY_CSS_ANCHORS = new Set(["right", "left", "bottom"]);
+
+function peekOverlayUsesCssAnchor(position) {
+  return PEEK_OVERLAY_CSS_ANCHORS.has(position);
+}
+
+/** Position de repli dans le viewport de l'onglet (aperçu intégré). */
+function peekOverlayViewportPosition(settings, panelWidth, panelHeight, viewportWidth, viewportHeight) {
+  const vw = Math.max(320, viewportWidth ?? 1280);
+  const vh = Math.max(240, viewportHeight ?? 900);
+  const position = settings?.position || "right";
+
+  if (position === "viewportCenter" || position === "center") {
+    return {
+      left: Math.round((vw - panelWidth) / 2),
+      top: Math.round((vh - panelHeight) / 2)
+    };
+  }
+
+  if (position === "left") {
+    return { left: 32, top: 32 };
+  }
+
+  if (position === "bottom") {
+    return {
+      left: Math.round((vw - panelWidth) / 2),
+      top: Math.max(24, vh - panelHeight - 24)
+    };
+  }
+
+  if (position === "custom") {
+    return {
+      left: clampNumber(settings.customLeft, 0, Math.max(0, vw - panelWidth), 80),
+      top: clampNumber(settings.customTop, 0, Math.max(0, vh - panelHeight), 80)
+    };
+  }
+
+  return {
+    left: Math.max(24, vw - panelWidth - 32),
+    top: 32
+  };
+}
+
+/** Estimated panel size before layout (matches overlay CSS min() rules). */
+function peekEstimateOverlayPanelSize(settings, viewportWidth, viewportHeight) {
+  const vw = Math.max(320, viewportWidth ?? 1280);
+  const vh = Math.max(240, viewportHeight ?? 900);
+  const sizeName = settings?.size || "medium";
+  let width = 960;
+  let height = 540;
+
+  if (sizeName === "small") {
+    width = 640;
+    height = 360;
+  } else if (sizeName === "large") {
+    width = 1280;
+    height = 720;
+  } else if (sizeName === "custom") {
+    width = clampNumber(settings.customWidth, 320, 1800, 920);
+    height = clampNumber(settings.customHeight, 240, 1200, 760);
+  }
+
+  if (sizeName === "full") {
+    return { width: vw, height: vh };
+  }
+
+  return {
+    width: Math.min(width, vw - (sizeName === "large" ? 40 : 64)),
+    height: Math.min(height, vh - 128)
+  };
+}
+
+function peekPanelScreenOrigin(settings, panelWidth, panelHeight, screenBase, browserWindow) {
+  const positionName = settings.position;
+  const screen = screenBase || { left: 0, top: 0, width: 1280, height: 900 };
+  const browser = browserWindow || { left: 0, top: 0, width: 1280, height: 900 };
+
+  if (positionName === "viewportCenter") {
+    return {
+      left: browser.left + Math.round((browser.width - panelWidth) / 2),
+      top: browser.top + Math.round((browser.height - panelHeight) / 2)
+    };
+  }
+
+  if (positionName === "left") {
+    return { left: screen.left + 32, top: screen.top + 32 };
+  }
+
+  if (positionName === "center") {
+    return {
+      left: screen.left + Math.round((screen.width - panelWidth) / 2),
+      top: screen.top + Math.round((screen.height - panelHeight) / 2)
+    };
+  }
+
+  if (positionName === "bottom") {
+    return {
+      left: screen.left + Math.round((screen.width - panelWidth) / 2),
+      top: screen.top + Math.max(24, screen.height - panelHeight - 48)
+    };
+  }
+
+  if (positionName === "custom") {
+    return {
+      left: screen.left + clampNumber(settings.customLeft, 0, 4000, 80),
+      top: screen.top + clampNumber(settings.customTop, 0, 3000, 80)
+    };
+  }
+
+  return {
+    left: screen.left + Math.max(24, screen.width - panelWidth - 32),
+    top: screen.top + 32
+  };
+}
+
+function isPeekAllowedForHost(hostname, settings) {
+  const host = (hostname || "").toLowerCase();
+  const mode = settings?.domainListMode || "off";
+  const list = parseDomainList(settings?.domainList);
+  if (mode === "off" || list.length === 0) {
+    return true;
+  }
+  const matched = list.some(domain => hostMatchesDomain(host, domain));
+  if (mode === "blacklist") {
+    return !matched;
+  }
+  if (mode === "whitelist") {
+    return matched;
+  }
+  return true;
 }

@@ -1,32 +1,106 @@
+importScripts("settings.js");
+
 const SIZE_MAP = {
   small: { width: 640, height: 360 },
   medium: { width: 960, height: 540 },
-  large: { width: 1280, height: 720 },
-  full: { width: 1280, height: 720 }
+  large: { width: 1280, height: 720 }
 };
 
 const compactWindowIds = new Set();
 const compactTabIds = new Set();
+const CONTEXT_MENU_ID = "peek-preview-link";
+
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: CONTEXT_MENU_ID,
+      title: "Preview with Preview link tab",
+      contexts: ["link"]
+    });
+  });
+});
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId !== CONTEXT_MENU_ID || !info.linkUrl || !tab?.id) {
+    return;
+  }
+  chrome.tabs.sendMessage(tab.id, {
+    type: "PREVIEW_URL",
+    url: info.linkUrl
+  });
+});
+
+chrome.commands.onCommand.addListener(command => {
+  if (command !== "preview-link") {
+    return;
+  }
+  chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+    const tabId = tabs[0]?.id;
+    if (!tabId) {
+      return;
+    }
+    chrome.tabs.sendMessage(tabId, { type: "PREVIEW_HOVERED_LINK" }).catch(() => {});
+  });
+});
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "CLOSE_COMPACT_WINDOW") {
-    closeCompactWindow(sender)
+    closeCompactWindow(message, sender)
       .then(ok => sendResponse({ ok }))
       .catch(() => sendResponse({ ok: false }));
     return true;
   }
 
-  if (message?.type !== "OPEN_COMPACT_WINDOW" || !isHttpUrl(message.url)) {
-    sendResponse({ ok: false });
-    return;
+  if (message?.type === "GET_OVERLAY_PLACEMENT") {
+    getOverlayPlacement(message, sender)
+      .then(result => sendResponse(result))
+      .catch(() => sendResponse({ ok: false }));
+    return true;
   }
 
-  openCompactWindow(message, sender)
-    .then(() => sendResponse({ ok: true }))
-    .catch(() => sendResponse({ ok: false }));
+  if (message?.type === "OPEN_COMPACT_WINDOW") {
+    if (!isHttpUrl(message.url)) {
+      sendResponse({ ok: false });
+      return true;
+    }
+    openCompactWindow(message, sender)
+      .then(result => sendResponse({ ok: true, ...result }))
+      .catch(() => sendResponse({ ok: false }));
+    return true;
+  }
 
-  return true;
+  return false;
 });
+
+async function getOverlayPlacement(message, sender) {
+  const windowId = sender.tab?.windowId;
+  if (!windowId || !message?.settings) {
+    return { ok: false };
+  }
+
+  const win = await chrome.windows.get(windowId);
+  const displays = chrome.system?.display?.getInfo
+    ? await chrome.system.display.getInfo()
+    : [];
+  const screenBase = peekGetDisplayBounds(win, displays);
+  const panelWidth = clampNumber(message.panelWidth, 200, 4000, 960);
+  const panelHeight = clampNumber(message.panelHeight, 160, 3000, 540);
+  const origin = peekPanelScreenOrigin(
+    message.settings,
+    panelWidth,
+    panelHeight,
+    screenBase,
+    win
+  );
+
+  return {
+    ok: true,
+    screenLeft: origin.left,
+    screenTop: origin.top,
+    panelWidth,
+    panelHeight
+  };
+}
 
 async function openCompactWindow(message, sender) {
   const sourceWindow = sender.tab?.windowId
@@ -45,18 +119,20 @@ async function openCompactWindow(message, sender) {
     left: position.left,
     top: position.top
   });
-  if (createdWindow?.id) {
-    compactWindowIds.add(createdWindow.id);
+  const windowId = createdWindow?.id;
+  if (windowId) {
+    compactWindowIds.add(windowId);
   }
   const tabId = createdWindow?.tabs?.[0]?.id;
   if (tabId) {
     compactTabIds.add(tabId);
-    enableCompactMenu(tabId);
+    enableCompactMenu(tabId, windowId);
   }
+  return { windowId, tabId };
 }
 
-async function closeCompactWindow(sender) {
-  const windowId = sender.tab?.windowId;
+async function closeCompactWindow(message, sender) {
+  const windowId = message?.windowId ?? sender.tab?.windowId;
   if (!windowId || !compactWindowIds.has(windowId)) {
     return false;
   }
@@ -69,9 +145,9 @@ chrome.windows.onRemoved.addListener(windowId => {
   compactWindowIds.delete(windowId);
 });
 
-chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === "complete" && compactTabIds.has(tabId)) {
-    enableCompactMenu(tabId);
+    enableCompactMenu(tabId, tab.windowId);
   }
 });
 
@@ -79,8 +155,13 @@ chrome.tabs.onRemoved.addListener(tabId => {
   compactTabIds.delete(tabId);
 });
 
-function enableCompactMenu(tabId) {
-  chrome.tabs.sendMessage(tabId, { type: "ENABLE_COMPACT_MENU" }).catch(() => {});
+function enableCompactMenu(tabId, windowId) {
+  chrome.tabs
+    .sendMessage(tabId, {
+      type: "ENABLE_COMPACT_MENU",
+      windowId: windowId ?? null
+    })
+    .catch(() => {});
 }
 
 function isHttpUrl(value) {
@@ -95,9 +176,17 @@ function isHttpUrl(value) {
 function clampSize(settings, sourceWindow, display) {
   const fallback = SIZE_MAP.medium;
   const sizeName = settings?.size;
-  const size = SIZE_MAP[sizeName] || fallback;
   const availableWidth = Math.max(520, (display?.width ?? sourceWindow?.width ?? 1280) - 48);
   const availableHeight = Math.max(420, (display?.height ?? sourceWindow?.height ?? 900) - 72);
+
+  if (sizeName === "full" && display) {
+    return {
+      width: Math.min(display.width - 24, availableWidth),
+      height: Math.min(display.height - 48, availableHeight)
+    };
+  }
+
+  const size = SIZE_MAP[sizeName] || fallback;
   if (sizeName === "custom") {
     return {
       width: Math.min(clampNumber(settings.customWidth, 320, 1800, fallback.width), availableWidth),
@@ -111,7 +200,6 @@ function clampSize(settings, sourceWindow, display) {
 }
 
 function getPosition(settings, size, sourceWindow, display) {
-  const positionName = settings?.position;
   const browserBase = {
     left: sourceWindow?.left ?? 0,
     top: sourceWindow?.top ?? 0,
@@ -125,45 +213,7 @@ function getPosition(settings, size, sourceWindow, display) {
     height: 900
   };
 
-  if (positionName === "left") {
-    return {
-      left: screenBase.left + 32,
-      top: screenBase.top + 32
-    };
-  }
-
-  if (positionName === "center") {
-    return {
-      left: screenBase.left + Math.round((screenBase.width - size.width) / 2),
-      top: screenBase.top + Math.round((screenBase.height - size.height) / 2)
-    };
-  }
-
-  if (positionName === "viewportCenter") {
-    return {
-      left: browserBase.left + Math.round((browserBase.width - size.width) / 2),
-      top: browserBase.top + Math.round((browserBase.height - size.height) / 2)
-    };
-  }
-
-  if (positionName === "bottom") {
-    return {
-      left: screenBase.left + Math.round((screenBase.width - size.width) / 2),
-      top: screenBase.top + Math.max(24, screenBase.height - size.height - 48)
-    };
-  }
-
-  if (positionName === "custom") {
-    return {
-      left: screenBase.left + clampNumber(settings.customLeft, 0, 4000, 80),
-      top: screenBase.top + clampNumber(settings.customTop, 0, 3000, 80)
-    };
-  }
-
-  return {
-    left: screenBase.left + Math.max(24, screenBase.width - size.width - 32),
-    top: screenBase.top + 32
-  };
+  return peekPanelScreenOrigin(settings, size.width, size.height, screenBase, browserBase);
 }
 
 async function getDisplayForWindow(sourceWindow) {
@@ -176,27 +226,7 @@ async function getDisplayForWindow(sourceWindow) {
     return null;
   }
 
-  const center = {
-    x: (sourceWindow?.left ?? 0) + Math.round((sourceWindow?.width ?? 1280) / 2),
-    y: (sourceWindow?.top ?? 0) + Math.round((sourceWindow?.height ?? 900) / 2)
-  };
-  const display = displays.find(item => {
-    const bounds = item.workArea || item.bounds;
-    return (
-      center.x >= bounds.left &&
-      center.x <= bounds.left + bounds.width &&
-      center.y >= bounds.top &&
-      center.y <= bounds.top + bounds.height
-    );
-  }) || displays[0];
-
-  const bounds = display.workArea || display.bounds;
-  return {
-    left: bounds.left,
-    top: bounds.top,
-    width: bounds.width,
-    height: bounds.height
-  };
+  return peekGetDisplayBounds(sourceWindow, displays);
 }
 
 function clampNumber(value, min, max, fallback) {

@@ -3,222 +3,288 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Peek Preview</title>
+    <title>Preview link tab</title>
     <link rel="stylesheet" href="popup.css">
   </head>
   <body>
     <main class="popup-shell">
       <header class="popup-header">
-        <div>
-          <h1>Peek Preview</h1>
-          <p>Parametres de l'extension</p>
+        <div class="brand">
+          <img class="brand-icon" src="Preview link tab logo.png" width="40" height="40" alt="">
+          <div>
+            <h1>Preview link tab</h1>
+            <p>Extension settings</p>
+          </div>
         </div>
         <div class="header-actions">
-          <button id="reset" type="button">Reset</button>
+          <button id="reset" type="button">Réinitialiser</button>
           <button id="save" class="primary-button" type="submit" form="settings-form">Sauvegarder</button>
         </div>
       </header>
 
+      <nav class="section-nav" aria-label="Sections">
+        <button type="button" class="section-nav-btn section-nav-btn-active" data-section="general">Général</button>
+        <button type="button" class="section-nav-btn" data-section="appearance">Apparence</button>
+        <button type="button" class="section-nav-btn" data-section="behavior">Comportement</button>
+      </nav>
+
       <form id="settings-form" class="settings-form">
-        <label>
-          <span>Mode d'ouverture</span>
-          <select name="openMode">
-            <option value="overlay">Apercu integre</option>
-            <option value="compact">Fenetre compacte</option>
-          </select>
-        </label>
+        <section class="form-section form-section-active" data-section="general">
+          <h2 class="section-title">Ouverture</h2>
+          <label>
+            <span>Mode d'ouverture</span>
+            <select name="openMode">
+              <option value="overlay">Aperçu intégré</option>
+              <option value="compact">Fenêtre compacte</option>
+            </select>
+          </label>
 
-        <label>
-          <span>Grandeur</span>
-          <select name="size">
-            <option value="small">Petite</option>
-            <option value="medium">Moyenne</option>
-            <option value="large">Grande</option>
-            <option value="full">Plein ecran</option>
-            <option value="custom">Personnalisee</option>
-          </select>
-        </label>
+          <fieldset class="segmented-field">
+            <legend>Taille</legend>
+            <div class="segmented" role="radiogroup" aria-label="Taille">
+              <label><input type="radio" name="size" value="small"><span>Petite</span></label>
+              <label><input type="radio" name="size" value="medium"><span>Moyenne</span></label>
+              <label><input type="radio" name="size" value="large"><span>Grande</span></label>
+              <label><input type="radio" name="size" value="full"><span>Plein écran</span></label>
+              <label><input type="radio" name="size" value="custom"><span>Perso.</span></label>
+            </div>
+          </fieldset>
 
-        <fieldset class="advanced-group" data-enabled-by="size" data-enabled-value="custom">
-          <legend>Dimensions personnalisees</legend>
-          <label>
-            <span>Largeur px</span>
-            <input type="number" name="customWidth" min="320" max="1800" step="10">
-          </label>
-          <label>
-            <span>Hauteur px</span>
-            <input type="number" name="customHeight" min="240" max="1200" step="10">
-          </label>
-        </fieldset>
+          <fieldset class="advanced-group" data-enabled-by="size" data-enabled-value="custom">
+            <legend>Dimensions personnalisées</legend>
+            <label>
+              <span>Largeur (px)</span>
+              <input type="number" name="customWidth" min="320" max="1800" step="10">
+            </label>
+            <label>
+              <span>Hauteur (px)</span>
+              <input type="number" name="customHeight" min="240" max="1200" step="10">
+            </label>
+          </fieldset>
 
-        <label>
-          <span>Position</span>
-          <select name="position">
-            <option value="right">Droite</option>
-            <option value="left">Gauche</option>
-            <option value="center">Centre</option>
-            <option value="viewportCenter">Centre du navigateur</option>
-            <option value="bottom">Bas</option>
-            <option value="custom">Personnalisee</option>
-          </select>
-        </label>
+          <label>
+            <span>Position</span>
+            <select name="position">
+              <option value="right">Droite</option>
+              <option value="left">Gauche</option>
+              <option value="center">Centre écran</option>
+              <option value="viewportCenter">Centre du navigateur</option>
+              <option value="bottom">Bas</option>
+              <option value="custom">Personnalisée</option>
+            </select>
+          </label>
 
-        <fieldset class="advanced-group" data-enabled-by="position" data-enabled-value="custom">
-          <legend>Position personnalisee</legend>
-          <label>
-            <span>X px</span>
-            <input type="number" name="customLeft" min="0" max="4000" step="10">
-          </label>
-          <label>
-            <span>Y px</span>
-            <input type="number" name="customTop" min="0" max="3000" step="10">
-          </label>
-        </fieldset>
+          <fieldset class="advanced-group" data-enabled-by="position" data-enabled-value="custom">
+            <legend>Position personnalisée</legend>
+            <label>
+              <span>X (px)</span>
+              <input type="number" name="customLeft" min="0" max="4000" step="10">
+            </label>
+            <label>
+              <span>Y (px)</span>
+              <input type="number" name="customTop" min="0" max="3000" step="10">
+            </label>
+          </fieldset>
+        </section>
 
-        <label>
-          <span>Raccourci</span>
-          <select name="trigger">
-            <option value="alt">Alt / Option + clic</option>
-            <option value="meta">Command / Ctrl + clic</option>
-            <option value="shift">Shift + clic</option>
-          </select>
-        </label>
+        <section class="form-section" data-section="appearance" hidden>
+          <h2 class="section-title">Apparence</h2>
+          <label>
+            <span>Thème</span>
+            <select name="theme">
+              <option value="system">Système</option>
+              <option value="light">Clair</option>
+              <option value="dark">Sombre</option>
+              <option value="graphite">Graphite</option>
+              <option value="mint">Menthe</option>
+              <option value="catppuccin">Catppuccin</option>
+              <option value="gruvbox">Gruvbox</option>
+              <option value="dracula">Dracula</option>
+              <option value="custom">Personnalisé</option>
+            </select>
+          </label>
 
-        <label>
-          <span>Theme</span>
-          <select name="theme">
-            <option value="system">Systeme</option>
-            <option value="light">Clair</option>
-            <option value="dark">Sombre</option>
-            <option value="graphite">Graphite</option>
-            <option value="mint">Menthe</option>
-            <option value="catppuccin">Catppuccin</option>
-            <option value="gruvbox">Gruvbox</option>
-            <option value="dracula">Dracula</option>
-            <option value="custom">Personnalise</option>
-          </select>
-        </label>
+          <fieldset class="advanced-group color-group" data-enabled-by="theme" data-enabled-value="custom">
+            <legend>Thème personnalisé</legend>
+            <label>
+              <span>Accent</span>
+              <span class="color-input">
+                <span class="color-swatch" data-color-for="customAccent"></span>
+                <input type="text" name="customAccent" pattern="#[0-9a-fA-F]{6}" placeholder="#2563eb">
+              </span>
+            </label>
+            <label>
+              <span>Fond</span>
+              <span class="color-input">
+                <span class="color-swatch" data-color-for="customBackground"></span>
+                <input type="text" name="customBackground" pattern="#[0-9a-fA-F]{6}" placeholder="#f8fafc">
+              </span>
+            </label>
+            <label>
+              <span>En-tête</span>
+              <span class="color-input">
+                <span class="color-swatch" data-color-for="customHeader"></span>
+                <input type="text" name="customHeader" pattern="#[0-9a-fA-F]{6}" placeholder="#ffffff">
+              </span>
+            </label>
+            <label>
+              <span>Page</span>
+              <span class="color-input">
+                <span class="color-swatch" data-color-for="customFrame"></span>
+                <input type="text" name="customFrame" pattern="#[0-9a-fA-F]{6}" placeholder="#ffffff">
+              </span>
+            </label>
+            <label>
+              <span>Texte</span>
+              <span class="color-input">
+                <span class="color-swatch" data-color-for="customText"></span>
+                <input type="text" name="customText" pattern="#[0-9a-fA-F]{6}" placeholder="#0f172a">
+              </span>
+            </label>
+            <label>
+              <span>Texte secondaire</span>
+              <span class="color-input">
+                <span class="color-swatch" data-color-for="customMuted"></span>
+                <input type="text" name="customMuted" pattern="#[0-9a-fA-F]{6}" placeholder="#64748b">
+              </span>
+            </label>
+            <label>
+              <span>Bordure</span>
+              <span class="color-input">
+                <span class="color-swatch" data-color-for="customBorder"></span>
+                <input type="text" name="customBorder" pattern="#[0-9a-fA-F]{6}" placeholder="#cbd5e1">
+              </span>
+            </label>
+            <label>
+              <span>Arrière-plan</span>
+              <span class="color-input">
+                <span class="color-swatch" data-color-for="customBackdrop"></span>
+                <input type="text" name="customBackdrop" pattern="#[0-9a-fA-F]{6}" placeholder="#111827">
+              </span>
+            </label>
+            <label class="wide-field">
+              <span>Opacité de l'arrière-plan (%)</span>
+              <input type="number" name="customBackdropOpacity" min="0" max="85" step="5">
+            </label>
+          </fieldset>
 
-        <fieldset class="advanced-group color-group" data-enabled-by="theme" data-enabled-value="custom">
-          <legend>Theme personnalise</legend>
-          <label>
-            <span>Accent</span>
-            <span class="color-input">
-              <span class="color-swatch" data-color-for="customAccent"></span>
-              <input type="text" name="customAccent" pattern="#[0-9a-fA-F]{6}" placeholder="#2563eb">
-            </span>
-          </label>
-          <label>
-            <span>Fond</span>
-            <span class="color-input">
-              <span class="color-swatch" data-color-for="customBackground"></span>
-              <input type="text" name="customBackground" pattern="#[0-9a-fA-F]{6}" placeholder="#f8fafc">
-            </span>
-          </label>
-          <label>
-            <span>Entete</span>
-            <span class="color-input">
-              <span class="color-swatch" data-color-for="customHeader"></span>
-              <input type="text" name="customHeader" pattern="#[0-9a-fA-F]{6}" placeholder="#ffffff">
-            </span>
-          </label>
-          <label>
-            <span>Page</span>
-            <span class="color-input">
-              <span class="color-swatch" data-color-for="customFrame"></span>
-              <input type="text" name="customFrame" pattern="#[0-9a-fA-F]{6}" placeholder="#ffffff">
-            </span>
-          </label>
-          <label>
-            <span>Texte</span>
-            <span class="color-input">
-              <span class="color-swatch" data-color-for="customText"></span>
-              <input type="text" name="customText" pattern="#[0-9a-fA-F]{6}" placeholder="#0f172a">
-            </span>
-          </label>
-          <label>
-            <span>Texte secondaire</span>
-            <span class="color-input">
-              <span class="color-swatch" data-color-for="customMuted"></span>
-              <input type="text" name="customMuted" pattern="#[0-9a-fA-F]{6}" placeholder="#64748b">
-            </span>
-          </label>
-          <label>
-            <span>Bordure</span>
-            <span class="color-input">
-              <span class="color-swatch" data-color-for="customBorder"></span>
-              <input type="text" name="customBorder" pattern="#[0-9a-fA-F]{6}" placeholder="#cbd5e1">
-            </span>
-          </label>
-          <label>
-            <span>Backdrop</span>
-            <span class="color-input">
-              <span class="color-swatch" data-color-for="customBackdrop"></span>
-              <input type="text" name="customBackdrop" pattern="#[0-9a-fA-F]{6}" placeholder="#111827">
-            </span>
-          </label>
           <label class="wide-field">
-            <span>Opacite backdrop</span>
-            <input type="number" name="customBackdropOpacity" min="0" max="85" step="5">
+            <span>Animation</span>
+            <select name="animation">
+              <option value="slide">Glissement</option>
+              <option value="slideUp">Montée</option>
+              <option value="slideDown">Descente</option>
+              <option value="scale">Zoom</option>
+              <option value="fade">Fondu</option>
+              <option value="bounce">Rebond</option>
+              <option value="blur">Flou</option>
+              <option value="none">Aucune</option>
+            </select>
           </label>
-        </fieldset>
 
-        <label>
-          <span>Animation</span>
-          <select name="animation">
-            <option value="slide">Glissement</option>
-            <option value="scale">Zoom</option>
-            <option value="fade">Fondu</option>
-            <option value="none">Aucune</option>
-          </select>
-        </label>
+          <fieldset class="segmented-field">
+            <legend>Vitesse</legend>
+            <div class="segmented segmented-wrap" role="radiogroup" aria-label="Vitesse">
+              <label><input type="radio" name="animationSpeed" value="instant"><span>Instant.</span></label>
+              <label><input type="radio" name="animationSpeed" value="quick"><span>Rapide</span></label>
+              <label><input type="radio" name="animationSpeed" value="normal"><span>Normale</span></label>
+              <label><input type="radio" name="animationSpeed" value="relaxed"><span>Détendue</span></label>
+              <label><input type="radio" name="animationSpeed" value="slow"><span>Lente</span></label>
+              <label><input type="radio" name="animationSpeed" value="leisurely"><span>Très lente</span></label>
+            </div>
+          </fieldset>
 
-        <label>
-          <span>Vitesse</span>
-          <select name="animationSpeed">
-            <option value="quick">Rapide</option>
-            <option value="normal">Normale</option>
-            <option value="slow">Lente</option>
-          </select>
-        </label>
+          <label>
+            <span>Cadre</span>
+            <select name="frameStyle">
+              <option value="soft">Doux</option>
+              <option value="rounded">Arrondi</option>
+              <option value="crisp">Net</option>
+              <option value="floating">Flottant</option>
+              <option value="glass">Verre dépoli</option>
+              <option value="outlined">Contour accent</option>
+              <option value="elevated">Élevé</option>
+              <option value="minimal">Minimal</option>
+              <option value="flat">Plat (sans relief)</option>
+            </select>
+          </label>
 
-        <label>
-          <span>Cadre</span>
-          <select name="frameStyle">
-            <option value="soft">Doux</option>
-            <option value="crisp">Net</option>
-            <option value="floating">Flottant</option>
-            <option value="minimal">Minimal</option>
-          </select>
-        </label>
+          <label>
+            <span>Ombre du panneau</span>
+            <select name="panelShadow">
+              <option value="default">Selon le thème</option>
+              <option value="none">Aucune</option>
+              <option value="subtle">Légère</option>
+              <option value="medium">Moyenne</option>
+              <option value="strong">Forte</option>
+              <option value="dramatic">Dramatique</option>
+              <option value="glow">Lueur (couleur accent)</option>
+            </select>
+          </label>
+        </section>
 
-        <label class="check-row">
-          <input type="checkbox" name="closeOutside">
-          <span class="switch" aria-hidden="true"></span>
-          <span>Fermer au clic exterieur</span>
-        </label>
+        <section class="form-section" data-section="behavior" hidden>
+          <h2 class="section-title">Comportement</h2>
 
-        <label class="check-row">
-          <input type="checkbox" name="closeWithEsc">
-          <span class="switch" aria-hidden="true"></span>
-          <span>Fermer avec Esc</span>
-        </label>
+          <fieldset class="segmented-field">
+            <legend>Raccourci + clic</legend>
+            <div class="segmented" role="radiogroup" aria-label="Raccourci">
+              <label><input type="radio" name="trigger" value="alt"><span>Alt</span></label>
+              <label><input type="radio" name="trigger" value="meta"><span>Ctrl/Cmd</span></label>
+              <label><input type="radio" name="trigger" value="shift"><span>Maj</span></label>
+            </div>
+          </fieldset>
 
-        <label class="check-row">
-          <input type="checkbox" name="dimBackdrop">
-          <span class="switch" aria-hidden="true"></span>
-          <span>Assombrir la page</span>
-        </label>
+          <p class="hint">Raccourci clavier global : <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> sur le lien survolé.</p>
 
-        <label class="check-row">
-          <input type="checkbox" name="closeAfterOpen">
-          <span class="switch" aria-hidden="true"></span>
-          <span>Fermer apres ouverture externe</span>
-        </label>
+          <label class="check-row">
+            <input type="checkbox" name="middleClick">
+            <span class="switch" aria-hidden="true"></span>
+            <span>Aperçu au clic molette sur un lien</span>
+          </label>
+
+          <label>
+            <span>Liste de domaines</span>
+            <select name="domainListMode">
+              <option value="off">Désactivée</option>
+              <option value="blacklist">Liste noire</option>
+              <option value="whitelist">Liste blanche</option>
+            </select>
+          </label>
+
+          <label class="wide-field">
+            <span>Domaines (un par ligne ou séparés par des virgules)</span>
+            <textarea name="domainList" rows="3" placeholder="exemple.com, banque.fr"></textarea>
+          </label>
+
+          <label class="check-row">
+            <input type="checkbox" name="closeOutside">
+            <span class="switch" aria-hidden="true"></span>
+            <span>Fermer au clic extérieur</span>
+          </label>
+
+          <label class="check-row">
+            <input type="checkbox" name="closeWithEsc">
+            <span class="switch" aria-hidden="true"></span>
+            <span>Fermer avec Échap</span>
+          </label>
+
+          <label class="check-row">
+            <input type="checkbox" name="dimBackdrop">
+            <span class="switch" aria-hidden="true"></span>
+            <span>Assombrir la page</span>
+          </label>
+
+          <label class="check-row">
+            <input type="checkbox" name="closeAfterOpen">
+            <span class="switch" aria-hidden="true"></span>
+            <span>Fermer après ouverture externe</span>
+          </label>
+        </section>
       </form>
 
       <p id="status" class="status" role="status"></p>
-      <div id="save-toast" class="save-toast" role="status" aria-live="polite">Parametres sauvegardes</div>
+      <div id="save-toast" class="save-toast" role="status" aria-live="polite">Paramètres sauvegardés</div>
     </main>
     <script src="settings.js"></script>
     <script src="popup.js"></script>

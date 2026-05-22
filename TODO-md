@@ -1,14 +1,13 @@
-- Liste des fonctionnalités à implémenter:
+# Preview link tab — suivi
 
-- Ajouter des animations pour les fenêtres flottantes, comme des transitions de fondu ou de glissement
-quand on passe d'une fenêtre flottante à ouvrir une nouvelle fenêtre dans un onglet.
+## Branding
 
+- Nom : **Preview link tab**
+- Logo source : `Preview link tab logo.png`
+- Icônes Chrome : `icons/icon16.png`, `icon48.png`, `icon128.png` (générées depuis le logo)
 
+## Idées futures
 
-- Liste des corrections à implementer:
-
-- Quand on est dans une fenêtre flottante, le menu flottant se trouve dans la fenêtre. Il faudrait que le menu flottant
-soit endehors de la fenêtre principale.
-- Quand on est dans une fenêtre flottante, le bouton de fermeture ne fonctione pas.
-- Corrections du nom de l'application qui s'affiche dans le navigateur.
-- Corriger les fautes dans les textes du menu.
+- Historique des aperçus, side panel Chrome
+- Redimensionnement du panneau à la souris
+- `chrome.storage.sync`
