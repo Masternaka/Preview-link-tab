@@ -1,0 +1,12 @@
+- Liste des fonctionnalités à implémenter:
+
+- Ajouter des animations pour les fenêtres flottantes, comme des transitions de fondu ou de glissement
+quand on passe d'une fenêtre flottante à ouvrir une nouvelle fenêtre dans un onglet.
+
+
+
+- Liste des corrections à implementer:
+
+- Quand on est dans une fenêtre flottante, le menu flottant se trouve dans la fenêtre. Il faudrait que le menu flottant
+soit endehors de la fenêtre principale.
+- Quand on est dans une fenêtre flottante, le bouton de fermeture ne fonctione pas.

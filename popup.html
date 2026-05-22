@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Peek Preview</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="popup-shell">
+      <header class="popup-header">
+        <div>
+          <h1>Peek Preview</h1>
+          <p>Parametres de l'extension</p>
+        </div>
+        <div class="header-actions">
+          <button id="reset" type="button">Reset</button>
+          <button id="save" class="primary-button" type="submit" form="settings-form">Sauvegarder</button>
+        </div>
+      </header>
+
+      <form id="settings-form" class="settings-form">
+        <label>
+          <span>Mode d'ouverture</span>
+          <select name="openMode">
+            <option value="overlay">Apercu integre</option>
+            <option value="compact">Fenetre compacte</option>
+          </select>
+        </label>
+
+        <label>
+          <span>Grandeur</span>
+          <select name="size">
+            <option value="small">Petite</option>
+            <option value="medium">Moyenne</option>
+            <option value="large">Grande</option>
+            <option value="full">Plein ecran</option>
+            <option value="custom">Personnalisee</option>
+          </select>
+        </label>
+
+        <fieldset class="advanced-group" data-enabled-by="size" data-enabled-value="custom">
+          <legend>Dimensions personnalisees</legend>
+          <label>
+            <span>Largeur px</span>
+            <input type="number" name="customWidth" min="320" max="1800" step="10">
+          </label>
+          <label>
+            <span>Hauteur px</span>
+            <input type="number" name="customHeight" min="240" max="1200" step="10">
+          </label>
+        </fieldset>
+
+        <label>
+          <span>Position</span>
+          <select name="position">
+            <option value="right">Droite</option>
+            <option value="left">Gauche</option>
+            <option value="center">Centre</option>
+            <option value="viewportCenter">Centre du navigateur</option>
+            <option value="bottom">Bas</option>
+            <option value="custom">Personnalisee</option>
+          </select>
+        </label>
+
+        <fieldset class="advanced-group" data-enabled-by="position" data-enabled-value="custom">
+          <legend>Position personnalisee</legend>
+          <label>
+            <span>X px</span>
+            <input type="number" name="customLeft" min="0" max="4000" step="10">
+          </label>
+          <label>
+            <span>Y px</span>
+            <input type="number" name="customTop" min="0" max="3000" step="10">
+          </label>
+        </fieldset>
+
+        <label>
+          <span>Raccourci</span>
+          <select name="trigger">
+            <option value="alt">Alt / Option + clic</option>
+            <option value="meta">Command / Ctrl + clic</option>
+            <option value="shift">Shift + clic</option>
+          </select>
+        </label>
+
+        <label>
+          <span>Theme</span>
+          <select name="theme">
+            <option value="system">Systeme</option>
+            <option value="light">Clair</option>
+            <option value="dark">Sombre</option>
+            <option value="graphite">Graphite</option>
+            <option value="mint">Menthe</option>
+            <option value="catppuccin">Catppuccin</option>
+            <option value="gruvbox">Gruvbox</option>
+            <option value="dracula">Dracula</option>
+            <option value="custom">Personnalise</option>
+          </select>
+        </label>
+
+        <fieldset class="advanced-group color-group" data-enabled-by="theme" data-enabled-value="custom">
+          <legend>Theme personnalise</legend>
+          <label>
+            <span>Accent</span>
+            <span class="color-input">
+              <span class="color-swatch" data-color-for="customAccent"></span>
+              <input type="text" name="customAccent" pattern="#[0-9a-fA-F]{6}" placeholder="#2563eb">
+            </span>
+          </label>
+          <label>
+            <span>Fond</span>
+            <span class="color-input">
+              <span class="color-swatch" data-color-for="customBackground"></span>
+              <input type="text" name="customBackground" pattern="#[0-9a-fA-F]{6}" placeholder="#f8fafc">
+            </span>
+          </label>
+          <label>
+            <span>Entete</span>
+            <span class="color-input">
+              <span class="color-swatch" data-color-for="customHeader"></span>
+              <input type="text" name="customHeader" pattern="#[0-9a-fA-F]{6}" placeholder="#ffffff">
+            </span>
+          </label>
+          <label>
+            <span>Page</span>
+            <span class="color-input">
+              <span class="color-swatch" data-color-for="customFrame"></span>
+              <input type="text" name="customFrame" pattern="#[0-9a-fA-F]{6}" placeholder="#ffffff">
+            </span>
+          </label>
+          <label>
+            <span>Texte</span>
+            <span class="color-input">
+              <span class="color-swatch" data-color-for="customText"></span>
+              <input type="text" name="customText" pattern="#[0-9a-fA-F]{6}" placeholder="#0f172a">
+            </span>
+          </label>
+          <label>
+            <span>Texte secondaire</span>
+            <span class="color-input">
+              <span class="color-swatch" data-color-for="customMuted"></span>
+              <input type="text" name="customMuted" pattern="#[0-9a-fA-F]{6}" placeholder="#64748b">
+            </span>
+          </label>
+          <label>
+            <span>Bordure</span>
+            <span class="color-input">
+              <span class="color-swatch" data-color-for="customBorder"></span>
+              <input type="text" name="customBorder" pattern="#[0-9a-fA-F]{6}" placeholder="#cbd5e1">
+            </span>
+          </label>
+          <label>
+            <span>Backdrop</span>
+            <span class="color-input">
+              <span class="color-swatch" data-color-for="customBackdrop"></span>
+              <input type="text" name="customBackdrop" pattern="#[0-9a-fA-F]{6}" placeholder="#111827">
+            </span>
+          </label>
+          <label class="wide-field">
+            <span>Opacite backdrop</span>
+            <input type="number" name="customBackdropOpacity" min="0" max="85" step="5">
+          </label>
+        </fieldset>
+
+        <label>
+          <span>Animation</span>
+          <select name="animation">
+            <option value="slide">Glissement</option>
+            <option value="scale">Zoom</option>
+            <option value="fade">Fondu</option>
+            <option value="none">Aucune</option>
+          </select>
+        </label>
+
+        <label>
+          <span>Vitesse</span>
+          <select name="animationSpeed">
+            <option value="quick">Rapide</option>
+            <option value="normal">Normale</option>
+            <option value="slow">Lente</option>
+          </select>
+        </label>
+
+        <label>
+          <span>Cadre</span>
+          <select name="frameStyle">
+            <option value="soft">Doux</option>
+            <option value="crisp">Net</option>
+            <option value="floating">Flottant</option>
+            <option value="minimal">Minimal</option>
+          </select>
+        </label>
+
+        <label class="check-row">
+          <input type="checkbox" name="closeOutside">
+          <span class="switch" aria-hidden="true"></span>
+          <span>Fermer au clic exterieur</span>
+        </label>
+
+        <label class="check-row">
+          <input type="checkbox" name="closeWithEsc">
+          <span class="switch" aria-hidden="true"></span>
+          <span>Fermer avec Esc</span>
+        </label>
+
+        <label class="check-row">
+          <input type="checkbox" name="dimBackdrop">
+          <span class="switch" aria-hidden="true"></span>
+          <span>Assombrir la page</span>
+        </label>
+
+        <label class="check-row">
+          <input type="checkbox" name="closeAfterOpen">
+          <span class="switch" aria-hidden="true"></span>
+          <span>Fermer apres ouverture externe</span>
+        </label>
+      </form>
+
+      <p id="status" class="status" role="status"></p>
+      <div id="save-toast" class="save-toast" role="status" aria-live="polite">Parametres sauvegardes</div>
+    </main>
+    <script src="settings.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
