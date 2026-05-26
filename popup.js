@@ -110,7 +110,9 @@ function getFormSettings() {
     closeOutside: form.elements.closeOutside.checked,
     closeWithEsc: form.elements.closeWithEsc.checked,
     dimBackdrop: form.elements.dimBackdrop.checked,
-    closeAfterOpen: form.elements.closeAfterOpen.checked
+    closeAfterOpen: form.elements.closeAfterOpen.checked,
+    autoCompactFallback: form.elements.autoCompactFallback.checked,
+    compactFallbackDomains: form.elements.compactFallbackDomains.value
   });
 }
 
@@ -149,6 +151,8 @@ function setFormSettings(settings) {
   form.elements.closeWithEsc.checked = clean.closeWithEsc;
   form.elements.dimBackdrop.checked = clean.dimBackdrop;
   form.elements.closeAfterOpen.checked = clean.closeAfterOpen;
+  form.elements.autoCompactFallback.checked = clean.autoCompactFallback;
+  form.elements.compactFallbackDomains.value = clean.compactFallbackDomains;
   updateAdvancedGroups();
   updateColorSwatches();
 }
@@ -204,3 +208,52 @@ function showSaveNotification() {
     saveToast.classList.remove("save-toast-visible");
   }, 1800);
 }
+
+// Export / Import Settings
+const exportButton = document.querySelector("#export-settings");
+const importButton = document.querySelector("#import-settings");
+const importFileInput = document.querySelector("#import-file");
+
+if (exportButton && importButton && importFileInput) {
+  exportButton.addEventListener("click", () => {
+    chrome.storage.local.get(PEEK_DEFAULT_SETTINGS, settings => {
+      const clean = cleanPeekSettings(settings);
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(clean, null, 2));
+      const downloadAnchor = document.createElement("a");
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", "preview-link-tab-settings.json");
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      showStatus("Exporté");
+    });
+  });
+
+  importButton.addEventListener("click", () => {
+    importFileInput.click();
+  });
+
+  importFileInput.addEventListener("change", event => {
+    const file = event.target.files[0];
+    if (!file) {
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const parsed = JSON.parse(e.target.result);
+        const cleaned = cleanPeekSettings(parsed);
+        chrome.storage.local.set(cleaned, () => {
+          setFormSettings(cleaned);
+          showStatus("Importé !");
+          showSaveNotification();
+        });
+      } catch (err) {
+        showStatus("Fichier invalide");
+      }
+    };
+    reader.readAsText(file);
+    importFileInput.value = ""; // Reset
+  });
+}
+

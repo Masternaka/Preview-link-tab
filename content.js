@@ -112,6 +112,14 @@
     root.innerHTML = `
       <div class="peek-backdrop" data-peek-close></div>
       <section class="peek-panel" role="dialog" aria-modal="true" aria-label="Aperçu du lien">
+        <div class="peek-resize-handle peek-resize-n" data-direction="n"></div>
+        <div class="peek-resize-handle peek-resize-s" data-direction="s"></div>
+        <div class="peek-resize-handle peek-resize-e" data-direction="e"></div>
+        <div class="peek-resize-handle peek-resize-w" data-direction="w"></div>
+        <div class="peek-resize-handle peek-resize-nw" data-direction="nw"></div>
+        <div class="peek-resize-handle peek-resize-ne" data-direction="ne"></div>
+        <div class="peek-resize-handle peek-resize-sw" data-direction="sw"></div>
+        <div class="peek-resize-handle peek-resize-se" data-direction="se"></div>
         <header class="peek-header">
           <div class="peek-meta">
             <img class="peek-favicon" width="18" height="18" alt="" decoding="async">
@@ -328,6 +336,8 @@
     STATE.settingsButton.addEventListener("click", toggleSettings);
     STATE.settingsPanel.addEventListener("change", handleSettingsChange);
 
+    initResizeListeners(root);
+
     applySettings();
     syncControls();
 
@@ -401,7 +411,7 @@
       return;
     }
 
-    if (STATE.settings.openMode === "compact") {
+    if (STATE.settings.openMode === "compact" || shouldAutoCompact(url, STATE.settings)) {
       STATE.currentUrl = url.href;
       openUrlInPopup(url.href, false);
       return;
@@ -1179,6 +1189,107 @@
     chrome.runtime.sendMessage({
       type: "CLOSE_COMPACT_WINDOW",
       windowId: STATE.compactWindowId
+    });
+  }
+
+  function initResizeListeners(rootEl) {
+    const panel = rootEl.querySelector(".peek-panel");
+    if (!panel) return;
+
+    panel.querySelectorAll(".peek-resize-handle").forEach(handle => {
+      handle.addEventListener("mousedown", event => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const direction = handle.dataset.direction;
+        const startX = event.clientX;
+        const startY = event.clientY;
+
+        const startRect = panel.getBoundingClientRect();
+        const startWidth = startRect.width;
+        const startHeight = startRect.height;
+        const startLeft = startRect.left;
+        const startTop = startRect.top;
+
+        rootEl.classList.add("peek-resizing");
+
+        let currentWidth = startWidth;
+        let currentHeight = startHeight;
+        let currentLeft = startLeft;
+        let currentTop = startTop;
+
+        const onMouseMove = moveEvent => {
+          const dx = moveEvent.clientX - startX;
+          const dy = moveEvent.clientY - startY;
+
+          // Horizontal resize
+          if (direction.includes("w")) {
+            const maxW = window.innerWidth - 32;
+            const targetWidth = startWidth - dx;
+            if (targetWidth < 320) {
+              currentWidth = 320;
+              currentLeft = startLeft + startWidth - 320;
+            } else if (targetWidth > maxW) {
+              currentWidth = maxW;
+              currentLeft = startLeft + startWidth - maxW;
+            } else {
+              currentWidth = targetWidth;
+              currentLeft = startLeft + dx;
+            }
+          } else if (direction.includes("e")) {
+            currentWidth = Math.max(320, Math.min(startWidth + dx, window.innerWidth - 32));
+          }
+
+          // Vertical resize
+          if (direction.includes("n")) {
+            const maxH = window.innerHeight - 32;
+            const targetHeight = startHeight - dy;
+            if (targetHeight < 240) {
+              currentHeight = 240;
+              currentTop = startTop + startHeight - 240;
+            } else if (targetHeight > maxH) {
+              currentHeight = maxH;
+              currentTop = startTop + startHeight - maxH;
+            } else {
+              currentHeight = targetHeight;
+              currentTop = startTop + dy;
+            }
+          } else if (direction.includes("s")) {
+            currentHeight = Math.max(240, Math.min(startHeight + dy, window.innerHeight - 32));
+          }
+
+          panel.style.width = `${currentWidth}px`;
+          panel.style.height = `${currentHeight}px`;
+          panel.style.left = `${currentLeft}px`;
+          panel.style.top = `${currentTop}px`;
+        };
+
+        const onMouseUp = () => {
+          window.removeEventListener("mousemove", onMouseMove);
+          window.removeEventListener("mouseup", onMouseUp);
+
+          rootEl.classList.remove("peek-resizing");
+
+          const updates = {
+            size: "custom",
+            customWidth: Math.round(currentWidth),
+            customHeight: Math.round(currentHeight)
+          };
+
+          if (STATE.settings.position === "custom") {
+            updates.customLeft = Math.round(currentLeft);
+            updates.customTop = Math.round(currentTop);
+          }
+
+          STATE.settings = cleanSettings({ ...STATE.settings, ...updates });
+          chrome.storage.local.set(updates, () => {
+            scheduleOverlayLayout({ updateDimensions: true });
+          });
+        };
+
+        window.addEventListener("mousemove", onMouseMove);
+        window.addEventListener("mouseup", onMouseUp);
+      });
     });
   }
 })();

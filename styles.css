@@ -1,6 +1,8 @@
 #peek-preview-extension-root {
   --peek-accent: #2563eb;
   --peek-backdrop: rgba(14, 18, 24, 0.32);
+  --peek-backdrop-opacity: 0.35;
+  --peek-backdrop-blur: 0px;
   --peek-bg: #f8fafc;
   --peek-border: rgba(15, 23, 42, 0.18);
   --peek-button-bg: #f1f5f9;
@@ -13,6 +15,7 @@
   --peek-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2364748b' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --peek-speed: 180ms;
   --peek-text: #0f172a;
+  --peek-radius: 14px;
   color-scheme: light;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   position: fixed;
@@ -165,12 +168,15 @@
 
 #peek-preview-extension-root .peek-backdrop {
   background: var(--peek-backdrop);
+  backdrop-filter: blur(var(--peek-backdrop-blur));
   inset: 0;
   position: fixed;
+  transition: background 220ms ease, backdrop-filter 220ms ease;
 }
 
 #peek-preview-extension-root[data-dim-backdrop="false"] .peek-backdrop {
   background: transparent;
+  backdrop-filter: none;
 }
 
 #peek-preview-extension-root .peek-panel {
@@ -179,7 +185,7 @@
   animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
   background: var(--peek-bg);
   border: 1px solid color-mix(in srgb, var(--peek-border) 80%, transparent);
-  border-radius: 14px;
+  border-radius: var(--peek-radius);
   box-shadow: var(--peek-panel-shadow);
   box-sizing: border-box;
   display: flex;
@@ -341,45 +347,54 @@
   animation-name: peek-blur-out;
 }
 
-#peek-preview-extension-root[data-frame-style="crisp"] .peek-panel {
-  border-radius: 4px;
+#peek-preview-extension-root[data-frame-style="crisp"] {
+  --peek-radius: 4px;
 }
 
-#peek-preview-extension-root[data-frame-style="rounded"] .peek-panel {
-  border-radius: 22px;
+#peek-preview-extension-root[data-frame-style="rounded"] {
+  --peek-radius: 22px;
 }
 
+#peek-preview-extension-root[data-frame-style="floating"] {
+  --peek-radius: 16px;
+}
 #peek-preview-extension-root[data-frame-style="floating"] .peek-panel {
   border: 0;
-  border-radius: 16px;
 }
 
+#peek-preview-extension-root[data-frame-style="glass"] {
+  --peek-radius: 18px;
+}
 #peek-preview-extension-root[data-frame-style="glass"] .peek-panel {
   backdrop-filter: blur(22px) saturate(1.2);
   background: color-mix(in srgb, var(--peek-bg) 78%, transparent);
-  border-radius: 18px;
 }
-
 #peek-preview-extension-root[data-frame-style="glass"] .peek-header {
   background: color-mix(in srgb, var(--peek-header-bg) 72%, transparent);
 }
 
+#peek-preview-extension-root[data-frame-style="outlined"] {
+  --peek-radius: 12px;
+}
 #peek-preview-extension-root[data-frame-style="outlined"] .peek-panel {
   border: 2px solid color-mix(in srgb, var(--peek-accent) 55%, var(--peek-border));
-  border-radius: 12px;
 }
 
+#peek-preview-extension-root[data-frame-style="elevated"] {
+  --peek-radius: 18px;
+}
 #peek-preview-extension-root[data-frame-style="elevated"] .peek-panel {
   border: 0;
-  border-radius: 18px;
 }
 
-#peek-preview-extension-root[data-frame-style="minimal"] .peek-panel {
-  border-radius: 0;
+#peek-preview-extension-root[data-frame-style="minimal"] {
+  --peek-radius: 0px;
 }
 
+#peek-preview-extension-root[data-frame-style="flat"] {
+  --peek-radius: 8px;
+}
 #peek-preview-extension-root[data-frame-style="flat"] .peek-panel {
-  border-radius: 8px;
   box-shadow: none !important;
 }
 
@@ -504,6 +519,8 @@
   background: color-mix(in srgb, var(--peek-header-bg) 92%, transparent);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--peek-border);
+  border-top-left-radius: calc(var(--peek-radius) - 1px);
+  border-top-right-radius: calc(var(--peek-radius) - 1px);
   display: flex;
   gap: 16px;
   justify-content: space-between;
@@ -725,6 +742,8 @@
   min-height: 240px;
   overflow: hidden;
   position: relative;
+  border-bottom-left-radius: calc(var(--peek-radius) - 1px);
+  border-bottom-right-radius: calc(var(--peek-radius) - 1px);
 }
 
 #peek-preview-extension-root .peek-frame {
@@ -1375,3 +1394,83 @@
     padding-top: 0;
   }
 }
+
+/* Poignées de redimensionnement */
+.peek-resize-handle {
+  position: absolute;
+  z-index: 999999;
+  user-select: none;
+}
+
+/* Bords horizontaux */
+.peek-resize-n {
+  top: -4px;
+  left: 6px;
+  right: 6px;
+  height: 8px;
+  cursor: ns-resize;
+}
+.peek-resize-s {
+  bottom: -4px;
+  left: 6px;
+  right: 6px;
+  height: 8px;
+  cursor: ns-resize;
+}
+
+/* Bords verticaux */
+.peek-resize-e {
+  top: 6px;
+  bottom: 6px;
+  right: -4px;
+  width: 8px;
+  cursor: ew-resize;
+}
+.peek-resize-w {
+  top: 6px;
+  bottom: 6px;
+  left: -4px;
+  width: 8px;
+  cursor: ew-resize;
+}
+
+/* Angles/Coins */
+.peek-resize-nw {
+  top: -4px;
+  left: -4px;
+  width: 12px;
+  height: 12px;
+  cursor: nwse-resize;
+}
+.peek-resize-ne {
+  top: -4px;
+  right: -4px;
+  width: 12px;
+  height: 12px;
+  cursor: nesw-resize;
+}
+.peek-resize-sw {
+  bottom: -4px;
+  left: -4px;
+  width: 12px;
+  height: 12px;
+  cursor: nesw-resize;
+}
+.peek-resize-se {
+  bottom: -4px;
+  right: -4px;
+  width: 12px;
+  height: 12px;
+  cursor: nwse-resize;
+}
+
+/* Désactivation des transitions, animations et événements de l'iframe en redimensionnement */
+#peek-preview-extension-root.peek-resizing .peek-panel {
+  transition: none !important;
+  animation: none !important;
+}
+
+#peek-preview-extension-root.peek-resizing .peek-frame {
+  pointer-events: none !important;
+}
+

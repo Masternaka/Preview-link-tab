@@ -400,3 +400,35 @@ input[type="checkbox"] {
   opacity: 1;
   transform: translateY(0);
 }
+
+.backup-actions {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.backup-button {
+  background: var(--popup-bg);
+  border: 1px solid var(--popup-border);
+  border-radius: 10px;
+  color: var(--popup-text);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+
+.backup-button:hover {
+  background: color-mix(in srgb, var(--popup-text) 6%, var(--popup-surface));
+  border-color: color-mix(in srgb, var(--popup-text) 22%, var(--popup-border));
+}
+
+.backup-button:active {
+  transform: scale(0.98);
+}
+

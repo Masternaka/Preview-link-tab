@@ -280,6 +280,24 @@
             <span class="switch" aria-hidden="true"></span>
             <span>Fermer après ouverture externe</span>
           </label>
+
+          <label class="check-row">
+            <input type="checkbox" name="autoCompactFallback">
+            <span class="switch" aria-hidden="true"></span>
+            <span>Ouverture compacte automatique pour les sites bloqués</span>
+          </label>
+
+          <label class="wide-field">
+            <span>Domaines redirigés (un par ligne ou séparés par des virgules)</span>
+            <textarea name="compactFallbackDomains" rows="2" placeholder="site-incompatible.com, autre.net"></textarea>
+          </label>
+
+          <h2 class="section-title" style="margin-top: 24px;">Sauvegarde</h2>
+          <div class="backup-actions">
+            <button type="button" id="export-settings" class="backup-button">Exporter</button>
+            <button type="button" id="import-settings" class="backup-button">Importer</button>
+            <input type="file" id="import-file" accept=".json" style="display: none;">
+          </div>
         </section>
       </form>
 

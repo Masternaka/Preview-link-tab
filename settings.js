@@ -27,7 +27,11 @@ const PEEK_DEFAULT_SETTINGS = {
   closeAfterOpen: false,
   domainListMode: "off",
   domainList: "",
-  middleClick: false
+  middleClick: false,
+  autoCompactFallback: true,
+  compactFallbackDomains: "",
+  backdropOpacity: 35,
+  backdropBlur: 0
 };
 
 const PEEK_SETTING_OPTIONS = {
@@ -153,7 +157,11 @@ function cleanPeekSettings(settings) {
   next.dimBackdrop = Boolean(next.dimBackdrop);
   next.closeAfterOpen = Boolean(next.closeAfterOpen);
   next.middleClick = Boolean(next.middleClick);
+  next.autoCompactFallback = Boolean(next.autoCompactFallback);
   next.domainList = typeof next.domainList === "string" ? next.domainList : PEEK_DEFAULT_SETTINGS.domainList;
+  next.compactFallbackDomains = typeof next.compactFallbackDomains === "string" ? next.compactFallbackDomains : PEEK_DEFAULT_SETTINGS.compactFallbackDomains;
+  next.backdropOpacity = clampNumber(next.backdropOpacity, 0, 90, PEEK_DEFAULT_SETTINGS.backdropOpacity);
+  next.backdropBlur = clampNumber(next.backdropBlur, 0, 25, PEEK_DEFAULT_SETTINGS.backdropBlur);
   if (!PEEK_SETTING_OPTIONS.domainListMode.includes(next.domainListMode)) {
     next.domainListMode = PEEK_DEFAULT_SETTINGS.domainListMode;
   }
@@ -375,4 +383,42 @@ function isPeekAllowedForHost(hostname, settings) {
     return matched;
   }
   return true;
+}
+
+const PEEK_BUILTIN_BLOCKED_DOMAINS = [
+  "google.com", "google.fr", "google.ca", "google.co.uk", "google.com.br", "google.co.jp",
+  "youtube.com", "youtu.be",
+  "github.com",
+  "facebook.com",
+  "instagram.com",
+  "twitter.com", "x.com",
+  "linkedin.com",
+  "reddit.com",
+  "netflix.com",
+  "amazon.com", "amazon.fr", "amazon.ca", "amazon.co.uk",
+  "yahoo.com",
+  "microsoft.com", "live.com", "outlook.com",
+  "apple.com",
+  "pinterest.com",
+  "zoom.us",
+  "slack.com",
+  "trello.com",
+  "spotify.com",
+  "twitch.tv"
+];
+
+function shouldAutoCompact(urlObj, settings) {
+  if (!settings || !settings.autoCompactFallback) {
+    return false;
+  }
+  const host = (urlObj?.hostname || "").toLowerCase();
+  
+  // Check custom user domains first
+  const customList = parseDomainList(settings.compactFallbackDomains);
+  if (customList.some(domain => hostMatchesDomain(host, domain))) {
+    return true;
+  }
+  
+  // Check built-in list
+  return PEEK_BUILTIN_BLOCKED_DOMAINS.some(domain => hostMatchesDomain(host, domain));
 }

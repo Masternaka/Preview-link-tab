@@ -1,13 +1,11 @@
-# Preview link tab — suivi
+# Preview link tab — TO-DO
 
-## Branding
+## Corriger
 
-- Nom : **Preview link tab**
-- Logo source : `Preview link tab logo.png`
-- Icônes Chrome : `icons/icon16.png`, `icon48.png`, `icon128.png` (générées depuis le logo)
+- Le cadre "Contour accent" n'est pas égale tout le tour de la fenêtre. 
+- Les ombres ne fonctionne toujours pas bien.
 
 ## Idées futures
 
-- Historique des aperçus, side panel Chrome
+- Ajouter une option pour définir la densité du flou et l'assombrissement de la page.
 - Redimensionnement du panneau à la souris
-- `chrome.storage.sync`
