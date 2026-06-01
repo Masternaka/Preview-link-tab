@@ -3,7 +3,7 @@ const PEEK_DEFAULT_SETTINGS = {
   openMode: "overlay",
   customWidth: 920,
   customHeight: 760,
-  position: "right",
+  position: "topRight",
   customLeft: 80,
   customTop: 80,
   trigger: "alt",
@@ -19,7 +19,7 @@ const PEEK_DEFAULT_SETTINGS = {
   customBackdropOpacity: 32,
   animation: "slide",
   animationSpeed: "normal",
-  frameStyle: "soft",
+  frameStyle: "rounded",
   panelShadow: "default",
   closeOutside: true,
   closeWithEsc: true,
@@ -37,12 +37,12 @@ const PEEK_DEFAULT_SETTINGS = {
 const PEEK_SETTING_OPTIONS = {
   openMode: ["overlay", "compact"],
   size: ["small", "medium", "large", "full", "custom"],
-  position: ["right", "left", "center", "viewportCenter", "bottom", "custom"],
+  position: ["topRight", "bottomRight", "topLeft", "bottomLeft", "center", "custom"],
   trigger: ["alt", "meta", "shift"],
   theme: ["system", "light", "dark", "graphite", "mint", "catppuccin", "gruvbox", "dracula", "custom"],
   animation: ["slide", "slideUp", "slideDown", "scale", "fade", "bounce", "blur", "none"],
   animationSpeed: ["instant", "quick", "normal", "relaxed", "slow", "leisurely"],
-  frameStyle: ["soft", "crisp", "floating", "minimal", "rounded", "glass", "outlined", "elevated", "flat"],
+  frameStyle: ["rounded", "square", "glass", "outlined"],
   panelShadow: ["default", "none", "subtle", "medium", "strong", "dramatic", "glow"],
   domainListMode: ["off", "blacklist", "whitelist"]
 };
@@ -145,6 +145,22 @@ const PEEK_THEME_PRESETS = {
 
 function cleanPeekSettings(settings) {
   const next = { ...PEEK_DEFAULT_SETTINGS, ...settings };
+
+  if (next.position === "right") {
+    next.position = "topRight";
+  } else if (next.position === "left") {
+    next.position = "topLeft";
+  } else if (next.position === "bottom") {
+    next.position = "bottomRight";
+  } else if (next.position === "viewportCenter") {
+    next.position = "center";
+  }
+
+  if (["soft", "floating", "elevated"].includes(next.frameStyle)) {
+    next.frameStyle = "rounded";
+  } else if (["crisp", "minimal", "flat"].includes(next.frameStyle)) {
+    next.frameStyle = "square";
+  }
 
   for (const [key, values] of Object.entries(PEEK_SETTING_OPTIONS)) {
     if (!values.includes(next[key])) {
@@ -253,7 +269,7 @@ function peekGetDisplayBounds(sourceWindow, displays) {
 }
 
 /** Screen coordinates for overlay/compact panel (same rules as background getPosition). */
-const PEEK_OVERLAY_CSS_ANCHORS = new Set(["right", "left", "bottom"]);
+const PEEK_OVERLAY_CSS_ANCHORS = new Set(["topRight", "bottomRight", "topLeft", "bottomLeft"]);
 
 function peekOverlayUsesCssAnchor(position) {
   return PEEK_OVERLAY_CSS_ANCHORS.has(position);
@@ -263,22 +279,29 @@ function peekOverlayUsesCssAnchor(position) {
 function peekOverlayViewportPosition(settings, panelWidth, panelHeight, viewportWidth, viewportHeight) {
   const vw = Math.max(320, viewportWidth ?? 1280);
   const vh = Math.max(240, viewportHeight ?? 900);
-  const position = settings?.position || "right";
+  const position = settings?.position || "topRight";
 
-  if (position === "viewportCenter" || position === "center") {
+  if (position === "center") {
     return {
       left: Math.round((vw - panelWidth) / 2),
       top: Math.round((vh - panelHeight) / 2)
     };
   }
 
-  if (position === "left") {
+  if (position === "topLeft") {
     return { left: 32, top: 32 };
   }
 
-  if (position === "bottom") {
+  if (position === "bottomLeft") {
     return {
-      left: Math.round((vw - panelWidth) / 2),
+      left: 32,
+      top: Math.max(24, vh - panelHeight - 24)
+    };
+  }
+
+  if (position === "bottomRight") {
+    return {
+      left: Math.max(24, vw - panelWidth - 32),
       top: Math.max(24, vh - panelHeight - 24)
     };
   }
@@ -328,29 +351,29 @@ function peekEstimateOverlayPanelSize(settings, viewportWidth, viewportHeight) {
 function peekPanelScreenOrigin(settings, panelWidth, panelHeight, screenBase, browserWindow) {
   const positionName = settings.position;
   const screen = screenBase || { left: 0, top: 0, width: 1280, height: 900 };
-  const browser = browserWindow || { left: 0, top: 0, width: 1280, height: 900 };
+  const browser = browserWindow || screen;
 
-  if (positionName === "viewportCenter") {
+  if (positionName === "topLeft") {
+    return { left: screen.left + 32, top: screen.top + 32 };
+  }
+
+  if (positionName === "center") {
     return {
       left: browser.left + Math.round((browser.width - panelWidth) / 2),
       top: browser.top + Math.round((browser.height - panelHeight) / 2)
     };
   }
 
-  if (positionName === "left") {
-    return { left: screen.left + 32, top: screen.top + 32 };
-  }
-
-  if (positionName === "center") {
+  if (positionName === "bottomLeft") {
     return {
-      left: screen.left + Math.round((screen.width - panelWidth) / 2),
-      top: screen.top + Math.round((screen.height - panelHeight) / 2)
+      left: screen.left + 32,
+      top: screen.top + Math.max(24, screen.height - panelHeight - 48)
     };
   }
 
-  if (positionName === "bottom") {
+  if (positionName === "bottomRight") {
     return {
-      left: screen.left + Math.round((screen.width - panelWidth) / 2),
+      left: screen.left + Math.max(24, screen.width - panelWidth - 32),
       top: screen.top + Math.max(24, screen.height - panelHeight - 48)
     };
   }

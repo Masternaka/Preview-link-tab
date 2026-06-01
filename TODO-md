@@ -1,11 +1,11 @@
-# Preview link tab — TO-DO
+# Preview link tab — TO-DO (Créé avec Codex)
 
 ## Corriger
 
-- Le cadre "Contour accent" n'est pas égale tout le tour de la fenêtre. 
-- Les ombres ne fonctionne toujours pas bien.
+- Image preview pour voir les changements qu'on fait.
+- Les options d'ombres ne font pas grand-chose, on ne voit pas grand changement.
 
 ## Idées futures
 
-- Ajouter une option pour définir la densité du flou et l'assombrissement de la page.
-- Redimensionnement du panneau à la souris
+- Ajouter une option pour définir la densité du flou et l'assombrissement de la page avec un slider.
+- Redimensionnement du panneau à la souris.

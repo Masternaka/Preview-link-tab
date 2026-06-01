@@ -51,13 +51,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message?.type === "GET_OVERLAY_PLACEMENT") {
-    getOverlayPlacement(message, sender)
-      .then(result => sendResponse(result))
-      .catch(() => sendResponse({ ok: false }));
-    return true;
-  }
-
   if (message?.type === "OPEN_COMPACT_WINDOW") {
     if (!isHttpUrl(message.url)) {
       sendResponse({ ok: false });
@@ -71,36 +64,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   return false;
 });
-
-async function getOverlayPlacement(message, sender) {
-  const windowId = sender.tab?.windowId;
-  if (!windowId || !message?.settings) {
-    return { ok: false };
-  }
-
-  const win = await chrome.windows.get(windowId);
-  const displays = chrome.system?.display?.getInfo
-    ? await chrome.system.display.getInfo()
-    : [];
-  const screenBase = peekGetDisplayBounds(win, displays);
-  const panelWidth = clampNumber(message.panelWidth, 200, 4000, 960);
-  const panelHeight = clampNumber(message.panelHeight, 160, 3000, 540);
-  const origin = peekPanelScreenOrigin(
-    message.settings,
-    panelWidth,
-    panelHeight,
-    screenBase,
-    win
-  );
-
-  return {
-    ok: true,
-    screenLeft: origin.left,
-    screenTop: origin.top,
-    panelWidth,
-    panelHeight
-  };
-}
 
 async function openCompactWindow(message, sender) {
   const sourceWindow = sender.tab?.windowId
@@ -200,12 +163,6 @@ function clampSize(settings, sourceWindow, display) {
 }
 
 function getPosition(settings, size, sourceWindow, display) {
-  const browserBase = {
-    left: sourceWindow?.left ?? 0,
-    top: sourceWindow?.top ?? 0,
-    width: sourceWindow?.width ?? 1280,
-    height: sourceWindow?.height ?? 900
-  };
   const screenBase = display || {
     left: 0,
     top: 0,
@@ -213,7 +170,7 @@ function getPosition(settings, size, sourceWindow, display) {
     height: 900
   };
 
-  return peekPanelScreenOrigin(settings, size.width, size.height, screenBase, browserBase);
+  return peekPanelScreenOrigin(settings, size.width, size.height, screenBase, sourceWindow);
 }
 
 async function getDisplayForWindow(sourceWindow) {

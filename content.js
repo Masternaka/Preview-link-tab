@@ -1,6 +1,7 @@
 (() => {
   const ROOT_ID = "peek-preview-extension-root";
   const COMPACT_MENU_ID = "peek-compact-menu-root";
+  const ACTIONS_BAR_GUTTER = 64;
   const STATE = {
     root: null,
     panel: null,
@@ -155,11 +156,11 @@
             <label>
               <span>Position</span>
               <select name="position">
-                <option value="right">Droite</option>
-                <option value="left">Gauche</option>
-                <option value="center">Centre écran</option>
-                <option value="viewportCenter">Centre du navigateur</option>
-                <option value="bottom">Bas</option>
+                <option value="topRight">En haut à droite</option>
+                <option value="bottomRight">En bas à droite</option>
+                <option value="topLeft">En haut à gauche</option>
+                <option value="bottomLeft">En bas à gauche</option>
+                <option value="center">Centre</option>
                 <option value="custom">Personnalisée</option>
               </select>
             </label>
@@ -204,15 +205,10 @@
             <label>
               <span>Cadre</span>
               <select name="frameStyle">
-                <option value="soft">Doux</option>
                 <option value="rounded">Arrondi</option>
-                <option value="crisp">Net</option>
-                <option value="floating">Flottant</option>
+                <option value="square">Carré</option>
                 <option value="glass">Verre</option>
                 <option value="outlined">Contour accent</option>
-                <option value="elevated">Élevé</option>
-                <option value="minimal">Minimal</option>
-                <option value="flat">Plat</option>
               </select>
             </label>
             <label>
@@ -271,15 +267,16 @@
             </div>
           </div>
         </div>
-        <div class="peek-actions">
-          ${peekIconButton("peek-settings-button", "settings", "Paramètres", "Paramètres")}
-          ${peekIconButton("peek-refresh", "refresh", "Actualiser", "Actualiser")}
-          ${peekIconButton("peek-copy", "copy", "Copier l'URL", "Copier l'URL")}
-          ${peekIconButton("peek-popup", "popup", "Fenêtre compacte", "Fenêtre compacte")}
-          ${peekIconButton("peek-open", "external", "Nouvel onglet", "Nouvel onglet")}
-          ${peekIconButton("peek-close", "close", "Fermer", "Fermer")}
-        </div>
+      </div>
       </section>
+      <div class="peek-actions">
+        ${peekIconButton("peek-settings-button", "settings", "Paramètres", "Paramètres")}
+        ${peekIconButton("peek-refresh", "refresh", "Actualiser", "Actualiser")}
+        ${peekIconButton("peek-copy", "copy", "Copier l'URL", "Copier l'URL")}
+        ${peekIconButton("peek-popup", "popup", "Fenêtre compacte", "Fenêtre compacte")}
+        ${peekIconButton("peek-open", "external", "Nouvel onglet", "Nouvel onglet")}
+        ${peekIconButton("peek-close", "close", "Fermer", "Fermer")}
+      </div>
     `;
 
     document.documentElement.appendChild(root);
@@ -457,13 +454,6 @@
     };
   }
 
-  function screenToViewport(screenLeft, screenTop) {
-    return {
-      left: screenLeft - window.screenX,
-      top: screenTop - window.screenY
-    };
-  }
-
   function clampToViewport(left, top, panelWidth, panelHeight) {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
@@ -494,12 +484,14 @@
       window.innerHeight
     );
     const maxHeight = Math.max(240, window.innerHeight - 48);
+    const maxWidth = Math.max(320, window.innerWidth - 64 - ACTIONS_BAR_GUTTER);
+    const width = Math.min(dims.width, maxWidth);
     const height = Math.min(dims.height, maxHeight);
-    STATE.panel.style.width = `${dims.width}px`;
+    STATE.panel.style.width = `${width}px`;
     STATE.panel.style.height = `${height}px`;
     STATE.panel.style.minHeight = "";
     STATE.panel.style.maxHeight = `${maxHeight}px`;
-    return { width: dims.width, height };
+    return { width, height };
   }
 
   function clearOverlayPanelLayout() {
@@ -521,27 +513,8 @@
   async function resolveOverlayViewportPosition(panelWidth, panelHeight) {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const position = STATE.settings.position;
-
-    if (position === "viewportCenter") {
-      return peekOverlayViewportPosition(
-        { ...STATE.settings, position: "viewportCenter" },
-        panelWidth,
-        panelHeight,
-        vw,
-        vh
-      );
-    }
-
-    if (position === "center" || position === "right" || position === "left" || position === "bottom" || position === "custom") {
-      const placement = await requestOverlayPlacement(panelWidth, panelHeight);
-      if (placement) {
-        const viewport = screenToViewport(placement.screenLeft, placement.screenTop);
-        return clampToViewport(viewport.left, viewport.top, panelWidth, panelHeight);
-      }
-    }
-
-    return peekOverlayViewportPosition(STATE.settings, panelWidth, panelHeight, vw, vh);
+    const position = peekOverlayViewportPosition(STATE.settings, panelWidth, panelHeight, vw, vh);
+    return clampToViewport(position.left, position.top, panelWidth, panelHeight);
   }
 
   function applyOverlayPanelPosition(left, top) {
@@ -551,6 +524,41 @@
     STATE.panel.style.right = "auto";
     STATE.panel.style.bottom = "auto";
     STATE.panel.style.transform = "none";
+    requestAnimationFrame(positionActionsBar);
+  }
+
+  function positionActionsBar() {
+    const actionsEl = STATE.root?.querySelector(".peek-actions");
+    if (!actionsEl || !STATE.panel) {
+      return;
+    }
+    const position = STATE.settings?.position;
+    const size = STATE.settings?.size;
+    // For full-screen previews, actions are inline (handled by CSS).
+    if (size === "full") {
+      actionsEl.style.removeProperty("left");
+      actionsEl.style.removeProperty("top");
+      actionsEl.style.removeProperty("right");
+      actionsEl.style.removeProperty("bottom");
+      return;
+    }
+    const rect = STATE.panel.getBoundingClientRect();
+    const actionsRect = actionsEl.getBoundingClientRect();
+    const margin = 8;
+    const gap = 8;
+    const rightSideLeft = rect.right + gap;
+    const leftSideLeft = rect.left - actionsRect.width - gap;
+    const fitsRight = rightSideLeft + actionsRect.width <= window.innerWidth - margin;
+    const fitsLeft = leftSideLeft >= margin;
+    const preferredLeft = fitsRight || !fitsLeft ? rightSideLeft : leftSideLeft;
+    const maxLeft = Math.max(margin, window.innerWidth - actionsRect.width - margin);
+    const maxTop = Math.max(margin, window.innerHeight - actionsRect.height - margin);
+    const top = rect.top + rect.height / 2 - actionsRect.height / 2;
+    const left = Math.min(maxLeft, Math.max(margin, preferredLeft));
+    actionsEl.style.left = `${left}px`;
+    actionsEl.style.top = `${Math.min(maxTop, Math.max(margin, top))}px`;
+    actionsEl.style.right = "auto";
+    actionsEl.style.bottom = "auto";
   }
 
   function stopOverlayPanelObserver() {
@@ -578,30 +586,6 @@
       scheduleOverlayLayout({ debounce: true, resetAttempts: false, updateDimensions: false });
     });
     overlayPanelObserver.observe(STATE.panel);
-  }
-
-  function requestOverlayPlacement(panelWidth, panelHeight) {
-    return new Promise(resolve => {
-      if (typeof chrome === "undefined" || !chrome.runtime?.sendMessage) {
-        resolve(null);
-        return;
-      }
-      chrome.runtime.sendMessage(
-        {
-          type: "GET_OVERLAY_PLACEMENT",
-          settings: STATE.settings,
-          panelWidth,
-          panelHeight
-        },
-        response => {
-          if (chrome.runtime.lastError || !response?.ok) {
-            resolve(null);
-            return;
-          }
-          resolve(response);
-        }
-      );
-    });
   }
 
   async function applyOverlayPositionOnly() {
@@ -637,6 +621,7 @@
       STATE.panel.style.right = "auto";
       STATE.panel.style.bottom = "auto";
       STATE.panel.style.transform = "none";
+      requestAnimationFrame(positionActionsBar);
       return true;
     }
 
@@ -862,11 +847,11 @@
         <label>
           <span>Position</span>
           <select name="position">
-            <option value="right">Droite</option>
-            <option value="left">Gauche</option>
-            <option value="center">Centre écran</option>
-            <option value="viewportCenter">Centre navigateur</option>
-            <option value="bottom">Bas</option>
+            <option value="topRight">En haut à droite</option>
+            <option value="bottomRight">En bas à droite</option>
+            <option value="topLeft">En haut à gauche</option>
+            <option value="bottomLeft">En bas à gauche</option>
+            <option value="center">Centre</option>
             <option value="custom">Personnalisée</option>
           </select>
         </label>
