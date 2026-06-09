@@ -104,12 +104,19 @@ function getFormSettings() {
     animationSpeed: getRadioValue("animationSpeed"),
     frameStyle: form.elements.frameStyle.value,
     panelShadow: form.elements.panelShadow.value,
+    backdropMode: getRadioValue("backdropMode") || "dim",
+    backdropOpacity: getRadioValue("backdropMode") !== "blur"
+      ? Number(form.elements.backdropIntensity?.value ?? PEEK_DEFAULT_SETTINGS.backdropOpacity)
+      : PEEK_DEFAULT_SETTINGS.backdropOpacity,
+    backdropBlur: getRadioValue("backdropMode") === "blur"
+      ? Number(form.elements.backdropIntensity?.value ?? PEEK_DEFAULT_SETTINGS.backdropBlur)
+      : 0,
     domainListMode: form.elements.domainListMode.value,
     domainList: form.elements.domainList.value,
     middleClick: form.elements.middleClick.checked,
     closeOutside: form.elements.closeOutside.checked,
     closeWithEsc: form.elements.closeWithEsc.checked,
-    dimBackdrop: form.elements.dimBackdrop.checked,
+    dimBackdrop: true,
     closeAfterOpen: form.elements.closeAfterOpen.checked,
     autoCompactFallback: form.elements.autoCompactFallback.checked,
     compactFallbackDomains: form.elements.compactFallbackDomains.value
@@ -144,12 +151,25 @@ function setFormSettings(settings) {
   setRadioValue("animationSpeed", clean.animationSpeed);
   form.elements.frameStyle.value = clean.frameStyle;
   form.elements.panelShadow.value = clean.panelShadow;
+
+  // Backdrop control
+  setRadioValue("backdropMode", clean.backdropMode || "dim");
+  const isBlur = clean.backdropMode === "blur";
+  const intensity = isBlur ? clean.backdropBlur : clean.backdropOpacity;
+  const sliderEl = document.getElementById("backdropIntensitySlider");
+  const valueEl = document.getElementById("backdropIntensityValue");
+  if (sliderEl) {
+    sliderEl.value = intensity;
+    const pct = (intensity / 100) * 100;
+    sliderEl.style.setProperty("--popup-slider-pct", `${pct}%`);
+  }
+  if (valueEl) valueEl.textContent = `${intensity}%`;
+
   form.elements.domainListMode.value = clean.domainListMode;
   form.elements.domainList.value = clean.domainList;
   form.elements.middleClick.checked = clean.middleClick;
   form.elements.closeOutside.checked = clean.closeOutside;
   form.elements.closeWithEsc.checked = clean.closeWithEsc;
-  form.elements.dimBackdrop.checked = clean.dimBackdrop;
   form.elements.closeAfterOpen.checked = clean.closeAfterOpen;
   form.elements.autoCompactFallback.checked = clean.autoCompactFallback;
   form.elements.compactFallbackDomains.value = clean.compactFallbackDomains;
@@ -192,6 +212,40 @@ function updateColorSwatches() {
     swatch.style.background = /^#[0-9a-fA-F]{6}$/.test(value) ? value : "transparent";
   });
 }
+
+// ── Backdrop slider live feedback ──
+function updateBackdropSliderDisplay(val) {
+  const sliderEl = document.getElementById("backdropIntensitySlider");
+  const valueEl = document.getElementById("backdropIntensityValue");
+  if (!sliderEl) return;
+  const num = val !== undefined ? val : Number(sliderEl.value);
+  const pct = (num / 100) * 100;
+  sliderEl.style.setProperty("--popup-slider-pct", `${pct}%`);
+  if (valueEl) valueEl.textContent = `${num}%`;
+}
+
+(function initBackdropControl() {
+  const sliderEl = document.getElementById("backdropIntensitySlider");
+  if (!sliderEl) return;
+
+  sliderEl.addEventListener("input", () => {
+    updateBackdropSliderDisplay();
+  });
+
+  // When mode radio changes, update slider to show the value for the new mode
+  form.querySelectorAll("input[name='backdropMode']").forEach(radio => {
+    radio.addEventListener("change", () => {
+      // Re-read stored settings to get the right value for this mode
+      chrome.storage.local.get(PEEK_DEFAULT_SETTINGS, stored => {
+        const clean = cleanPeekSettings(stored);
+        const isBlur = radio.value === "blur";
+        const newIntensity = isBlur ? clean.backdropBlur : clean.backdropOpacity;
+        sliderEl.value = newIntensity;
+        updateBackdropSliderDisplay(newIntensity);
+      });
+    });
+  });
+})();
 
 function showStatus(text) {
   statusEl.textContent = text;

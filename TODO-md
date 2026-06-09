@@ -1,11 +1,21 @@
 # Preview link tab — TO-DO (Créé avec Codex)
 
+## À vérifier
+
+- Vérifier que les nouvelles options de flou et d'assombrissement fonctionnent correctement avec
+  le menu slider. (Fait avec Claude Sonnet 4.6)
+- Tester la focntion d'exportation et importation des fichiers de préférences.
+
 ## Corriger
 
 - Image preview pour voir les changements qu'on fait.
-- Les options d'ombres ne font pas grand-chose, on ne voit pas grand changement.
+- Changer la couleur de l'assombrissement pour que ça soit en noir. Présentement, c'est de la
+  couleur du thème.
+- Lorsque la fenêtre "Aperçu intégré" est ouverte et que appuie pour ouvrir une "fenêtre compact", il faut que
+  que la fenêtre "Aperçu intégré" se ferme. Présentement, les deux fenêtres sont ouvertes en même temps.
 
 ## Idées futures
 
-- Ajouter une option pour définir la densité du flou et l'assombrissement de la page avec un slider.
 - Redimensionnement du panneau à la souris.
+- Lorsqu'on fait un thème personnalisé, faire qu'on puisse choisir
+  des couleurs dans un menu de sélection de couleurs.

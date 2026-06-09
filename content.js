@@ -245,10 +245,17 @@
               <input type="checkbox" name="closeWithEsc">
               <span>Fermer avec Échap</span>
             </label>
-            <label class="peek-check">
-              <input type="checkbox" name="dimBackdrop">
-              <span>Assombrir la page</span>
-            </label>
+            <div class="peek-backdrop-control">
+              <label><span>Arrière-plan</span></label>
+              <div class="peek-backdrop-mode">
+                <button type="button" class="peek-backdrop-mode-btn" data-mode="dim">🌑 Assombrissement</button>
+                <button type="button" class="peek-backdrop-mode-btn" data-mode="blur">🌫 Flou</button>
+              </div>
+              <div class="peek-backdrop-slider-row">
+                <input type="range" class="peek-backdrop-slider" name="backdropIntensity" min="0" max="100" step="1">
+                <span class="peek-backdrop-value">50%</span>
+              </div>
+            </div>
             <label class="peek-check">
               <input type="checkbox" name="closeAfterOpen">
               <span>Fermer après ouverture externe</span>
@@ -332,6 +339,37 @@
     STATE.refreshButton.addEventListener("click", refreshPreview);
     STATE.settingsButton.addEventListener("click", toggleSettings);
     STATE.settingsPanel.addEventListener("change", handleSettingsChange);
+
+    // Backdrop mode buttons
+    root.querySelectorAll(".peek-backdrop-mode-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const mode = btn.dataset.mode;
+        STATE.settings = { ...STATE.settings, backdropMode: mode };
+        applySettings();
+        syncControls();
+        saveSettings(STATE.settings);
+      });
+    });
+
+    // Backdrop slider live update
+    const backdropSlider = root.querySelector(".peek-backdrop-slider");
+    if (backdropSlider) {
+      backdropSlider.addEventListener("input", () => {
+        const mode = STATE.settings.backdropMode || "dim";
+        const val = Number(backdropSlider.value);
+        const pct = (val / 100) * 100;
+        backdropSlider.style.setProperty("--peek-slider-pct", `${pct}%`);
+        const valueEl = backdropSlider.closest(".peek-backdrop-slider-row")?.querySelector(".peek-backdrop-value");
+        if (valueEl) valueEl.textContent = `${val}%`;
+        if (mode === "blur") {
+          STATE.settings = { ...STATE.settings, backdropBlur: val };
+        } else {
+          STATE.settings = { ...STATE.settings, backdropOpacity: val };
+        }
+        applySettings();
+        saveSettings(STATE.settings);
+      });
+    }
 
     initResizeListeners(root);
 
@@ -826,7 +864,7 @@
     const menu = document.createElement("div");
     menu.id = COMPACT_MENU_ID;
     menu.innerHTML = `
-      <div class="peek-compact-settings">
+      <form class="peek-compact-settings">
         <label>
           <span>Mode</span>
           <select name="openMode">
@@ -873,7 +911,7 @@
           <input type="checkbox" name="closeWithEsc">
           <span>Fermer avec Échap</span>
         </label>
-      </div>
+      </form>
       <div class="peek-compact-actions">
         ${peekIconButton("peek-compact-settings-button", "settings", "Paramètres", "Paramètres")}
         ${peekIconButton("peek-compact-open", "external", "Nouvel onglet", "Nouvel onglet")}
@@ -977,6 +1015,18 @@
     STATE.root.dataset.frameStyle = STATE.settings.frameStyle;
     STATE.root.dataset.panelShadow = STATE.settings.panelShadow;
     STATE.root.dataset.dimBackdrop = String(STATE.settings.dimBackdrop);
+    STATE.root.dataset.backdropMode = STATE.settings.backdropMode || "dim";
+
+    // Backdrop CSS variables (slider 0-100 maps to: blur 0-25px, dim 0-1.0 opacity)
+    if (STATE.settings.backdropMode === "blur") {
+      const blurPx = Math.round((STATE.settings.backdropBlur / 100) * 25);
+      STATE.root.style.setProperty("--peek-backdrop-blur", `${blurPx}px`);
+      // Keep a very light dim even in blur mode (handled by CSS * 0.25)
+      STATE.root.style.setProperty("--peek-backdrop-opacity", String(STATE.settings.backdropBlur / 100));
+    } else {
+      STATE.root.style.setProperty("--peek-backdrop-opacity", String(STATE.settings.backdropOpacity / 100));
+      STATE.root.style.setProperty("--peek-backdrop-blur", "0px");
+    }
     STATE.root.style.setProperty("--peek-custom-width", `${STATE.settings.customWidth}px`);
     STATE.root.style.setProperty("--peek-custom-height", `${STATE.settings.customHeight}px`);
     STATE.root.style.setProperty("--peek-custom-left", `${STATE.settings.customLeft}px`);
@@ -998,6 +1048,7 @@
         "--peek-backdrop",
         `rgba(${r}, ${g}, ${b}, ${STATE.settings.customBackdropOpacity / 100})`
       );
+      STATE.root.style.setProperty("--peek-backdrop-color", `${r}, ${g}, ${b}`);
     } else {
       [
         "--peek-accent",
@@ -1010,7 +1061,8 @@
         "--peek-border",
         "--peek-button-bg",
         "--peek-button-hover",
-        "--peek-backdrop"
+        "--peek-backdrop",
+        "--peek-backdrop-color"
       ].forEach(name => STATE.root.style.removeProperty(name));
     }
 
@@ -1035,8 +1087,22 @@
     STATE.settingsPanel.elements.middleClick.checked = STATE.settings.middleClick;
     STATE.settingsPanel.elements.closeOutside.checked = STATE.settings.closeOutside;
     STATE.settingsPanel.elements.closeWithEsc.checked = STATE.settings.closeWithEsc;
-    STATE.settingsPanel.elements.dimBackdrop.checked = STATE.settings.dimBackdrop;
     STATE.settingsPanel.elements.closeAfterOpen.checked = STATE.settings.closeAfterOpen;
+
+    // Sync backdrop control
+    const backdropMode = STATE.settings.backdropMode || "dim";
+    STATE.settingsPanel.querySelectorAll(".peek-backdrop-mode-btn").forEach(btn => {
+      btn.classList.toggle("peek-active", btn.dataset.mode === backdropMode);
+    });
+    const intensity = backdropMode === "blur" ? STATE.settings.backdropBlur : STATE.settings.backdropOpacity;
+    const sliderEl = STATE.settingsPanel.querySelector(".peek-backdrop-slider");
+    const valueEl = STATE.settingsPanel.querySelector(".peek-backdrop-value");
+    if (sliderEl && valueEl) {
+      sliderEl.value = intensity;
+      const pct = ((intensity - 0) / 100) * 100;
+      sliderEl.style.setProperty("--peek-slider-pct", `${pct}%`);
+      valueEl.textContent = `${intensity}%`;
+    }
   }
 
   function handleSettingsChange(event) {
@@ -1063,22 +1129,44 @@
         resolve(readLocalStorageSettings());
         return;
       }
-      chrome.storage.local.get(PEEK_DEFAULT_SETTINGS, stored => {
-        if (chrome.runtime.lastError) {
-          resolve(readLocalStorageSettings());
-          return;
-        }
-        resolve(cleanSettings(stored));
-      });
+      try {
+        chrome.storage.local.get(PEEK_DEFAULT_SETTINGS, stored => {
+          if (chrome.runtime.lastError) {
+            resolve(readLocalStorageSettings());
+            return;
+          }
+          resolve(cleanSettings(stored));
+        });
+      } catch (err) {
+        console.warn("loadSettings: failed to read from chrome.storage", err.message);
+        resolve(readLocalStorageSettings());
+      }
     });
   }
 
   function saveSettings(settings) {
     if (typeof chrome === "undefined" || !chrome.storage?.local) {
-      window.localStorage.setItem("peek-preview-settings", JSON.stringify(settings));
+      try {
+        window.localStorage.setItem("peek-preview-settings", JSON.stringify(settings));
+      } catch (e) {
+        /* ignore */
+      }
       return;
     }
-    chrome.storage.local.set(settings);
+    try {
+      chrome.storage.local.set(settings, () => {
+        if (chrome.runtime.lastError) {
+          console.warn("saveSettings: error saving to storage", chrome.runtime.lastError.message);
+        }
+      });
+    } catch (err) {
+      console.warn("saveSettings: extension context might be invalidated, falling back to localStorage", err.message);
+      try {
+        window.localStorage.setItem("peek-preview-settings", JSON.stringify(settings));
+      } catch (e) {
+        /* ignore */
+      }
+    }
   }
 
   function readLocalStorageSettings() {
@@ -1267,9 +1355,17 @@
           }
 
           STATE.settings = cleanSettings({ ...STATE.settings, ...updates });
-          chrome.storage.local.set(updates, () => {
+          try {
+            chrome.storage.local.set(updates, () => {
+              if (chrome.runtime.lastError) {
+                console.warn("Resize storage error:", chrome.runtime.lastError.message);
+              }
+              scheduleOverlayLayout({ updateDimensions: true });
+            });
+          } catch (err) {
+            console.warn("Resize storage failed:", err.message);
             scheduleOverlayLayout({ updateDimensions: true });
-          });
+          }
         };
 
         window.addEventListener("mousemove", onMouseMove);

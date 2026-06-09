@@ -264,11 +264,23 @@
             <span>Fermer avec Échap</span>
           </label>
 
-          <label class="check-row">
-            <input type="checkbox" name="dimBackdrop">
-            <span class="switch" aria-hidden="true"></span>
-            <span>Assombrir la page</span>
-          </label>
+          <div class="backdrop-control wide-field">
+            <label><span>Arrière-plan lors de l'aperçu</span></label>
+            <div class="backdrop-mode">
+              <label class="backdrop-mode-btn">
+                <input type="radio" name="backdropMode" value="dim">
+                <span>🌑 Assombrissement</span>
+              </label>
+              <label class="backdrop-mode-btn">
+                <input type="radio" name="backdropMode" value="blur">
+                <span>🌫 Flou</span>
+              </label>
+            </div>
+            <div class="backdrop-slider-row">
+              <input type="range" id="backdropIntensitySlider" class="backdrop-slider" name="backdropIntensity" min="0" max="100" step="1">
+              <span class="backdrop-value" id="backdropIntensityValue">50%</span>
+            </div>
+          </div>
 
           <label class="check-row">
             <input type="checkbox" name="closeAfterOpen">

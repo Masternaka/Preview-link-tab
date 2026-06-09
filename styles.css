@@ -3,6 +3,7 @@
   --peek-backdrop: rgba(14, 18, 24, 0.32);
   --peek-backdrop-opacity: 0.35;
   --peek-backdrop-blur: 0px;
+  --peek-backdrop-color: 14, 18, 24;
   --peek-bg: #f8fafc;
   --peek-border: rgba(15, 23, 42, 0.18);
   --peek-button-bg: #f1f5f9;
@@ -29,6 +30,7 @@
 #peek-preview-extension-root[data-theme="dark"] {
   --peek-accent: #38bdf8;
   --peek-backdrop: rgba(3, 7, 18, 0.56);
+  --peek-backdrop-color: 3, 7, 18;
   --peek-bg: #111827;
   --peek-border: rgba(148, 163, 184, 0.26);
   --peek-button-bg: #1f2937;
@@ -46,6 +48,7 @@
 #peek-preview-extension-root[data-theme="graphite"] {
   --peek-accent: #f97316;
   --peek-backdrop: rgba(15, 23, 42, 0.38);
+  --peek-backdrop-color: 15, 23, 42;
   --peek-bg: #1f2937;
   --peek-border: rgba(209, 213, 219, 0.28);
   --peek-button-bg: #374151;
@@ -63,6 +66,7 @@
 #peek-preview-extension-root[data-theme="mint"] {
   --peek-accent: #0f766e;
   --peek-backdrop: rgba(8, 47, 73, 0.28);
+  --peek-backdrop-color: 8, 47, 73;
   --peek-bg: #f0fdfa;
   --peek-border: rgba(15, 118, 110, 0.24);
   --peek-button-bg: #ccfbf1;
@@ -78,6 +82,7 @@
 #peek-preview-extension-root[data-theme="catppuccin"] {
   --peek-accent: #cba6f7;
   --peek-backdrop: rgba(17, 17, 27, 0.48);
+  --peek-backdrop-color: 17, 17, 27;
   --peek-bg: #1e1e2e;
   --peek-border: rgba(203, 166, 247, 0.3);
   --peek-button-bg: #313244;
@@ -94,6 +99,7 @@
 #peek-preview-extension-root[data-theme="gruvbox"] {
   --peek-accent: #fabd2f;
   --peek-backdrop: rgba(40, 40, 40, 0.5);
+  --peek-backdrop-color: 40, 40, 40;
   --peek-bg: #282828;
   --peek-border: rgba(250, 189, 47, 0.32);
   --peek-button-bg: #3c3836;
@@ -110,6 +116,7 @@
 #peek-preview-extension-root[data-theme="dracula"] {
   --peek-accent: #bd93f9;
   --peek-backdrop: rgba(40, 42, 54, 0.52);
+  --peek-backdrop-color: 40, 42, 54;
   --peek-bg: #282a36;
   --peek-border: rgba(189, 147, 249, 0.32);
   --peek-button-bg: #44475a;
@@ -131,6 +138,7 @@
   #peek-preview-extension-root[data-theme="system"] {
     --peek-accent: #38bdf8;
     --peek-backdrop: rgba(3, 7, 18, 0.56);
+    --peek-backdrop-color: 3, 7, 18;
     --peek-bg: #111827;
     --peek-border: rgba(148, 163, 184, 0.26);
     --peek-button-bg: #1f2937;
@@ -167,11 +175,22 @@
 }
 
 #peek-preview-extension-root .peek-backdrop {
-  background: var(--peek-backdrop);
-  backdrop-filter: blur(var(--peek-backdrop-blur));
+  background: rgba(var(--peek-backdrop-color, 14, 18, 24), var(--peek-backdrop-opacity, 0.35));
+  backdrop-filter: blur(var(--peek-backdrop-blur, 0px));
   inset: 0;
   position: fixed;
   transition: background 220ms ease, backdrop-filter 220ms ease;
+}
+
+/* Mode assombrissement : fond coloré, pas de flou */
+#peek-preview-extension-root[data-backdrop-mode="dim"] .peek-backdrop {
+  backdrop-filter: none;
+}
+
+/* Mode flou : flou actif, fond très léger */
+#peek-preview-extension-root[data-backdrop-mode="blur"] .peek-backdrop {
+  background: rgba(var(--peek-backdrop-color, 14, 18, 24), calc(var(--peek-backdrop-opacity, 0.35) * 0.25));
+  backdrop-filter: blur(var(--peek-backdrop-blur, 0px));
 }
 
 #peek-preview-extension-root[data-dim-backdrop="false"] .peek-backdrop {
@@ -229,25 +248,39 @@
 }
 
 #peek-preview-extension-root[data-panel-shadow="subtle"] {
-  --peek-panel-shadow: 0 6px 20px rgba(15, 23, 42, 0.1);
+  --peek-panel-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.08),
+    0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
 #peek-preview-extension-root[data-panel-shadow="medium"] {
-  --peek-panel-shadow: 0 18px 56px rgba(15, 23, 42, 0.26);
+  --peek-panel-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.14),
+    0 16px 48px rgba(0, 0, 0, 0.26),
+    0 32px 64px rgba(0, 0, 0, 0.12);
 }
 
 #peek-preview-extension-root[data-panel-shadow="strong"] {
-  --peek-panel-shadow: 0 26px 88px rgba(15, 23, 42, 0.38);
+  --peek-panel-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.22),
+    0 24px 64px rgba(0, 0, 0, 0.42),
+    0 48px 96px rgba(0, 0, 0, 0.20);
 }
 
 #peek-preview-extension-root[data-panel-shadow="dramatic"] {
-  --peek-panel-shadow: 0 36px 120px rgba(0, 0, 0, 0.52);
+  --peek-panel-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.30),
+    0 32px 80px rgba(0, 0, 0, 0.58),
+    0 64px 120px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(0, 0, 0, 0.06);
 }
 
 #peek-preview-extension-root[data-panel-shadow="glow"] {
   --peek-panel-shadow:
-    0 20px 64px color-mix(in srgb, var(--peek-accent) 38%, transparent),
-    0 8px 28px rgba(15, 23, 42, 0.18);
+    0 0 0 1px color-mix(in srgb, var(--peek-accent) 25%, transparent),
+    0 8px 24px color-mix(in srgb, var(--peek-accent) 30%, transparent),
+    0 20px 64px color-mix(in srgb, var(--peek-accent) 48%, transparent),
+    0 40px 96px color-mix(in srgb, var(--peek-accent) 22%, transparent);
 }
 
 #peek-preview-extension-root.peek-visible[data-animation="slide"] .peek-panel {
@@ -702,6 +735,124 @@
   height: 15px;
   margin: 0;
   width: 15px;
+}
+
+/* ── Backdrop control (mode + slider) ── */
+#peek-preview-extension-root .peek-backdrop-control {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  grid-column: 1 / -1;
+}
+
+#peek-preview-extension-root .peek-backdrop-mode {
+  display: grid;
+  gap: 4px;
+  grid-template-columns: 1fr 1fr;
+}
+
+#peek-preview-extension-root .peek-backdrop-mode-btn {
+  align-items: center;
+  appearance: none;
+  background: var(--peek-button-bg);
+  border: 1px solid var(--peek-border);
+  border-radius: 6px;
+  color: var(--peek-muted);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  gap: 5px;
+  height: 28px;
+  justify-content: center;
+  padding: 0 8px;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+  width: 100%;
+}
+
+#peek-preview-extension-root .peek-backdrop-mode-btn.peek-active {
+  background: color-mix(in srgb, var(--peek-accent) 16%, var(--peek-button-bg));
+  border-color: color-mix(in srgb, var(--peek-accent) 45%, var(--peek-border));
+  color: var(--peek-text);
+}
+
+#peek-preview-extension-root .peek-backdrop-slider-row {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr auto;
+}
+
+#peek-preview-extension-root .peek-backdrop-slider {
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  height: 16px;
+  margin: 0;
+  outline: none;
+  padding: 0;
+  width: 100%;
+}
+
+#peek-preview-extension-root .peek-backdrop-slider::-webkit-slider-runnable-track {
+  background:
+    linear-gradient(
+      to right,
+      var(--peek-accent) 0%,
+      var(--peek-accent) var(--peek-slider-pct, 50%),
+      var(--peek-border) var(--peek-slider-pct, 50%),
+      var(--peek-border) 100%
+    );
+  border-radius: 999px;
+  height: 4px;
+}
+
+#peek-preview-extension-root .peek-backdrop-slider::-webkit-slider-thumb {
+  appearance: none;
+  background: #ffffff;
+  border: 2px solid var(--peek-accent);
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22);
+  height: 16px;
+  margin-top: -6px;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+  width: 16px;
+}
+
+#peek-preview-extension-root .peek-backdrop-slider::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--peek-accent) 20%, transparent);
+  transform: scale(1.15);
+}
+
+#peek-preview-extension-root .peek-backdrop-slider::-moz-range-track {
+  background: var(--peek-border);
+  border-radius: 999px;
+  height: 4px;
+}
+
+#peek-preview-extension-root .peek-backdrop-slider::-moz-range-progress {
+  background: var(--peek-accent);
+  border-radius: 999px;
+  height: 4px;
+}
+
+#peek-preview-extension-root .peek-backdrop-slider::-moz-range-thumb {
+  appearance: none;
+  background: #ffffff;
+  border: 2px solid var(--peek-accent);
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22);
+  height: 16px;
+  transition: transform 120ms ease;
+  width: 16px;
+}
+
+#peek-preview-extension-root .peek-backdrop-value {
+  color: var(--peek-muted);
+  font-size: 10px;
+  min-width: 26px;
+  text-align: right;
 }
 
 #peek-preview-extension-root .peek-frame-wrap {

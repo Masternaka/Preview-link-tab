@@ -31,7 +31,8 @@ const PEEK_DEFAULT_SETTINGS = {
   autoCompactFallback: true,
   compactFallbackDomains: "",
   backdropOpacity: 35,
-  backdropBlur: 0
+  backdropBlur: 0,
+  backdropMode: "dim"
 };
 
 const PEEK_SETTING_OPTIONS = {
@@ -44,7 +45,8 @@ const PEEK_SETTING_OPTIONS = {
   animationSpeed: ["instant", "quick", "normal", "relaxed", "slow", "leisurely"],
   frameStyle: ["rounded", "square", "glass", "outlined"],
   panelShadow: ["default", "none", "subtle", "medium", "strong", "dramatic", "glow"],
-  domainListMode: ["off", "blacklist", "whitelist"]
+  domainListMode: ["off", "blacklist", "whitelist"],
+  backdropMode: ["dim", "blur"]
 };
 
 const PEEK_ANIMATION_SPEED_MS = {
@@ -176,8 +178,11 @@ function cleanPeekSettings(settings) {
   next.autoCompactFallback = Boolean(next.autoCompactFallback);
   next.domainList = typeof next.domainList === "string" ? next.domainList : PEEK_DEFAULT_SETTINGS.domainList;
   next.compactFallbackDomains = typeof next.compactFallbackDomains === "string" ? next.compactFallbackDomains : PEEK_DEFAULT_SETTINGS.compactFallbackDomains;
-  next.backdropOpacity = clampNumber(next.backdropOpacity, 0, 90, PEEK_DEFAULT_SETTINGS.backdropOpacity);
-  next.backdropBlur = clampNumber(next.backdropBlur, 0, 25, PEEK_DEFAULT_SETTINGS.backdropBlur);
+  next.backdropOpacity = clampNumber(next.backdropOpacity, 0, 100, PEEK_DEFAULT_SETTINGS.backdropOpacity);
+  next.backdropBlur = clampNumber(next.backdropBlur, 0, 100, PEEK_DEFAULT_SETTINGS.backdropBlur);
+  if (!PEEK_SETTING_OPTIONS.backdropMode.includes(next.backdropMode)) {
+    next.backdropMode = PEEK_DEFAULT_SETTINGS.backdropMode;
+  }
   if (!PEEK_SETTING_OPTIONS.domainListMode.includes(next.domainListMode)) {
     next.domainListMode = PEEK_DEFAULT_SETTINGS.domainListMode;
   }
