@@ -333,8 +333,8 @@
     });
     STATE.openButton.addEventListener("click", openCurrentInTab);
     STATE.helpOpenButton.addEventListener("click", openCurrentInTab);
-    STATE.popupButton.addEventListener("click", () => openCurrentInPopup());
-    STATE.helpPopupButton.addEventListener("click", () => openCurrentInPopup());
+    STATE.popupButton.addEventListener("click", () => openCurrentInPopup(true));
+    STATE.helpPopupButton.addEventListener("click", () => openCurrentInPopup(true));
     STATE.copyButton.addEventListener("click", copyCurrentUrl);
     STATE.refreshButton.addEventListener("click", refreshPreview);
     STATE.settingsButton.addEventListener("click", toggleSettings);

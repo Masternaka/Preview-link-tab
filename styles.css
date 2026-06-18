@@ -182,8 +182,9 @@
   transition: background 220ms ease, backdrop-filter 220ms ease;
 }
 
-/* Mode assombrissement : fond coloré, pas de flou */
+/* Mode assombrissement : fond noir fixe, pas de flou */
 #peek-preview-extension-root[data-backdrop-mode="dim"] .peek-backdrop {
+  background: rgba(0, 0, 0, var(--peek-backdrop-opacity, 0.35));
   backdrop-filter: none;
 }
 

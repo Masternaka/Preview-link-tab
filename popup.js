@@ -5,6 +5,7 @@ const saveToast = document.querySelector("#save-toast");
 
 loadSettings();
 initSectionNav();
+initColorPickers();
 
 form.addEventListener("submit", event => {
   event.preventDefault();
@@ -209,7 +210,25 @@ function updateColorSwatches() {
   document.querySelectorAll("[data-color-for]").forEach(swatch => {
     const field = form.elements[swatch.dataset.colorFor];
     const value = field?.value?.trim();
-    swatch.style.background = /^#[0-9a-fA-F]{6}$/.test(value) ? value : "transparent";
+    if (swatch.tagName === "INPUT" && swatch.type === "color") {
+      if (/^#[0-9a-fA-F]{6}$/.test(value)) {
+        swatch.value = value.toLowerCase();
+      }
+    } else {
+      swatch.style.background = /^#[0-9a-fA-F]{6}$/.test(value) ? value : "transparent";
+    }
+  });
+}
+
+function initColorPickers() {
+  document.querySelectorAll("input[type='color'].color-swatch").forEach(swatch => {
+    swatch.addEventListener("input", (e) => {
+      const field = form.elements[swatch.dataset.colorFor];
+      if (field) {
+        field.value = e.target.value;
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
   });
 }
 
