@@ -624,6 +624,16 @@
   background: var(--peek-button-hover);
 }
 
+#peek-preview-extension-root button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+#peek-preview-extension-root .peek-pin.peek-active {
+  background: color-mix(in srgb, var(--peek-accent) 22%, var(--peek-button-bg));
+  color: var(--peek-accent);
+}
+
 #peek-preview-extension-root .peek-settings {
   background: var(--peek-header-bg);
   border-bottom: 1px solid var(--peek-border);
@@ -1508,21 +1518,21 @@
 }
 
 /* Poignées de redimensionnement */
-.peek-resize-handle {
+#peek-preview-extension-root .peek-resize-handle {
   position: absolute;
   z-index: 999999;
   user-select: none;
 }
 
 /* Bords horizontaux */
-.peek-resize-n {
+#peek-preview-extension-root .peek-resize-n {
   top: -4px;
   left: 6px;
   right: 6px;
   height: 8px;
   cursor: ns-resize;
 }
-.peek-resize-s {
+#peek-preview-extension-root .peek-resize-s {
   bottom: -4px;
   left: 6px;
   right: 6px;
@@ -1531,14 +1541,14 @@
 }
 
 /* Bords verticaux */
-.peek-resize-e {
+#peek-preview-extension-root .peek-resize-e {
   top: 6px;
   bottom: 6px;
   right: -4px;
   width: 8px;
   cursor: ew-resize;
 }
-.peek-resize-w {
+#peek-preview-extension-root .peek-resize-w {
   top: 6px;
   bottom: 6px;
   left: -4px;
@@ -1547,28 +1557,28 @@
 }
 
 /* Angles/Coins */
-.peek-resize-nw {
+#peek-preview-extension-root .peek-resize-nw {
   top: -4px;
   left: -4px;
   width: 12px;
   height: 12px;
   cursor: nwse-resize;
 }
-.peek-resize-ne {
+#peek-preview-extension-root .peek-resize-ne {
   top: -4px;
   right: -4px;
   width: 12px;
   height: 12px;
   cursor: nesw-resize;
 }
-.peek-resize-sw {
+#peek-preview-extension-root .peek-resize-sw {
   bottom: -4px;
   left: -4px;
   width: 12px;
   height: 12px;
   cursor: nesw-resize;
 }
-.peek-resize-se {
+#peek-preview-extension-root .peek-resize-se {
   bottom: -4px;
   right: -4px;
   width: 12px;

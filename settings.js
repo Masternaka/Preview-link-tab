@@ -28,6 +28,8 @@ const PEEK_DEFAULT_SETTINGS = {
   domainListMode: "off",
   domainList: "",
   middleClick: false,
+  hoverPreviewDelay: 0,
+  domainRules: "",
   autoCompactFallback: true,
   compactFallbackDomains: "",
   backdropOpacity: 35,
@@ -170,14 +172,16 @@ function cleanPeekSettings(settings) {
     }
   }
 
-  next.closeOutside = Boolean(next.closeOutside);
-  next.closeWithEsc = Boolean(next.closeWithEsc);
-  next.dimBackdrop = Boolean(next.dimBackdrop);
-  next.closeAfterOpen = Boolean(next.closeAfterOpen);
-  next.middleClick = Boolean(next.middleClick);
-  next.autoCompactFallback = Boolean(next.autoCompactFallback);
+  next.closeOutside = cleanBoolean(next.closeOutside, PEEK_DEFAULT_SETTINGS.closeOutside);
+  next.closeWithEsc = cleanBoolean(next.closeWithEsc, PEEK_DEFAULT_SETTINGS.closeWithEsc);
+  next.dimBackdrop = cleanBoolean(next.dimBackdrop, PEEK_DEFAULT_SETTINGS.dimBackdrop);
+  next.closeAfterOpen = cleanBoolean(next.closeAfterOpen, PEEK_DEFAULT_SETTINGS.closeAfterOpen);
+  next.middleClick = cleanBoolean(next.middleClick, PEEK_DEFAULT_SETTINGS.middleClick);
+  next.autoCompactFallback = cleanBoolean(next.autoCompactFallback, PEEK_DEFAULT_SETTINGS.autoCompactFallback);
   next.domainList = typeof next.domainList === "string" ? next.domainList : PEEK_DEFAULT_SETTINGS.domainList;
+  next.domainRules = typeof next.domainRules === "string" ? next.domainRules : PEEK_DEFAULT_SETTINGS.domainRules;
   next.compactFallbackDomains = typeof next.compactFallbackDomains === "string" ? next.compactFallbackDomains : PEEK_DEFAULT_SETTINGS.compactFallbackDomains;
+  next.hoverPreviewDelay = clampNumber(next.hoverPreviewDelay, 0, 3000, PEEK_DEFAULT_SETTINGS.hoverPreviewDelay);
   next.backdropOpacity = clampNumber(next.backdropOpacity, 0, 100, PEEK_DEFAULT_SETTINGS.backdropOpacity);
   next.backdropBlur = clampNumber(next.backdropBlur, 0, 100, PEEK_DEFAULT_SETTINGS.backdropBlur);
   if (!PEEK_SETTING_OPTIONS.backdropMode.includes(next.backdropMode)) {
@@ -200,6 +204,16 @@ function cleanPeekSettings(settings) {
   next.customBorder = cleanHexColor(next.customBorder, PEEK_DEFAULT_SETTINGS.customBorder);
   next.customBackdrop = cleanHexColor(next.customBackdrop, PEEK_DEFAULT_SETTINGS.customBackdrop);
   return next;
+}
+
+function cleanBoolean(value, fallback) {
+  if (value === true || value === "true") {
+    return true;
+  }
+  if (value === false || value === "false") {
+    return false;
+  }
+  return fallback;
 }
 
 function clampNumber(value, min, max, fallback) {
@@ -233,9 +247,45 @@ function parseDomainList(value) {
   }
   return value
     .split(/[\n,;]+/)
-    .map(entry => entry.trim().toLowerCase())
+    .map(normalizeDomainEntry)
+    .filter(Boolean);
+}
+
+function normalizeDomainEntry(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  let entry = value.trim().toLowerCase().replace(/^\*\./, "");
+  if (!entry) {
+    return "";
+  }
+  try {
+    if (!/^[a-z][a-z\d+.-]*:\/\//i.test(entry)) {
+      entry = `https://${entry.replace(/^\/\//, "")}`;
+    }
+    return new URL(entry).hostname.replace(/\.$/, "");
+  } catch {
+    return "";
+  }
+}
+
+function parseDomainRules(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    return [];
+  }
+  return value
+    .split(/[\n,;]+/)
+    .map(line => line.trim())
+    .map(line => {
+      const match = line.match(/^(.+?)\s*(?:=|:)\s*(overlay|compact|blocked)\s*$/i);
+      if (!match) {
+        return null;
+      }
+      const domain = normalizeDomainEntry(match[1]);
+      return domain ? { domain, mode: match[2].toLowerCase() } : null;
+    })
     .filter(Boolean)
-    .map(entry => entry.replace(/^\*\./, ""));
+    .sort((a, b) => b.domain.length - a.domain.length);
 }
 
 function hostMatchesDomain(host, domain) {
@@ -411,6 +461,11 @@ function isPeekAllowedForHost(hostname, settings) {
     return matched;
   }
   return true;
+}
+
+function getDomainRule(hostname, settings) {
+  const host = (hostname || "").toLowerCase();
+  return parseDomainRules(settings?.domainRules).find(rule => hostMatchesDomain(host, rule.domain)) || null;
 }
 
 const PEEK_BUILTIN_BLOCKED_DOMAINS = [

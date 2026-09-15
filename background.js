@@ -9,6 +9,7 @@ const SIZE_MAP = {
 const compactWindowIds = new Set();
 const compactTabIds = new Set();
 const CONTEXT_MENU_ID = "peek-preview-link";
+const COMPACT_WINDOWS_STORAGE_KEY = "peekCompactWindows";
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.removeAll(() => {
@@ -24,10 +25,12 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId !== CONTEXT_MENU_ID || !info.linkUrl || !tab?.id) {
     return;
   }
-  chrome.tabs.sendMessage(tab.id, {
-    type: "PREVIEW_URL",
-    url: info.linkUrl
-  });
+  chrome.tabs
+    .sendMessage(tab.id, {
+      type: "PREVIEW_URL",
+      url: info.linkUrl
+    })
+    .catch(() => {});
 });
 
 chrome.commands.onCommand.addListener(command => {
@@ -62,6 +65,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === "OPEN_URL_IN_TAB" && isHttpUrl(message.url)) {
+    chrome.tabs.create({ url: message.url, active: true })
+      .then(() => sendResponse({ ok: true }))
+      .catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+
   return false;
 });
 
@@ -89,6 +99,7 @@ async function openCompactWindow(message, sender) {
   const tabId = createdWindow?.tabs?.[0]?.id;
   if (tabId) {
     compactTabIds.add(tabId);
+    await rememberCompactWindow(windowId, tabId);
     enableCompactMenu(tabId, windowId);
   }
   return { windowId, tabId };
@@ -96,27 +107,92 @@ async function openCompactWindow(message, sender) {
 
 async function closeCompactWindow(message, sender) {
   const windowId = message?.windowId ?? sender.tab?.windowId;
-  if (!windowId || !compactWindowIds.has(windowId)) {
+  if (!windowId || !(await isCompactWindow(windowId))) {
     return false;
   }
   await chrome.windows.remove(windowId);
   compactWindowIds.delete(windowId);
+  await forgetCompactWindow(windowId);
   return true;
 }
 
 chrome.windows.onRemoved.addListener(windowId => {
   compactWindowIds.delete(windowId);
+  forgetCompactWindow(windowId).catch(() => {});
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status === "complete" && compactTabIds.has(tabId)) {
-    enableCompactMenu(tabId, tab.windowId);
+  if (changeInfo.status !== "complete") {
+    return;
   }
+  isCompactTab(tabId).then(isCompact => {
+    if (isCompact) {
+      enableCompactMenu(tabId, tab.windowId);
+    }
+  }).catch(() => {});
 });
 
 chrome.tabs.onRemoved.addListener(tabId => {
   compactTabIds.delete(tabId);
+  forgetCompactTab(tabId).catch(() => {});
 });
+
+async function getCompactWindows() {
+  if (!chrome.storage?.session) {
+    return {};
+  }
+  const stored = await chrome.storage.session.get(COMPACT_WINDOWS_STORAGE_KEY);
+  return stored[COMPACT_WINDOWS_STORAGE_KEY] || {};
+}
+
+async function setCompactWindows(windows) {
+  if (chrome.storage?.session) {
+    await chrome.storage.session.set({ [COMPACT_WINDOWS_STORAGE_KEY]: windows });
+  }
+}
+
+async function rememberCompactWindow(windowId, tabId) {
+  if (!windowId || !tabId) {
+    return;
+  }
+  const windows = await getCompactWindows();
+  windows[windowId] = tabId;
+  await setCompactWindows(windows);
+}
+
+async function isCompactWindow(windowId) {
+  if (compactWindowIds.has(windowId)) {
+    return true;
+  }
+  const windows = await getCompactWindows();
+  return Object.prototype.hasOwnProperty.call(windows, windowId);
+}
+
+async function isCompactTab(tabId) {
+  if (compactTabIds.has(tabId)) {
+    return true;
+  }
+  const windows = await getCompactWindows();
+  return Object.values(windows).includes(tabId);
+}
+
+async function forgetCompactWindow(windowId) {
+  const windows = await getCompactWindows();
+  if (!Object.prototype.hasOwnProperty.call(windows, windowId)) {
+    return;
+  }
+  delete windows[windowId];
+  await setCompactWindows(windows);
+}
+
+async function forgetCompactTab(tabId) {
+  const windows = await getCompactWindows();
+  const windowId = Object.keys(windows).find(id => windows[id] === tabId);
+  if (windowId) {
+    delete windows[windowId];
+    await setCompactWindows(windows);
+  }
+}
 
 function enableCompactMenu(tabId, windowId) {
   chrome.tabs

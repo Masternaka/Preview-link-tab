@@ -114,7 +114,9 @@ function getFormSettings() {
       : 0,
     domainListMode: form.elements.domainListMode.value,
     domainList: form.elements.domainList.value,
+    domainRules: form.elements.domainRules.value,
     middleClick: form.elements.middleClick.checked,
+    hoverPreviewDelay: form.elements.hoverPreviewDelay.value,
     closeOutside: form.elements.closeOutside.checked,
     closeWithEsc: form.elements.closeWithEsc.checked,
     dimBackdrop: true,
@@ -168,7 +170,9 @@ function setFormSettings(settings) {
 
   form.elements.domainListMode.value = clean.domainListMode;
   form.elements.domainList.value = clean.domainList;
+  form.elements.domainRules.value = clean.domainRules;
   form.elements.middleClick.checked = clean.middleClick;
+  form.elements.hoverPreviewDelay.value = String(clean.hoverPreviewDelay);
   form.elements.closeOutside.checked = clean.closeOutside;
   form.elements.closeWithEsc.checked = clean.closeWithEsc;
   form.elements.closeAfterOpen.checked = clean.closeAfterOpen;
@@ -329,4 +333,3 @@ if (exportButton && importButton && importFileInput) {
     importFileInput.value = ""; // Reset
   });
 }
-

@@ -230,12 +230,23 @@
             </div>
           </fieldset>
 
-          <p class="hint">Raccourci clavier global : <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> sur le lien survolé.</p>
+          <p class="hint">Raccourci global : <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd>. Chrome permet de le modifier dans <kbd>chrome://extensions/shortcuts</kbd>.</p>
 
           <label class="check-row">
             <input type="checkbox" name="middleClick">
             <span class="switch" aria-hidden="true"></span>
             <span>Aperçu au clic molette sur un lien</span>
+          </label>
+
+          <label>
+            <span>Aperçu au survol</span>
+            <select name="hoverPreviewDelay">
+              <option value="0">Désactivé</option>
+              <option value="350">Après 0,35 seconde</option>
+              <option value="700">Après 0,7 seconde</option>
+              <option value="1200">Après 1,2 seconde</option>
+              <option value="2000">Après 2 secondes</option>
+            </select>
           </label>
 
           <label>
@@ -251,6 +262,12 @@
             <span>Domaines (un par ligne ou séparés par des virgules)</span>
             <textarea name="domainList" rows="3" placeholder="exemple.com, banque.fr"></textarea>
           </label>
+
+          <label class="wide-field">
+            <span>Règles par domaine</span>
+            <textarea name="domainRules" rows="3" placeholder="github.com = compact&#10;docs.exemple.com = overlay&#10;banque.fr = blocked"></textarea>
+          </label>
+          <p class="hint wide-field">Les règles les plus spécifiques gagnent. Les valeurs possibles sont <code>overlay</code>, <code>compact</code> et <code>blocked</code>.</p>
 
           <label class="check-row">
             <input type="checkbox" name="closeOutside">

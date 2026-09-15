@@ -17,8 +17,7 @@ desktop.ini
 *.tmp
 *.bak
 
-# Test directories
-test/
+# Temporary test artefacts
 tmp/
 
 # Claude Code documentation

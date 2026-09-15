@@ -1,4 +1,20 @@
 (() => {
+  // In embedded documents, only relay keyboard/navigation information to the
+  // top-level preview. The full interface must never be rendered in a frame.
+  if (window.top !== window.self) {
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape") {
+        window.top.postMessage({ source: "peek-preview", type: "CLOSE_PEEK_PREVIEW" }, "*");
+      }
+    }, true);
+    window.top.postMessage({
+      source: "peek-preview",
+      type: "PEEK_FRAME_NAVIGATION",
+      url: window.location.href
+    }, "*");
+    return;
+  }
+
   const ROOT_ID = "peek-preview-extension-root";
   const COMPACT_MENU_ID = "peek-compact-menu-root";
   const ACTIONS_BAR_GUTTER = 64;
@@ -15,6 +31,9 @@
     refreshButton: null,
     helpOpenButton: null,
     helpPopupButton: null,
+    backButton: null,
+    forwardButton: null,
+    pinButton: null,
     settingsPanel: null,
     settingsButton: null,
     helpEl: null,
@@ -23,7 +42,11 @@
     compactSettingsButton: null,
     compactWindowId: null,
     settings: { ...PEEK_DEFAULT_SETTINGS },
-    currentUrl: ""
+    currentUrl: "",
+    previouslyFocused: null,
+    previewHistory: [],
+    previewHistoryIndex: -1,
+    isPinned: false
   };
 
   let closeId = 0;
@@ -32,6 +55,10 @@
   let overlayResizeTimer = 0;
   let overlayPositionAttempts = 0;
   let overlayPanelObserver = null;
+  let hoverPreviewTimer = 0;
+  let hoveredAnchor = null;
+  let previewLoadTimer = 0;
+  let settingsSaveTimer = 0;
 
   loadSettings().then(settings => {
     STATE.settings = settings;
@@ -92,16 +119,23 @@
     });
   }
 
-  document.addEventListener(
-    "mouseover",
-    event => {
-      const anchor = findLink(event.target);
-      if (anchor) {
-        lastHoveredAnchor = anchor;
-      }
-    },
-    true
-  );
+  document.addEventListener("pointerover", event => {
+    const anchor = findLink(event.target);
+    if (!anchor || anchor === hoveredAnchor) {
+      return;
+    }
+    lastHoveredAnchor = anchor;
+    hoveredAnchor = anchor;
+    scheduleHoverPreview(anchor);
+  }, true);
+
+  document.addEventListener("pointerout", event => {
+    const anchor = findLink(event.target);
+    if (anchor && anchor === hoveredAnchor && !anchor.contains(event.relatedTarget)) {
+      hoveredAnchor = null;
+      window.clearTimeout(hoverPreviewTimer);
+    }
+  }, true);
 
   function ensureRoot() {
     if (STATE.root) {
@@ -112,7 +146,7 @@
     root.id = ROOT_ID;
     root.innerHTML = `
       <div class="peek-backdrop" data-peek-close></div>
-      <section class="peek-panel" role="dialog" aria-modal="true" aria-label="Aperçu du lien">
+      <section class="peek-panel" role="dialog" aria-modal="true" aria-label="Aperçu du lien" tabindex="-1">
         <div class="peek-resize-handle peek-resize-n" data-direction="n"></div>
         <div class="peek-resize-handle peek-resize-s" data-direction="s"></div>
         <div class="peek-resize-handle peek-resize-e" data-direction="e"></div>
@@ -278,8 +312,11 @@
       </section>
       <div class="peek-actions">
         ${peekIconButton("peek-settings-button", "settings", "Paramètres", "Paramètres")}
+        ${peekIconButton("peek-back", "back", "Page précédente", "Page précédente")}
+        ${peekIconButton("peek-forward", "forward", "Page suivante", "Page suivante")}
         ${peekIconButton("peek-refresh", "refresh", "Actualiser", "Actualiser")}
         ${peekIconButton("peek-copy", "copy", "Copier l'URL", "Copier l'URL")}
+        ${peekIconButton("peek-pin", "pin", "Épingler l'aperçu", "Épingler l'aperçu")}
         ${peekIconButton("peek-popup", "popup", "Fenêtre compacte", "Fenêtre compacte")}
         ${peekIconButton("peek-open", "external", "Nouvel onglet", "Nouvel onglet")}
         ${peekIconButton("peek-close", "close", "Fermer", "Fermer")}
@@ -303,12 +340,16 @@
     STATE.settingsPanel = root.querySelector(".peek-settings");
     STATE.settingsButton = root.querySelector(".peek-settings-button");
     STATE.helpEl = root.querySelector(".peek-help");
+    STATE.backButton = root.querySelector(".peek-back");
+    STATE.forwardButton = root.querySelector(".peek-forward");
+    STATE.pinButton = root.querySelector(".peek-pin");
 
     root.querySelectorAll(".peek-settings-tab").forEach(tab => {
       tab.addEventListener("click", () => switchSettingsTab(tab.dataset.tab));
     });
 
     STATE.iframe.addEventListener("load", () => {
+      clearPreviewLoadTimer();
       if (!STATE.currentUrl) {
         return;
       }
@@ -324,10 +365,11 @@
         STATE.root.classList.remove("peek-blocked");
       }
     });
+    STATE.iframe.addEventListener("error", () => setPreviewBlocked());
 
     root.querySelector(".peek-close").addEventListener("click", closePreview);
     root.querySelector("[data-peek-close]").addEventListener("click", () => {
-      if (STATE.settings.closeOutside) {
+      if (STATE.settings.closeOutside && !STATE.isPinned) {
         closePreview();
       }
     });
@@ -336,9 +378,13 @@
     STATE.popupButton.addEventListener("click", () => openCurrentInPopup(true));
     STATE.helpPopupButton.addEventListener("click", () => openCurrentInPopup(true));
     STATE.copyButton.addEventListener("click", copyCurrentUrl);
+    STATE.backButton.addEventListener("click", () => navigatePreviewHistory(-1));
+    STATE.forwardButton.addEventListener("click", () => navigatePreviewHistory(1));
+    STATE.pinButton.addEventListener("click", togglePinnedPreview);
     STATE.refreshButton.addEventListener("click", refreshPreview);
     STATE.settingsButton.addEventListener("click", toggleSettings);
     STATE.settingsPanel.addEventListener("change", handleSettingsChange);
+    root.addEventListener("keydown", trapFocus);
 
     // Backdrop mode buttons
     root.querySelectorAll(".peek-backdrop-mode-btn").forEach(btn => {
@@ -347,7 +393,7 @@
         STATE.settings = { ...STATE.settings, backdropMode: mode };
         applySettings();
         syncControls();
-        saveSettings(STATE.settings);
+        scheduleSettingsSave();
       });
     });
 
@@ -367,8 +413,9 @@
           STATE.settings = { ...STATE.settings, backdropOpacity: val };
         }
         applySettings();
-        saveSettings(STATE.settings);
+        scheduleSettingsSave();
       });
+      backdropSlider.addEventListener("change", flushSettingsSave);
     }
 
     initResizeListeners(root);
@@ -420,18 +467,36 @@
     STATE.urlLabel.textContent = url.hostname;
     STATE.urlLabel.title = url.href;
     if (STATE.favicon) {
-      STATE.favicon.src = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(url.hostname)}&sz=32`;
+      // Do not disclose every previewed domain to a third-party favicon service.
+      STATE.favicon.src = new URL("/favicon.ico", url.origin).href;
       STATE.favicon.hidden = false;
+      STATE.favicon.onerror = () => {
+        STATE.favicon.hidden = true;
+      };
     }
+  }
+
+  function scheduleHoverPreview(anchor) {
+    window.clearTimeout(hoverPreviewTimer);
+    const delay = STATE.settings.hoverPreviewDelay;
+    if (!delay || STATE.root?.classList.contains("peek-visible")) {
+      return;
+    }
+    hoverPreviewTimer = window.setTimeout(() => {
+      if (hoveredAnchor !== anchor) {
+        return;
+      }
+      const url = normalizeUrl(anchor);
+      if (url) {
+        openPreview(anchor, url);
+      }
+    }, delay);
   }
 
   function previewUrl(href, labelFallback) {
     try {
       const url = new URL(href, window.location.href);
       if (url.protocol !== "http:" && url.protocol !== "https:") {
-        return;
-      }
-      if (!isPeekAllowedForHost(url.hostname, STATE.settings)) {
         return;
       }
       const fakeAnchor = { href: url.href, textContent: labelFallback, getAttribute: () => null };
@@ -442,11 +507,11 @@
   }
 
   function openPreview(anchor, url) {
-    if (!isPeekAllowedForHost(url.hostname, STATE.settings)) {
+    const domainRule = getDomainRule(url.hostname, STATE.settings);
+    if (domainRule?.mode === "blocked" || (!domainRule && !isPeekAllowedForHost(url.hostname, STATE.settings))) {
       return;
     }
-
-    if (STATE.settings.openMode === "compact" || shouldAutoCompact(url, STATE.settings)) {
+    if (domainRule?.mode !== "overlay" && (domainRule?.mode === "compact" || STATE.settings.openMode === "compact" || shouldAutoCompact(url, STATE.settings))) {
       STATE.currentUrl = url.href;
       openUrlInPopup(url.href, false);
       return;
@@ -457,8 +522,13 @@
 
     closeId++;
 
+    STATE.previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     STATE.currentUrl = url.href;
+    STATE.previewHistory = [url.href];
+    STATE.previewHistoryIndex = 0;
+    STATE.isPinned = false;
     updateHeaderMeta(anchor, url, label);
+    syncPreviewControls();
     STATE.iframe.removeAttribute("src");
     root.classList.add("peek-visible", "peek-loading");
     root.classList.remove("peek-settings-open", "peek-closing", "peek-blocked", "peek-to-compact");
@@ -468,8 +538,97 @@
 
     requestAnimationFrame(() => {
       STATE.iframe.src = url.href;
+      startPreviewLoadTimer();
       scheduleOverlayLayout();
+      STATE.panel.focus({ preventScroll: true });
     });
+  }
+
+  function recordPreviewNavigation(href) {
+    let url;
+    try {
+      url = new URL(href);
+    } catch {
+      return;
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return;
+    }
+    if (STATE.previewHistory[STATE.previewHistoryIndex] === url.href) {
+      return;
+    }
+    const existingIndex = STATE.previewHistory.lastIndexOf(url.href, STATE.previewHistoryIndex - 1);
+    if (existingIndex >= 0) {
+      STATE.previewHistoryIndex = existingIndex;
+    } else {
+      STATE.previewHistory = STATE.previewHistory.slice(0, STATE.previewHistoryIndex + 1);
+      STATE.previewHistory.push(url.href);
+      STATE.previewHistoryIndex = STATE.previewHistory.length - 1;
+    }
+    STATE.currentUrl = url.href;
+    updateHeaderMeta({ textContent: "Aperçu", getAttribute: () => null }, url, "Aperçu");
+    syncPreviewControls();
+  }
+
+  function navigatePreviewHistory(direction) {
+    const nextIndex = STATE.previewHistoryIndex + direction;
+    if (!STATE.iframe || nextIndex < 0 || nextIndex >= STATE.previewHistory.length) {
+      return;
+    }
+    STATE.previewHistoryIndex = nextIndex;
+    STATE.currentUrl = STATE.previewHistory[nextIndex];
+    STATE.iframe.src = STATE.currentUrl;
+    startPreviewLoadTimer();
+    try {
+      updateHeaderMeta({ textContent: "Aperçu", getAttribute: () => null }, new URL(STATE.currentUrl), "Aperçu");
+    } catch {
+      /* URL was already validated when it entered history. */
+    }
+    syncPreviewControls();
+  }
+
+  function togglePinnedPreview() {
+    STATE.isPinned = !STATE.isPinned;
+    STATE.root?.classList.toggle("peek-pinned", STATE.isPinned);
+    syncPreviewControls();
+  }
+
+  function syncPreviewControls() {
+    if (STATE.backButton) {
+      STATE.backButton.disabled = STATE.previewHistoryIndex <= 0;
+    }
+    if (STATE.forwardButton) {
+      STATE.forwardButton.disabled = STATE.previewHistoryIndex >= STATE.previewHistory.length - 1;
+    }
+    if (STATE.pinButton) {
+      STATE.pinButton.classList.toggle("peek-active", STATE.isPinned);
+      STATE.pinButton.setAttribute("aria-pressed", String(STATE.isPinned));
+      STATE.pinButton.title = STATE.isPinned ? "Désépingler l'aperçu" : "Épingler l'aperçu";
+    }
+  }
+
+  function startPreviewLoadTimer() {
+    clearPreviewLoadTimer();
+    previewLoadTimer = window.setTimeout(() => {
+      if (STATE.root?.classList.contains("peek-loading")) {
+        setPreviewBlocked("Le chargement a expiré ou ce site refuse l’intégration.");
+      }
+    }, 12000);
+  }
+
+  function clearPreviewLoadTimer() {
+    window.clearTimeout(previewLoadTimer);
+    previewLoadTimer = 0;
+  }
+
+  function setPreviewBlocked(message) {
+    clearPreviewLoadTimer();
+    STATE.root?.classList.remove("peek-loading");
+    STATE.root?.classList.add("peek-blocked");
+    const text = STATE.helpEl?.querySelector("span");
+    if (text && message) {
+      text.textContent = message;
+    }
   }
 
   function measureOverlayPanelSize() {
@@ -722,9 +881,17 @@
       "peek-to-compact"
     );
     STATE.currentUrl = "";
+    STATE.previewHistory = [];
+    STATE.previewHistoryIndex = -1;
+    STATE.isPinned = false;
     STATE.iframe.removeAttribute("src");
+    clearPreviewLoadTimer();
     stopOverlayPanelObserver();
     clearOverlayPanelLayout();
+    if (STATE.previouslyFocused?.isConnected) {
+      STATE.previouslyFocused.focus({ preventScroll: true });
+    }
+    STATE.previouslyFocused = null;
   }
 
   function closePreview() {
@@ -761,7 +928,12 @@
     if (!STATE.currentUrl || !navigator.clipboard?.writeText) {
       return;
     }
-    navigator.clipboard.writeText(STATE.currentUrl).catch(() => {});
+    navigator.clipboard.writeText(STATE.currentUrl).then(() => {
+      STATE.copyButton.title = "URL copiée";
+      window.setTimeout(() => {
+        if (STATE.copyButton) STATE.copyButton.title = "Copier l'URL";
+      }, 1200);
+    }).catch(() => {});
   }
 
   function refreshPreview() {
@@ -771,6 +943,7 @@
     STATE.root?.classList.add("peek-loading");
     STATE.root?.classList.remove("peek-blocked");
     STATE.iframe.src = STATE.currentUrl;
+    startPreviewLoadTimer();
   }
 
   function openCurrentInTab() {
@@ -816,7 +989,11 @@
 
       chrome.runtime.sendMessage(payload, response => {
         if (chrome.runtime.lastError || !response?.ok) {
-          window.open(url, "_blank", "noopener,noreferrer");
+          chrome.runtime.sendMessage({ type: "OPEN_URL_IN_TAB", url }, fallback => {
+            if (chrome.runtime.lastError || !fallback?.ok) {
+              window.open(url, "_blank", "noopener,noreferrer");
+            }
+          });
         }
         if (closeAfterOpen) {
           closePreview();
@@ -1169,6 +1346,22 @@
     }
   }
 
+  function scheduleSettingsSave() {
+    window.clearTimeout(settingsSaveTimer);
+    settingsSaveTimer = window.setTimeout(() => {
+      settingsSaveTimer = 0;
+      saveSettings(STATE.settings);
+    }, 180);
+  }
+
+  function flushSettingsSave() {
+    if (settingsSaveTimer) {
+      window.clearTimeout(settingsSaveTimer);
+      settingsSaveTimer = 0;
+    }
+    saveSettings(STATE.settings);
+  }
+
   function readLocalStorageSettings() {
     try {
       const stored = JSON.parse(window.localStorage.getItem("peek-preview-settings"));
@@ -1221,11 +1414,41 @@
   document.addEventListener(
     "keydown",
     event => {
-      if (event.key !== "Escape" || !STATE.settings.closeWithEsc) {
-        return;
+      const previewIsOpen = STATE.root?.classList.contains("peek-visible");
+      const editable = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement;
+      if (previewIsOpen && !editable && !event.altKey && !event.ctrlKey && !event.metaKey) {
+        if (event.key === "r") {
+          event.preventDefault();
+          refreshPreview();
+          return;
+        }
+        if (event.key === "o") {
+          event.preventDefault();
+          openCurrentInTab();
+          return;
+        }
+        if (event.key === "c") {
+          event.preventDefault();
+          copyCurrentUrl();
+          return;
+        }
+        if (event.key === "p") {
+          event.preventDefault();
+          togglePinnedPreview();
+          return;
+        }
+        if (event.key === "ArrowLeft") {
+          event.preventDefault();
+          navigatePreviewHistory(-1);
+          return;
+        }
+        if (event.key === "ArrowRight") {
+          event.preventDefault();
+          navigatePreviewHistory(1);
+          return;
+        }
       }
-      if (window.top !== window.self) {
-        window.top.postMessage({ source: "peek-preview", type: "CLOSE_PEEK_PREVIEW" }, "*");
+      if (event.key !== "Escape" || !STATE.settings.closeWithEsc) {
         return;
       }
       if (STATE.root?.classList.contains("peek-settings-open")) {
@@ -1246,13 +1469,39 @@
   );
 
   window.addEventListener("message", event => {
-    if (event.data?.source !== "peek-preview" || event.data?.type !== "CLOSE_PEEK_PREVIEW") {
+    if (event.data?.source !== "peek-preview" || event.source !== STATE.iframe?.contentWindow) {
       return;
     }
-    if (STATE.settings.closeWithEsc) {
+    if (event.data.type === "CLOSE_PEEK_PREVIEW" && STATE.settings.closeWithEsc) {
       closePreview();
     }
+    if (event.data.type === "PEEK_FRAME_NAVIGATION" && typeof event.data.url === "string") {
+      recordPreviewNavigation(event.data.url);
+    }
   });
+
+  function trapFocus(event) {
+    if (event.key !== "Tab" || !STATE.root?.classList.contains("peek-visible")) {
+      return;
+    }
+    const focusable = [...STATE.root.querySelectorAll(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), iframe, [tabindex]:not([tabindex="-1"])'
+    )].filter(element => !element.hidden && element.offsetParent !== null);
+    if (!focusable.length) {
+      event.preventDefault();
+      STATE.panel?.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
 
   function requestCompactWindowClose() {
     if (typeof chrome === "undefined" || !chrome.runtime?.sendMessage) {
