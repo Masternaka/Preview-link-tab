@@ -2,6 +2,11 @@ const form = document.querySelector("#settings-form");
 const resetButton = document.querySelector("#reset");
 const statusEl = document.querySelector("#status");
 const saveToast = document.querySelector("#save-toast");
+const backdropDraft = {
+  dim: PEEK_DEFAULT_SETTINGS.backdropOpacity,
+  blur: PEEK_DEFAULT_SETTINGS.backdropBlur
+};
+let backdropDraftMode = "dim";
 
 loadSettings();
 initSectionNav();
@@ -48,7 +53,7 @@ function saveSettings() {
     return;
   }
   const settings = getFormSettings();
-  chrome.storage.local.set(settings, () => {
+  storeSettings(settings, () => {
     updateAdvancedGroups();
     updateColorSwatches();
     showStatus("Sauvegardé");
@@ -56,8 +61,22 @@ function saveSettings() {
   });
 }
 
+function storeSettings(settings, onSuccess) {
+  try {
+    chrome.storage.local.set(settings, () => {
+      if (chrome.runtime.lastError) {
+        showStatus("Échec de la sauvegarde. Réessayez.");
+        return;
+      }
+      onSuccess();
+    });
+  } catch {
+    showStatus("Échec de la sauvegarde. Réessayez.");
+  }
+}
+
 resetButton.addEventListener("click", () => {
-  chrome.storage.local.set(PEEK_DEFAULT_SETTINGS, () => {
+  storeSettings(PEEK_DEFAULT_SETTINGS, () => {
     setFormSettings(PEEK_DEFAULT_SETTINGS);
     showStatus("Paramètres réinitialisés");
   });
@@ -82,6 +101,7 @@ function setRadioValue(name, value) {
 }
 
 function getFormSettings() {
+  rememberBackdropIntensity();
   return cleanPeekSettings({
     openMode: form.elements.openMode.value,
     size: getRadioValue("size"),
@@ -106,12 +126,8 @@ function getFormSettings() {
     frameStyle: form.elements.frameStyle.value,
     panelShadow: form.elements.panelShadow.value,
     backdropMode: getRadioValue("backdropMode") || "dim",
-    backdropOpacity: getRadioValue("backdropMode") !== "blur"
-      ? Number(form.elements.backdropIntensity?.value ?? PEEK_DEFAULT_SETTINGS.backdropOpacity)
-      : PEEK_DEFAULT_SETTINGS.backdropOpacity,
-    backdropBlur: getRadioValue("backdropMode") === "blur"
-      ? Number(form.elements.backdropIntensity?.value ?? PEEK_DEFAULT_SETTINGS.backdropBlur)
-      : 0,
+    backdropOpacity: backdropDraft.dim,
+    backdropBlur: backdropDraft.blur,
     domainListMode: form.elements.domainListMode.value,
     domainList: form.elements.domainList.value,
     domainRules: form.elements.domainRules.value,
@@ -156,6 +172,9 @@ function setFormSettings(settings) {
   form.elements.panelShadow.value = clean.panelShadow;
 
   // Backdrop control
+  backdropDraft.dim = clean.backdropOpacity;
+  backdropDraft.blur = clean.backdropBlur;
+  backdropDraftMode = clean.backdropMode;
   setRadioValue("backdropMode", clean.backdropMode || "dim");
   const isBlur = clean.backdropMode === "blur";
   const intensity = isBlur ? clean.backdropBlur : clean.backdropOpacity;
@@ -247,25 +266,27 @@ function updateBackdropSliderDisplay(val) {
   if (valueEl) valueEl.textContent = `${num}%`;
 }
 
+function rememberBackdropIntensity() {
+  const sliderEl = document.getElementById("backdropIntensitySlider");
+  if (sliderEl) backdropDraft[backdropDraftMode] = Number(sliderEl.value);
+}
+
 (function initBackdropControl() {
   const sliderEl = document.getElementById("backdropIntensitySlider");
   if (!sliderEl) return;
 
   sliderEl.addEventListener("input", () => {
+    rememberBackdropIntensity();
     updateBackdropSliderDisplay();
   });
 
   // When mode radio changes, update slider to show the value for the new mode
   form.querySelectorAll("input[name='backdropMode']").forEach(radio => {
     radio.addEventListener("change", () => {
-      // Re-read stored settings to get the right value for this mode
-      chrome.storage.local.get(PEEK_DEFAULT_SETTINGS, stored => {
-        const clean = cleanPeekSettings(stored);
-        const isBlur = radio.value === "blur";
-        const newIntensity = isBlur ? clean.backdropBlur : clean.backdropOpacity;
-        sliderEl.value = newIntensity;
-        updateBackdropSliderDisplay(newIntensity);
-      });
+      rememberBackdropIntensity();
+      backdropDraftMode = radio.value;
+      sliderEl.value = backdropDraft[backdropDraftMode];
+      updateBackdropSliderDisplay();
     });
   });
 })();
@@ -320,7 +341,7 @@ if (exportButton && importButton && importFileInput) {
       try {
         const parsed = JSON.parse(e.target.result);
         const cleaned = cleanPeekSettings(parsed);
-        chrome.storage.local.set(cleaned, () => {
+        storeSettings(cleaned, () => {
           setFormSettings(cleaned);
           showStatus("Importé !");
           showSaveNotification();

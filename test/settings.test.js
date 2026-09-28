@@ -50,3 +50,7 @@ test("positionne le panneau sans sortir du viewport", () => {
     JSON.stringify({ left: 24, top: 36 })
   );
 });
+
+test("le mode vue partagée est conservé dans les réglages", () => {
+  assert.equal(settings.cleanPeekSettings({ openMode: "split" }).openMode, "split");
+});

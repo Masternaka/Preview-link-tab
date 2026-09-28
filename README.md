@@ -1,47 +1,87 @@
 # Preview link tab
 
-Chrome Manifest V3 extension inspired by Arc's Peek Preview.
+Extension Chrome Manifest V3 inspirée du Peek Preview d'Arc.
 
-## Usage
+## Installation
 
-1. Open `chrome://extensions`.
-2. Enable **Developer mode**.
-3. Click **Load unpacked**.
-4. Select this folder.
-5. On a web page, **Alt + click** a link to preview it (shortcut is configurable).
+1. Ouvrir `chrome://extensions`.
+2. Activer le **Mode développeur**.
+3. Cliquer sur **Charger l'extension non empaquetée**.
+4. Sélectionner ce dossier.
+5. Sur une page web, **Alt + clic** sur un lien pour le prévisualiser (le raccourci est configurable).
 
-- **Esc** closes the preview.
-- Sidebar buttons: back/forward, refresh, copy URL, pin, compact window, new tab, close.
-- **Alt + Shift + P** previews the last hovered link.
-- Right-click a link → **Preview with Preview link tab**.
+## Utilisation
 
-The global shortcut can be changed in `chrome://extensions/shortcuts`. While an
-overlay is open, `R`, `O`, `C`, `P`, and the left/right arrow keys respectively
-refresh, open in a tab, copy, pin, and navigate its preview history.
+- **Échap** ferme l'aperçu (si **Fermer avec Échap** est activé).
+- L'épinglage empêche un clic extérieur de fermer l'aperçu ; Échap le ferme
+  toujours lorsque **Fermer avec Échap** est activé.
+- Le mode **Vue partagée (Split View)** ouvre le lien à côté de l'onglet courant.
+  La barre d'outils de l'aperçu dispose aussi d'un bouton dédié. La compatibilité
+  dépend de l'API réellement exposée par l'extension, pas du nom du navigateur :
+  les dérivés de Chromium comme Brave ou Helium peuvent l'utiliser s'ils exposent
+  l'API Split View. La présence d'un menu **Vue partagée** natif ne garantit pas
+  pour autant le support de l'API. Les navigateurs non compatibles ou les onglets
+  déjà en vue partagée affichent un message explicatif et conservent l'aperçu en
+  cours. Aucun repli vers une fenêtre séparée n'est proposé. Si l'API est
+  indisponible, ouvrir le lien dans un nouvel onglet puis utiliser le menu
+  contextuel de l'onglet pour créer une vue partagée native, si disponible.
+- Boutons de la barre d'outils : paramètres, précédent/suivant, actualiser,
+  copier l'URL, épingler, fenêtre compacte, vue partagée, nouvel onglet, fermer.
+- **Alt + Shift + P** prévisualise le dernier lien survolé.
+- Clic droit sur un lien → **Preview with Preview link tab**.
 
-## Per-domain rules
+Le raccourci global se modifie dans `chrome://extensions/shortcuts`. Tant qu'un
+aperçu est ouvert, les touches `R`, `O`, `C`, `P` et les flèches gauche/droite
+respectivement actualisent, ouvrent dans un onglet, copient, épinglent et
+parcourent l'historique de l'aperçu.
 
-In **Comportement**, add one rule per line in the form
-`domain = overlay`, `domain = compact`, or `domain = blocked`. A more specific
-subdomain rule takes precedence. Domain lists also accept URLs and `*.domain`.
+Chaque réglage d'ouverture est disponible dans **Comportement** et **Apparence** :
+mode d'ouverture (intégré, fenêtre compacte, vue partagée), taille, position,
+thème, animation, cadre, ombre, déclencheur au clic, aperçu au survol, clic
+molette, fermeture au clic extérieur ou avec Échap, arrière-plan (assombrissement
+ou flou, intensité réglable) et fermeture après ouverture externe.
 
-Click the extension icon for full settings.
+## Règles par domaine
 
-## Branding
+Dans **Comportement**, ajouter une règle par ligne sous la forme
+`domaine = overlay`, `domaine = compact` ou `domaine = blocked`. Une règle de
+sous-domaine plus spécifique est prioritaire. Les listes de domaines acceptent
+aussi des URL et la forme `*.domaine`.
 
-Toolbar and store icons are generated from [`Preview link tab logo.png`](Preview%20link%20tab%20logo.png). Regenerate sizes with:
+Une **liste noire** désactive l'aperçu sur les domaines listés, une **liste
+blanche** ne l'autorise que sur ceux-ci. L'option **Ouverture compacte
+automatique pour les sites bloqués** bascule vers une fenêtre compacte pour les
+sites connus comme incompatibles, complétés par une liste de domaines.
+Cliquer sur l'icône de l'extension ouvre tous les réglages, avec export et import
+au format JSON.
+
+## Icônes
+
+Chaque icône de l'extension conserve son propre visuel. Les originaux sont
+préservés dans [`icons/sources`](icons/sources) ; la génération recadre chaque
+image au centre en carré puis la redimensionne en 16, 32, 48 ou 128 pixels sans
+modifier son fond. La popup utilise `icons/icon48.png`. Régénérer les tailles sur
+macOS avec :
 
 ```bash
 ./scripts/generate-icons.sh
 ```
 
-## Limits
+Il est aussi possible de lancer `python3 scripts/generate-icons.py` avec Pillow
+installé. Remplacer les fichiers correspondants dans `icons/sources` lors d'une
+mise à jour du visuel.
 
-Some sites block embedded previews (`X-Frame-Options` / CSP). Use the compact window or a new tab instead.
+## Limites
+
+Certains sites bloquent l'intégration dans un aperçu (`X-Frame-Options` / CSP).
+Utiliser alors la fenêtre compacte ou un nouvel onglet.
+L'aperçu attend la confirmation du script de l'extension présent dans la page
+intégrée. Sans confirmation sous 12 secondes, il propose ces alternatives ; cela
+peut aussi arriver avec une page lente ou lorsque le script ne peut pas s'exécuter.
 
 ## Tests
 
-With a current Node.js installation, run:
+Avec une installation actuelle de Node.js, lancer :
 
 ```bash
 npm test

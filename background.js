@@ -10,6 +10,7 @@ const compactWindowIds = new Set();
 const compactTabIds = new Set();
 const CONTEXT_MENU_ID = "peek-preview-link";
 const COMPACT_WINDOWS_STORAGE_KEY = "peekCompactWindows";
+let compactWindowsQueue = Promise.resolve();
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.removeAll(() => {
@@ -47,6 +48,12 @@ chrome.commands.onCommand.addListener(command => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === "OPEN_URL_IN_SPLIT_VIEW") {
+    openUrlInSplitView(message.url, sender)
+      .then(tab => sendResponse({ ok: true, tabId: tab.id }))
+      .catch(error => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
   if (message?.type === "CLOSE_COMPACT_WINDOW") {
     closeCompactWindow(message, sender)
       .then(ok => sendResponse({ ok }))
@@ -74,6 +81,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   return false;
 });
+
+async function openUrlInSplitView(url, sender) {
+  if (!isHttpUrl(url)) {
+    throw new Error("Ce lien ne peut pas être ouvert en vue partagée.");
+  }
+  if (typeof chrome.tabs.createSplit !== "function") {
+    throw new Error("Ce navigateur ne permet pas encore aux extensions d’ouvrir une vue partagée native. Ouvrez le lien dans un nouvel onglet, puis utilisez la commande « Vue partagée / Split View » du menu contextuel des onglets, si elle est disponible.");
+  }
+  if (sender.tab?.id == null) {
+    throw new Error("Ouvrez la vue partagée depuis un onglet.");
+  }
+  const source = await chrome.tabs.get(sender.tab.id);
+  if (source.splitViewId != null && source.splitViewId !== -1) {
+    throw new Error("Cet onglet est déjà en vue partagée. Séparez les onglets avant de réessayer.");
+  }
+  try {
+    return await chrome.tabs.create({ url, splitWithTabId: source.id, windowId: source.windowId, active: true });
+  } catch {
+    throw new Error("Impossible d’ouvrir la vue partagée dans cette fenêtre. Réessayez depuis un onglet d’une fenêtre normale.");
+  }
+}
 
 async function openCompactWindow(message, sender) {
   const sourceWindow = sender.tab?.windowId
@@ -151,16 +179,27 @@ async function setCompactWindows(windows) {
   }
 }
 
+function queueCompactWindowsUpdate(update) {
+  // Keep the entire read/modify/write operation ordered, including removals
+  // from Chrome events. A failed operation must not block later updates.
+  const operation = compactWindowsQueue.then(update);
+  compactWindowsQueue = operation.catch(() => {});
+  return operation;
+}
+
 async function rememberCompactWindow(windowId, tabId) {
   if (!windowId || !tabId) {
     return;
   }
-  const windows = await getCompactWindows();
-  windows[windowId] = tabId;
-  await setCompactWindows(windows);
+  return queueCompactWindowsUpdate(async () => {
+    const windows = await getCompactWindows();
+    windows[windowId] = tabId;
+    await setCompactWindows(windows);
+  });
 }
 
 async function isCompactWindow(windowId) {
+  await compactWindowsQueue;
   if (compactWindowIds.has(windowId)) {
     return true;
   }
@@ -169,6 +208,7 @@ async function isCompactWindow(windowId) {
 }
 
 async function isCompactTab(tabId) {
+  await compactWindowsQueue;
   if (compactTabIds.has(tabId)) {
     return true;
   }
@@ -177,21 +217,30 @@ async function isCompactTab(tabId) {
 }
 
 async function forgetCompactWindow(windowId) {
-  const windows = await getCompactWindows();
-  if (!Object.prototype.hasOwnProperty.call(windows, windowId)) {
-    return;
-  }
-  delete windows[windowId];
-  await setCompactWindows(windows);
+  return queueCompactWindowsUpdate(async () => {
+    const windows = await getCompactWindows();
+    if (!Object.prototype.hasOwnProperty.call(windows, windowId)) {
+      return;
+    }
+    const tabId = windows[windowId];
+    delete windows[windowId];
+    await setCompactWindows(windows);
+    compactWindowIds.delete(windowId);
+    compactTabIds.delete(tabId);
+  });
 }
 
 async function forgetCompactTab(tabId) {
-  const windows = await getCompactWindows();
-  const windowId = Object.keys(windows).find(id => windows[id] === tabId);
-  if (windowId) {
-    delete windows[windowId];
-    await setCompactWindows(windows);
-  }
+  return queueCompactWindowsUpdate(async () => {
+    const windows = await getCompactWindows();
+    const windowId = Object.keys(windows).find(id => windows[id] === tabId);
+    if (windowId) {
+      delete windows[windowId];
+      await setCompactWindows(windows);
+      compactWindowIds.delete(Number(windowId));
+      compactTabIds.delete(tabId);
+    }
+  });
 }
 
 function enableCompactMenu(tabId, windowId) {

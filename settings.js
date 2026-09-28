@@ -38,7 +38,7 @@ const PEEK_DEFAULT_SETTINGS = {
 };
 
 const PEEK_SETTING_OPTIONS = {
-  openMode: ["overlay", "compact"],
+  openMode: ["overlay", "compact", "split"],
   size: ["small", "medium", "large", "full", "custom"],
   position: ["topRight", "bottomRight", "topLeft", "bottomLeft", "center", "custom"],
   trigger: ["alt", "meta", "shift"],

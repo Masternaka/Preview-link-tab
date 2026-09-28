@@ -154,6 +154,21 @@
   }
 }
 
+#peek-preview-notice {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2147483647;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: #172033;
+  color: #ffffff;
+  box-shadow: 0 4px 20px #0004;
+  font: 14px/1.5 system-ui, sans-serif;
+}
+
 #peek-preview-extension-root,
 #peek-preview-extension-root * {
   box-sizing: border-box;
@@ -166,6 +181,15 @@
 #peek-preview-extension-root.peek-visible {
   overflow: visible;
   pointer-events: none;
+}
+
+/* Measure the final layout before showing the panel or starting its animation. */
+#peek-preview-extension-root.peek-preparing {
+  visibility: hidden;
+}
+
+#peek-preview-extension-root.peek-preparing .peek-panel {
+  animation: none !important;
 }
 
 #peek-preview-extension-root.peek-visible .peek-panel,
@@ -697,6 +721,10 @@
 #peek-preview-extension-root.peek-loading .peek-loading-skeleton {
   animation: peek-skeleton 1.2s ease-in-out infinite;
   display: block;
+}
+
+#peek-preview-extension-root.peek-loading .peek-frame {
+  visibility: hidden;
 }
 
 @keyframes peek-skeleton {

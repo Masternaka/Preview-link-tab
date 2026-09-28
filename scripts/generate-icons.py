@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Generate extension PNG icons from Preview link tab logo.png (requires Pillow)."""
+"""Generate extension PNG icons from their individual sources (requires Pillow)."""
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-LOGO = ROOT / "Preview link tab logo.png"
 ICONS = ROOT / "icons"
+SOURCES = ICONS / "sources"
 
 
 def main() -> None:
@@ -14,14 +14,19 @@ def main() -> None:
         print("Install Pillow (pip install pillow) or run scripts/generate-icons.sh on macOS.")
         raise SystemExit(1) from None
 
-    if not LOGO.is_file():
-        print(f"Logo not found: {LOGO}")
-        raise SystemExit(1)
-
     ICONS.mkdir(parents=True, exist_ok=True)
-    img = Image.open(LOGO).convert("RGBA")
-    for size in (16, 48, 128):
-        resized = img.resize((size, size), Image.Resampling.LANCZOS)
+    for size in (16, 32, 48, 128):
+        source = SOURCES / f"icon{size}.png"
+        if not source.is_file():
+            print(f"Source not found: {source}")
+            raise SystemExit(1)
+        with Image.open(source) as original:
+            img = original.convert("RGBA")
+        side = min(img.size)
+        left = (img.width - side) // 2
+        top = (img.height - side) // 2
+        square = img.crop((left, top, left + side, top + side))
+        resized = square.resize((size, size), Image.Resampling.LANCZOS)
         resized.save(ICONS / f"icon{size}.png")
         print(f"Wrote icon{size}.png")
 

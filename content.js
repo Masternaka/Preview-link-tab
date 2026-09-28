@@ -175,6 +175,7 @@
               <select name="openMode">
                 <option value="overlay">Aperçu intégré</option>
                 <option value="compact">Fenêtre compacte</option>
+                <option value="split">Vue partagée (Split View)</option>
               </select>
             </label>
             <label>
@@ -300,8 +301,8 @@
           <iframe class="peek-frame" title="Page prévisualisée" referrerpolicy="strict-origin-when-cross-origin"></iframe>
           <div class="peek-loading-skeleton" aria-hidden="true"></div>
           <div class="peek-help">
-            <strong>Aperçu bloqué</strong>
-            <span>Ce site refuse l'intégration. Ouvrez-le dans une fenêtre compacte ou un nouvel onglet.</span>
+            <strong>Aperçu non confirmé</strong>
+            <span>Le chargement n’a pas pu être confirmé. Ouvrez le lien dans une fenêtre compacte ou un nouvel onglet.</span>
             <div class="peek-help-actions">
               <button class="peek-help-popup" type="button">Fenêtre compacte</button>
               <button class="peek-help-open" type="button">Nouvel onglet</button>
@@ -318,6 +319,7 @@
         ${peekIconButton("peek-copy", "copy", "Copier l'URL", "Copier l'URL")}
         ${peekIconButton("peek-pin", "pin", "Épingler l'aperçu", "Épingler l'aperçu")}
         ${peekIconButton("peek-popup", "popup", "Fenêtre compacte", "Fenêtre compacte")}
+        ${peekIconButton("peek-split", "split", "Ouvrir à côté de cet onglet", "Ouvrir en vue partagée")}
         ${peekIconButton("peek-open", "external", "Nouvel onglet", "Nouvel onglet")}
         ${peekIconButton("peek-close", "close", "Fermer", "Fermer")}
       </div>
@@ -348,24 +350,8 @@
       tab.addEventListener("click", () => switchSettingsTab(tab.dataset.tab));
     });
 
-    STATE.iframe.addEventListener("load", () => {
-      clearPreviewLoadTimer();
-      if (!STATE.currentUrl) {
-        return;
-      }
-      STATE.root.classList.remove("peek-loading");
-      try {
-        const frameUrl = STATE.iframe.contentDocument?.location?.href || "";
-        if (frameUrl === "about:blank" || frameUrl.startsWith("chrome-error://")) {
-          STATE.root.classList.add("peek-blocked");
-          return;
-        }
-        STATE.root.classList.remove("peek-blocked");
-      } catch {
-        STATE.root.classList.remove("peek-blocked");
-      }
-    });
-    STATE.iframe.addEventListener("error", () => setPreviewBlocked());
+    // A frame's load event also fires on failure. Only the embedded content
+    // script's navigation message confirms that the document is available.
 
     root.querySelector(".peek-close").addEventListener("click", closePreview);
     root.querySelector("[data-peek-close]").addEventListener("click", () => {
@@ -374,6 +360,7 @@
       }
     });
     STATE.openButton.addEventListener("click", openCurrentInTab);
+    root.querySelector(".peek-split").addEventListener("click", () => openUrlInSplitView(STATE.currentUrl, true));
     STATE.helpOpenButton.addEventListener("click", openCurrentInTab);
     STATE.popupButton.addEventListener("click", () => openCurrentInPopup(true));
     STATE.helpPopupButton.addEventListener("click", () => openCurrentInPopup(true));
@@ -506,9 +493,18 @@
     }
   }
 
-  function openPreview(anchor, url) {
+  function canPreviewUrl(url) {
     const domainRule = getDomainRule(url.hostname, STATE.settings);
-    if (domainRule?.mode === "blocked" || (!domainRule && !isPeekAllowedForHost(url.hostname, STATE.settings))) {
+    return domainRule ? domainRule.mode !== "blocked" : isPeekAllowedForHost(url.hostname, STATE.settings);
+  }
+
+  function openPreview(anchor, url) {
+    if (!canPreviewUrl(url)) {
+      return;
+    }
+    const domainRule = getDomainRule(url.hostname, STATE.settings);
+    if (!domainRule && STATE.settings.openMode === "split") {
+      openUrlInSplitView(url.href);
       return;
     }
     if (domainRule?.mode !== "overlay" && (domainRule?.mode === "compact" || STATE.settings.openMode === "compact" || shouldAutoCompact(url, STATE.settings))) {
@@ -529,19 +525,18 @@
     STATE.isPinned = false;
     updateHeaderMeta(anchor, url, label);
     syncPreviewControls();
-    STATE.iframe.removeAttribute("src");
-    root.classList.add("peek-visible", "peek-loading");
+    root.classList.add("peek-preparing", "peek-visible", "peek-loading");
     root.classList.remove("peek-settings-open", "peek-closing", "peek-blocked", "peek-to-compact");
     STATE.settingsButton.setAttribute("aria-expanded", "false");
 
+    // Complete layout while hidden so the first painted frame has its final
+    // position and animation, rather than switching animations mid-opening.
+    applyOverlayLayout();
+    startPreviewLoadTimer();
+    STATE.iframe.src = url.href;
+    root.classList.remove("peek-preparing");
     startOverlayPanelObserver();
-
-    requestAnimationFrame(() => {
-      STATE.iframe.src = url.href;
-      startPreviewLoadTimer();
-      scheduleOverlayLayout();
-      STATE.panel.focus({ preventScroll: true });
-    });
+    STATE.panel.focus({ preventScroll: true });
   }
 
   function recordPreviewNavigation(href) {
@@ -603,15 +598,17 @@
     if (STATE.pinButton) {
       STATE.pinButton.classList.toggle("peek-active", STATE.isPinned);
       STATE.pinButton.setAttribute("aria-pressed", String(STATE.isPinned));
-      STATE.pinButton.title = STATE.isPinned ? "Désépingler l'aperçu" : "Épingler l'aperçu";
+      STATE.pinButton.title = STATE.isPinned ? "Désépingler l'aperçu" : "Épingler : empêcher la fermeture par clic extérieur";
     }
   }
 
   function startPreviewLoadTimer() {
     clearPreviewLoadTimer();
+    STATE.root?.classList.add("peek-loading");
+    STATE.root?.classList.remove("peek-blocked");
     previewLoadTimer = window.setTimeout(() => {
       if (STATE.root?.classList.contains("peek-loading")) {
-        setPreviewBlocked("Le chargement a expiré ou ce site refuse l’intégration.");
+        setPreviewBlocked("Le chargement n’a pas pu être confirmé. La page peut être lente ou refuser l’intégration. Essayez une fenêtre compacte ou un nouvel onglet.");
       }
     }, 12000);
   }
@@ -707,7 +704,7 @@
     STATE.panel.style.removeProperty("max-height");
   }
 
-  async function resolveOverlayViewportPosition(panelWidth, panelHeight) {
+  function resolveOverlayViewportPosition(panelWidth, panelHeight) {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const position = peekOverlayViewportPosition(STATE.settings, panelWidth, panelHeight, vw, vh);
@@ -721,7 +718,7 @@
     STATE.panel.style.right = "auto";
     STATE.panel.style.bottom = "auto";
     STATE.panel.style.transform = "none";
-    requestAnimationFrame(positionActionsBar);
+    positionActionsBar();
   }
 
   function positionActionsBar() {
@@ -785,7 +782,7 @@
     overlayPanelObserver.observe(STATE.panel);
   }
 
-  async function applyOverlayPositionOnly() {
+  function applyOverlayPositionOnly() {
     if (!STATE.root || !STATE.panel || !STATE.root.classList.contains("peek-visible")) {
       return false;
     }
@@ -793,12 +790,12 @@
       return true;
     }
     const { width: panelWidth, height: panelHeight } = measureOverlayPanelSize();
-    const position = await resolveOverlayViewportPosition(panelWidth, panelHeight);
+    const position = resolveOverlayViewportPosition(panelWidth, panelHeight);
     applyOverlayPanelPosition(position.left, position.top);
     return true;
   }
 
-  async function applyOverlayLayout(options = {}) {
+  function applyOverlayLayout(options = {}) {
     const { updateDimensions = true } = options;
     if (!STATE.root || !STATE.panel || !STATE.root.classList.contains("peek-visible")) {
       return false;
@@ -818,15 +815,14 @@
       STATE.panel.style.right = "auto";
       STATE.panel.style.bottom = "auto";
       STATE.panel.style.transform = "none";
-      requestAnimationFrame(positionActionsBar);
+      positionActionsBar();
       return true;
     }
 
     STATE.panel.style.removeProperty("inset");
 
-    await new Promise(resolve => requestAnimationFrame(resolve));
     const { width: panelWidth, height: panelHeight } = measureOverlayPanelSize();
-    const position = await resolveOverlayViewportPosition(panelWidth, panelHeight);
+    const position = resolveOverlayViewportPosition(panelWidth, panelHeight);
     applyOverlayPanelPosition(position.left, position.top);
     return true;
   }
@@ -946,6 +942,35 @@
     startPreviewLoadTimer();
   }
 
+  function showPreviewNotice(message) {
+    let notice = document.getElementById("peek-preview-notice");
+    if (!notice) {
+      notice = document.createElement("div");
+      notice.id = "peek-preview-notice";
+      notice.setAttribute("role", "status");
+      document.documentElement.appendChild(notice);
+    }
+    notice.textContent = message;
+    window.clearTimeout(showPreviewNotice.timer);
+    showPreviewNotice.timer = window.setTimeout(() => notice.remove(), 8000);
+  }
+
+  function openUrlInSplitView(url, closeAfterOpen = false) {
+    if (!url) return;
+    const failed = "Impossible d’ouvrir la vue partagée. Rechargez l’extension et la page, puis réessayez.";
+    try {
+      chrome.runtime.sendMessage({ type: "OPEN_URL_IN_SPLIT_VIEW", url }, response => {
+        if (chrome.runtime.lastError || !response?.ok) {
+          showPreviewNotice(response?.error || failed);
+          return;
+        }
+        if (closeAfterOpen) closePreview();
+      });
+    } catch {
+      showPreviewNotice(failed);
+    }
+  }
+
   function openCurrentInTab() {
     if (!STATE.currentUrl) {
       return;
@@ -1047,6 +1072,7 @@
           <select name="openMode">
             <option value="overlay">Aperçu intégré</option>
             <option value="compact">Fenêtre compacte</option>
+                <option value="split">Vue partagée (Split View)</option>
           </select>
         </label>
         <label>
@@ -1381,7 +1407,7 @@
       return;
     }
     const url = normalizeUrl(anchor);
-    if (!url) {
+    if (!url || !canPreviewUrl(url)) {
       return;
     }
     event.preventDefault();
@@ -1476,6 +1502,19 @@
       closePreview();
     }
     if (event.data.type === "PEEK_FRAME_NAVIGATION" && typeof event.data.url === "string") {
+      if (!STATE.currentUrl || !STATE.root?.classList.contains("peek-visible")) {
+        return;
+      }
+      try {
+        const url = new URL(event.data.url);
+        if (!["http:", "https:"].includes(url.protocol) || url.origin !== event.origin) {
+          return;
+        }
+      } catch {
+        return;
+      }
+      clearPreviewLoadTimer();
+      STATE.root.classList.remove("peek-loading", "peek-blocked");
       recordPreviewNavigation(event.data.url);
     }
   });
