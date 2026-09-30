@@ -58,7 +58,7 @@ sources des palettes sont détaillées dans [THEMES.md](THEMES.md).
 ## Règles par domaine
 
 Dans **Comportement**, ajouter une règle par ligne sous la forme
-`domaine = overlay`, `domaine = compact` ou `domaine = blocked`. Une règle de
+`domaine = overlay`, `domaine = compact`, `domaine = split` ou `domaine = blocked`. Une règle de
 sous-domaine plus spécifique est prioritaire. Les listes de domaines acceptent
 aussi des URL et la forme `*.domaine`.
 
@@ -68,6 +68,40 @@ automatique pour les sites bloqués** bascule vers une fenêtre compacte pour le
 sites connus comme incompatibles, complétés par une liste de domaines.
 Cliquer sur l'icône de l'extension ouvre tous les réglages, avec export et import
 au format JSON.
+
+## Règles rapides et pause
+
+Dans l’aperçu, ouvrir **Paramètres → Comportement → Toujours ouvrir ce site en…**
+pour mémoriser un mode pour le domaine du lien affiché. Dans la popup, la commande
+**Ouverture des liens vers ce site** vise le domaine de l’onglet courant. Choisir
+**Réglage général / règle héritée** et mémoriser supprime la règle exacte ; une
+règle de domaine parent peut encore s’appliquer. La vue partagée reste native et
+nécessite l’API du navigateur.
+
+**Mettre en pause sur ce site**, en haut de la popup, suspend les déclencheurs
+sur les pages du même nom d’hôte. Les clics gardent leur comportement normal.
+Le bouton devient **Réactiver sur ce site** et l’icône affiche le badge **II**.
+La pause ne ferme pas les aperçus déjà ouverts. Elle s’applique aux onglets du
+même hôte, séparément en navigation privée, et se termine à la réactivation,
+au redémarrage du navigateur ou au rechargement de l’extension.
+
+## Apparence et thèmes personnels
+
+La miniature d’**Apparence** montre immédiatement les couleurs, dimensions,
+position, cadre, ombre et arrière-plan. **Rejouer l’animation** permet d’essayer
+la transition choisie ; aucune page externe n’est chargée par cet exemple.
+
+**Copier vers Personnalisé** reprend les couleurs du thème sélectionné. Modifier
+les champs, saisir un nom puis cliquer **Enregistrer ce thème** ajoute une entrée
+à **Mes thèmes**, disponible dans tous les sélecteurs. Un nom déjà présent
+remplace sa palette. La bibliothèque accepte jusqu’à 50 thèmes. **Supprimer ce
+thème** retire l’entrée tout en gardant ses couleurs dans Personnalisé.
+L’enregistrement d’un thème sauvegarde sa palette immédiatement ; les autres
+réglages modifiés restent à sauvegarder avec le bouton principal.
+
+Les exports JSON incluent la bibliothèque. L’import accepte uniquement un objet
+contenant des réglages reconnus, ignore les clés inconnues et limite le fichier
+à 1 Mo. Un fichier invalide ou illisible ne remplace pas les préférences.
 
 ## Icônes
 
@@ -100,3 +134,14 @@ Avec une installation actuelle de Node.js, lancer :
 ```bash
 npm test
 ```
+
+Le workflow [Tests](.github/workflows/tests.yml) lance cette commande sur Node.js
+22 et 24 à chaque push et pull request. Aucune installation de dépendances n’est
+nécessaire pour la suite actuelle.
+
+Après avoir commité et poussé les changements sur GitHub, ouvrir l’onglet
+**Actions → Tests** pour consulter le résultat. Une coche verte indique que les
+tests ont réussi ; une croix rouge permet d’ouvrir les journaux du test en échec.
+Le workflow peut aussi être lancé manuellement depuis **Run workflow**, une fois
+présent sur la branche par défaut. Ces tests ne remplacent pas les essais visuels
+de l’extension dans les navigateurs.

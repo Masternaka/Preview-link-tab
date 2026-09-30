@@ -29,3 +29,16 @@ lorsqu’un thème connu est sélectionné, puis retrouvées en revenant à Pers
 La section **Couleurs du thème** affiche la palette du thème sélectionné en
 lecture seule. Ses champs deviennent modifiables avec **Personnalisé**, en
 restaurant le brouillon personnel sans le remplacer par les couleurs du thème connu.
+
+
+## Bibliothèque personnelle
+
+**Copier vers Personnalisé** prépare les couleurs du thème sélectionné pour
+modification. **Enregistrer ce thème** sauvegarde la palette sous le nom saisi,
+ou remplace celle du même nom. Les entrées de **Mes thèmes** sont disponibles
+dans la popup, l’aperçu et le menu compact. La limite est de 50 thèmes.
+La suppression conserve la palette dans Personnalisé pour permettre de la
+réenregistrer. Les exports/imports JSON incluent cette bibliothèque.
+
+La miniature d’Apparence utilise la même application de palette que l’aperçu.
+Elle montre du contenu local fictif et ne modifie pas les couleurs des sites.

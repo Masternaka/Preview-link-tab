@@ -8,7 +8,7 @@ function loadSettings() {
   const source = fs.readFileSync(path.join(__dirname, "..", "settings.js"), "utf8");
   const context = { URL };
   vm.createContext(context);
-  vm.runInContext(`${source}\nthis.exportsForTest = { PEEK_THEME_PRESETS, PEEK_SETTING_OPTIONS, applyPeekTheme, cleanPeekSettings, parseDomainList, parseDomainRules, getDomainRule, isPeekAllowedForHost, peekOverlayViewportPosition };`, context);
+  vm.runInContext(`${source}\nthis.exportsForTest = { setPeekDomainRule, cleanPeekSavedThemes, parsePeekSettingsImport, PEEK_THEME_PRESETS, PEEK_SETTING_OPTIONS, applyPeekTheme, cleanPeekSettings, parseDomainList, parseDomainRules, getDomainRule, isPeekAllowedForHost, peekOverlayViewportPosition };`, context);
   return context.exportsForTest;
 }
 
@@ -120,4 +120,53 @@ test("un thème personnalisé conserve ses couleurs et remplace un thème connu"
   assert.equal(values.get('--peek-bg'), '#2e3440');
   assert.equal(values.get('color-scheme'), 'dark');
   assert.equal(values.get('--peek-backdrop-opacity'), '0.35');
+});
+
+
+test('un import exige un objet de réglages et ignore les clés inconnues', () => {
+  for (const input of ['null', '[]', '42', 'true', '"theme"', '{}', '{"unrelated":1}', '{']) {
+    assert.throws(() => settings.parsePeekSettingsImport(input));
+  }
+  const imported = settings.parsePeekSettingsImport('{"theme":"nord","unknown":1,"__proto__":{"polluted":true}}');
+  assert.equal(imported.theme, 'nord');
+  assert.equal(Object.hasOwn(imported, 'unknown'), false);
+  assert.equal(Object.hasOwn(imported, '__proto__'), false);
+});
+
+
+test('une règle rapide remplace seulement le domaine choisi et peut être supprimée', () => {
+  const rules = 'example.com = compact\ndocs.example.com = overlay\nother.test = blocked';
+  const updated = settings.setPeekDomainRule(rules, 'https://docs.example.com/path', 'split');
+  assert.equal(settings.getDomainRule('docs.example.com', { domainRules: updated }).mode, 'split');
+  assert.equal(settings.getDomainRule('example.com', { domainRules: updated }).mode, 'compact');
+  const removed = settings.setPeekDomainRule(updated, 'docs.example.com', 'default');
+  assert.equal(settings.getDomainRule('docs.example.com', { domainRules: removed }).mode, 'compact');
+  assert.match(removed, /other.test = blocked/);
+  assert.throws(() => settings.setPeekDomainRule(rules, 'example.com', 'invalid'));
+});
+
+test('les thèmes enregistrés survivent à un export/import et une référence absente est corrigée', () => {
+  const colors = { customAccent: '#123456', customBackground: '#eeeeee', customBackdropOpacity: 23 };
+  const clean = settings.cleanPeekSettings({ theme: 'saved:mon-theme', savedThemes: [{ id: 'mon-theme', name: 'Mon thème', colors }] });
+  assert.equal(clean.theme, 'saved:mon-theme');
+  const imported = settings.parsePeekSettingsImport(JSON.stringify(clean));
+  assert.equal(imported.savedThemes[0].colors.customAccent, '#123456');
+  const values = new Map();
+  settings.applyPeekTheme({ style: { setProperty: (key, value) => values.set(key, value) } }, imported.theme, imported);
+  assert.equal(values.get('--peek-bg'), '#eeeeee');
+  assert.equal(values.get('--peek-backdrop-opacity'), '0.23');
+  assert.equal(settings.cleanPeekSettings({ ...clean, savedThemes: [] }).theme, 'catppuccin');
+});
+
+test('une bibliothèque importée filtre les entrées invalides, les doublons et les champs inconnus', () => {
+  const cleaned = settings.cleanPeekSavedThemes([
+    null, { id: '<html>', name: 'Non', colors: {} },
+    { id: 'ok', name: '  Mon thème  ', colors: { customAccent: 'bad', unwanted: 1 }, extra: 1 },
+    { id: 'ok', name: 'Doublon', colors: {} }
+  ]);
+  assert.equal(cleaned.length, 1);
+  assert.equal(cleaned[0].name, 'Mon thème');
+  assert.equal(cleaned[0].colors.customAccent, '#2563eb');
+  assert.equal(Object.hasOwn(cleaned[0].colors, 'unwanted'), false);
+  assert.equal(Object.hasOwn(cleaned[0], 'extra'), false);
 });

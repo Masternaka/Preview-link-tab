@@ -179,3 +179,86 @@ test('un échec de création split est transmis au script sans ouverture de seco
   assert.match(response.error, /Impossible/);
   assert.equal(creations, 1);
 });
+
+function siteHarness() {
+  const worker = loadWorker(storageHarness());
+  const session = {};
+  const local = { domainRules: 'other.example = overlay' };
+  const tabs = [
+    { id: 1, url: 'https://example.com/a', incognito: false },
+    { id: 2, url: 'https://example.com/b', incognito: false },
+    { id: 3, url: 'https://sub.example.com/', incognito: false },
+    { id: 4, url: 'https://example.com/', incognito: true },
+    { id: 5, url: 'chrome://settings/', incognito: false }
+  ];
+  const area = store => ({
+    async get() { await new Promise(resolve => setImmediate(resolve)); return structuredClone(store); },
+    async set(value) { await new Promise(resolve => setImmediate(resolve)); Object.assign(store, structuredClone(value)); }
+  });
+  const configure = chrome => {
+    chrome.storage.session = area(session);
+    chrome.storage.local = area(local);
+    chrome.tabs.get = async id => tabs.find(tab => tab.id === id);
+    chrome.tabs.query = async () => tabs;
+  };
+  configure(worker.chrome);
+  const message = (data, sender = {}) => new Promise(resolve => {
+    assert.equal(worker.chrome.runtime.onMessage.listener(data, sender, resolve), true);
+  });
+  return { ...worker, local, session, tabs, configure, message };
+}
+
+test('la pause se propage aux onglets du même site et survit au redémarrage du worker', async () => {
+  const { chrome, sent, message, configure } = siteHarness();
+  const result = await message({ type: 'SET_SITE_PAUSE', tabId: 1, paused: true });
+  assert.equal(result.ok, true);
+  assert.equal(result.paused, true);
+  assert.deepEqual(sent.map(item => item.id), [1, 2]);
+  const restarted = loadWorker(storageHarness());
+  configure(restarted.chrome);
+  const state = await restarted.api.handleSiteSettings({ type: 'GET_SITE_PAUSE', tabId: 2 }, {});
+  assert.equal(state.paused, true);
+  assert.equal((await message({ type: 'GET_SITE_PAUSE', tabId: 3 })).paused, false);
+  assert.equal((await message({ type: 'GET_SITE_PAUSE', tabId: 4 })).paused, false);
+  await message({ type: 'SET_SITE_PAUSE', tabId: 1, paused: false });
+  assert.equal((await message({ type: 'GET_SITE_PAUSE', tabId: 2 })).paused, false);
+  assert.equal((await message({ type: 'GET_SITE_PAUSE', tabId: 5 })).ok, false);
+  // Content scripts must act on their own tab, not a supplied alternate tab ID.
+  assert.equal((await message({ type: 'GET_SITE_PAUSE', tabId: 1 }, { tab: { id: 3 } })).hostname, 'sub.example.com');
+});
+
+test('les changements de pause concurrents ne perdent pas de site', async () => {
+  const { message } = siteHarness();
+  await Promise.all([
+    message({ type: 'SET_SITE_PAUSE', tabId: 1, paused: true }),
+    message({ type: 'SET_SITE_PAUSE', tabId: 3, paused: true })
+  ]);
+  assert.equal((await message({ type: 'GET_SITE_PAUSE', tabId: 1 })).paused, true);
+  assert.equal((await message({ type: 'GET_SITE_PAUSE', tabId: 3 })).paused, true);
+});
+
+test('les règles rapides sont fusionnées avec les dernières règles enregistrées', async () => {
+  const { message, local } = siteHarness();
+  await Promise.all([
+    message({ type: 'SET_DOMAIN_RULE', url: 'https://example.com/path', mode: 'compact' }),
+    message({ type: 'SET_DOMAIN_RULE', url: 'https://sub.example.com/', mode: 'split' })
+  ]);
+  assert.match(local.domainRules, /other.example = overlay/);
+  assert.match(local.domainRules, /example.com = compact/);
+  assert.match(local.domainRules, /sub.example.com = split/);
+  await message({ type: 'SET_DOMAIN_RULE', url: 'https://sub.example.com/', mode: 'default' });
+  assert.doesNotMatch(local.domainRules, /sub.example/);
+  assert.equal((await message({ type: 'SET_DOMAIN_RULE', url: 'javascript:alert(1)', mode: 'blocked' })).ok, false);
+});
+
+test('un échec de stockage de pause ou de règle est signalé et ne bloque pas la suite', async () => {
+  const { chrome, message, configure } = siteHarness();
+  chrome.storage.session.set = async () => { throw new Error('storage failed'); };
+  assert.equal((await message({ type: 'SET_SITE_PAUSE', tabId: 1, paused: true })).ok, false);
+  configure(chrome);
+  assert.equal((await message({ type: 'GET_SITE_PAUSE', tabId: 1 })).paused, false);
+  chrome.storage.local.set = async () => { throw new Error('storage failed'); };
+  assert.equal((await message({ type: 'SET_DOMAIN_RULE', url: 'https://example.com/', mode: 'compact' })).ok, false);
+  configure(chrome);
+  assert.equal((await message({ type: 'SET_DOMAIN_RULE', url: 'https://example.com/', mode: 'compact' })).ok, true);
+});

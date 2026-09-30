@@ -59,6 +59,7 @@
     previouslyFocused: null,
     previewHistory: [],
     previewHistoryIndex: -1,
+    isPaused: false,
     isPinned: false
   };
 
@@ -108,6 +109,10 @@
 
   if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) {
     chrome.runtime.onMessage.addListener(message => {
+      if (message?.type === "SITE_PAUSE_CHANGED" && message.hostname === new URL(window.location.href).hostname) {
+        STATE.isPaused = message.paused === true;
+        return;
+      }
       if (message?.type === "ENABLE_COMPACT_MENU") {
         if (window.top !== window.self) {
           return;
@@ -129,6 +134,14 @@
         }
       }
     });
+  }
+
+  if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
+    try {
+      chrome.runtime.sendMessage({ type: "GET_SITE_PAUSE" }, response => {
+        if (!chrome.runtime.lastError && response?.ok) STATE.isPaused = response.paused === true;
+      });
+    } catch { /* The page can still use the saved settings after a context reload. */ }
   }
 
   document.addEventListener("pointerover", event => {
@@ -260,6 +273,19 @@
             </label>
           </div>
           <div class="peek-settings-panel" data-panel="behavior" hidden>
+            <div class="peek-site-rule">
+              <label><span>Toujours ouvrir <strong class="peek-site-host"></strong> en…</span>
+                <select class="peek-site-mode">
+                  <option value="default">Réglage général / règle héritée</option>
+                  <option value="overlay">Aperçu intégré</option>
+                  <option value="compact">Fenêtre compacte</option>
+                  <option value="split">Vue partagée native</option>
+                  <option value="blocked">Désactivé</option>
+                </select>
+              </label>
+              <button type="button" class="peek-site-save">Mémoriser pour ce site</button>
+              <span class="peek-site-status" role="status"></span>
+            </div>
             <label>
               <span>Raccourci</span>
               <select name="trigger">
@@ -405,6 +431,7 @@
       backdropSlider.addEventListener("change", flushSettingsSave);
     }
 
+    root.querySelector(".peek-site-save").addEventListener("click", savePreviewSiteRule);
     initResizeListeners(root);
 
     applySettings();
@@ -477,6 +504,7 @@
   }
 
   function canPreviewUrl(url) {
+    if (STATE.isPaused) return false;
     const domainRule = getDomainRule(url.hostname, STATE.settings);
     return domainRule ? domainRule.mode !== "blocked" : isPeekAllowedForHost(url.hostname, STATE.settings);
   }
@@ -486,7 +514,7 @@
       return;
     }
     const domainRule = getDomainRule(url.hostname, STATE.settings);
-    if (!domainRule && STATE.settings.openMode === "split") {
+    if (domainRule?.mode === "split" || (!domainRule && STATE.settings.openMode === "split")) {
       openUrlInSplitView(url.href);
       return;
     }
@@ -535,14 +563,11 @@
     if (STATE.previewHistory[STATE.previewHistoryIndex] === url.href) {
       return;
     }
-    const existingIndex = STATE.previewHistory.lastIndexOf(url.href, STATE.previewHistoryIndex - 1);
-    if (existingIndex >= 0) {
-      STATE.previewHistoryIndex = existingIndex;
-    } else {
-      STATE.previewHistory = STATE.previewHistory.slice(0, STATE.previewHistoryIndex + 1);
-      STATE.previewHistory.push(url.href);
-      STATE.previewHistoryIndex = STATE.previewHistory.length - 1;
-    }
+    // Only our previous/next controls move the cursor. Revisiting an older URL
+    // through a link is a new entry, not evidence of a backwards traversal.
+    STATE.previewHistory = STATE.previewHistory.slice(0, STATE.previewHistoryIndex + 1);
+    STATE.previewHistory.push(url.href);
+    STATE.previewHistoryIndex = STATE.previewHistory.length - 1;
     STATE.currentUrl = url.href;
     updateHeaderMeta({ textContent: "Aperçu", getAttribute: () => null }, url, "Aperçu");
     syncPreviewControls();
@@ -565,6 +590,34 @@
     syncPreviewControls();
   }
 
+  function syncPreviewSiteRule() {
+    const host = STATE.root?.querySelector?.(".peek-site-host");
+    const select = STATE.root?.querySelector?.(".peek-site-mode");
+    if (!host || !select || !STATE.currentUrl) return;
+    const hostname = new URL(STATE.currentUrl).hostname;
+    host.textContent = hostname;
+    select.value = parseDomainRules(STATE.settings.domainRules).find(rule => rule.domain === hostname)?.mode || "default";
+  }
+
+  function savePreviewSiteRule() {
+    const url = STATE.currentUrl;
+    if (!url) return;
+    const button = STATE.root.querySelector(".peek-site-save");
+    const status = STATE.root.querySelector(".peek-site-status");
+    const mode = STATE.root.querySelector(".peek-site-mode").value;
+    button.disabled = true;
+    const failed = () => { button.disabled = false; status.textContent = "Échec de la sauvegarde. Réessayez."; };
+    try {
+      chrome.runtime.sendMessage({ type: "SET_DOMAIN_RULE", url, mode }, response => {
+        button.disabled = false;
+        if (chrome.runtime.lastError || !response?.ok) { failed(); return; }
+        STATE.settings.domainRules = response.domainRules;
+        status.textContent = mode === "default" ? "Règle supprimée : réglage général ou hérité rétabli." : `Règle enregistrée pour ${response.hostname}.`;
+        syncPreviewSiteRule();
+      });
+    } catch { failed(); }
+  }
+
   function togglePinnedPreview() {
     STATE.isPinned = !STATE.isPinned;
     STATE.root?.classList.toggle("peek-pinned", STATE.isPinned);
@@ -572,6 +625,7 @@
   }
 
   function syncPreviewControls() {
+    syncPreviewSiteRule();
     if (STATE.backButton) {
       STATE.backButton.disabled = STATE.previewHistoryIndex <= 0;
     }
@@ -1145,13 +1199,14 @@
     STATE.compactSettings.elements.openMode.value = STATE.settings.openMode;
     STATE.compactSettings.elements.size.value = STATE.settings.size;
     STATE.compactSettings.elements.position.value = STATE.settings.position;
+    populatePeekSavedThemes(STATE.compactSettings.elements.theme, STATE.settings);
     STATE.compactSettings.elements.theme.value = STATE.settings.theme;
     STATE.compactSettings.elements.closeWithEsc.checked = STATE.settings.closeWithEsc;
   }
 
   function handleCompactSettingsChange(event) {
     const field = event.target;
-    if (!(field instanceof HTMLInputElement) && !(field instanceof HTMLSelectElement)) {
+    if (!Object.hasOwn(PEEK_DEFAULT_SETTINGS, field.name) || (!(field instanceof HTMLInputElement) && !(field instanceof HTMLSelectElement))) {
       return;
     }
     STATE.settings = {
@@ -1209,6 +1264,7 @@
   }
 
   function syncControls() {
+    syncPreviewSiteRule();
     if (!STATE.settingsPanel) {
       return;
     }
@@ -1216,6 +1272,7 @@
     STATE.settingsPanel.elements.openMode.value = STATE.settings.openMode;
     STATE.settingsPanel.elements.position.value = STATE.settings.position;
     STATE.settingsPanel.elements.trigger.value = STATE.settings.trigger;
+    populatePeekSavedThemes(STATE.settingsPanel.elements.theme, STATE.settings);
     STATE.settingsPanel.elements.theme.value = STATE.settings.theme;
     STATE.settingsPanel.elements.animation.value = STATE.settings.animation;
     STATE.settingsPanel.elements.animationSpeed.value = STATE.settings.animationSpeed;
@@ -1244,7 +1301,7 @@
 
   function handleSettingsChange(event) {
     const field = event.target;
-    if (!(field instanceof HTMLInputElement) && !(field instanceof HTMLSelectElement)) {
+    if (!Object.hasOwn(PEEK_DEFAULT_SETTINGS, field.name) || (!(field instanceof HTMLInputElement) && !(field instanceof HTMLSelectElement))) {
       return;
     }
     STATE.settings = {

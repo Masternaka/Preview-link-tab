@@ -11,6 +11,8 @@ const compactTabIds = new Set();
 const CONTEXT_MENU_ID = "peek-preview-link";
 const COMPACT_WINDOWS_STORAGE_KEY = "peekCompactWindows";
 let compactWindowsQueue = Promise.resolve();
+let siteSettingsQueue = Promise.resolve();
+const PAUSED_SITES_KEY = "peekPausedSites";
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.removeAll(() => {
@@ -48,6 +50,13 @@ chrome.commands.onCommand.addListener(command => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (["GET_SITE_PAUSE", "SET_SITE_PAUSE", "SET_DOMAIN_RULE"].includes(message?.type)) {
+    const operation = siteSettingsQueue.then(() => handleSiteSettings(message, sender));
+    siteSettingsQueue = operation.catch(() => {});
+    operation.then(result => sendResponse({ ok: true, ...result }))
+      .catch(error => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
   if (message?.type === "OPEN_URL_IN_SPLIT_VIEW") {
     openUrlInSplitView(message.url, sender)
       .then(tab => sendResponse({ ok: true, tabId: tab.id }))
@@ -150,6 +159,9 @@ chrome.windows.onRemoved.addListener(windowId => {
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.url || changeInfo.status === "complete") {
+    updatePauseBadge(tab).catch(() => {});
+  }
   if (changeInfo.status !== "complete") {
     return;
   }
@@ -317,4 +329,52 @@ function clampNumber(value, min, max, fallback) {
     return fallback;
   }
   return Math.min(max, Math.max(min, Math.round(number)));
+}
+
+
+function pausedSiteKey(tab) {
+  if (!isHttpUrl(tab?.url)) throw new Error("Cette action est disponible sur une page web.");
+  return `${tab.incognito ? "private" : "normal"}:${new URL(tab.url).hostname}`;
+}
+
+async function updatePauseBadge(tab, paused) {
+  if (!chrome.action?.setBadgeText || tab?.id == null) return;
+  if (paused == null) {
+    const stored = await chrome.storage.session.get(PAUSED_SITES_KEY);
+    paused = isHttpUrl(tab.url) && (stored[PAUSED_SITES_KEY] || []).includes(pausedSiteKey(tab));
+  }
+  await chrome.action.setBadgeText({ tabId: tab.id, text: paused ? "II" : "" });
+  await chrome.action.setTitle({ tabId: tab.id, title: paused ? "Aperçu en pause sur ce site — cliquer pour réactiver" : "Preview link tab settings" });
+}
+
+async function handleSiteSettings(message, sender) {
+  if (message.type === "SET_DOMAIN_RULE") {
+    if (!isHttpUrl(message.url)) throw new Error("Adresse de site invalide.");
+    const hostname = new URL(message.url).hostname;
+    const stored = await chrome.storage.local.get({ domainRules: "" });
+    const domainRules = setPeekDomainRule(stored.domainRules, hostname, message.mode);
+    await chrome.storage.local.set({ domainRules });
+    return { domainRules, hostname };
+  }
+  const tabId = sender.tab?.id ?? message.tabId;
+  if (!Number.isInteger(tabId)) throw new Error("Ouvrez cette action depuis un onglet.");
+  const tab = await chrome.tabs.get(tabId);
+  const key = pausedSiteKey(tab);
+  const stored = await chrome.storage.session.get(PAUSED_SITES_KEY);
+  const pausedSites = new Set(Array.isArray(stored[PAUSED_SITES_KEY]) ? stored[PAUSED_SITES_KEY] : []);
+  if (message.type === "SET_SITE_PAUSE") {
+    if (typeof message.paused !== "boolean") throw new Error("État de pause invalide.");
+    message.paused ? pausedSites.add(key) : pausedSites.delete(key);
+    await chrome.storage.session.set({ [PAUSED_SITES_KEY]: [...pausedSites] });
+    const tabs = await chrome.tabs.query({});
+    await Promise.allSettled(tabs.filter(item => isHttpUrl(item.url) && pausedSiteKey(item) === key).map(async item => {
+      await updatePauseBadge(item, message.paused).catch(() => {});
+      await chrome.tabs.sendMessage(item.id, {
+        type: "SITE_PAUSE_CHANGED", hostname: new URL(tab.url).hostname, paused: message.paused
+      });
+    }));
+  }
+  const paused = pausedSites.has(key);
+  await updatePauseBadge(tab, paused).catch(() => {});
+  return { paused, hostname: new URL(tab.url).hostname };
 }

@@ -7,11 +7,10 @@ const backdropDraft = {
   blur: PEEK_DEFAULT_SETTINGS.backdropBlur
 };
 let backdropDraftMode = "dim";
-const themeColorRoles = {
-  customAccent: "accent", customBackground: "bg", customHeader: "header-bg",
-  customFrame: "frame-bg", customText: "text", customMuted: "muted",
-  customBorder: "border", customBackdrop: "backdrop-color"
-};
+const themeColorRoles = PEEK_THEME_COLOR_ROLES;
+let savedThemesDraft = [];
+let activeSite = null;
+let activeSitePaused = false;
 const customThemeDraft = {};
 let displayedTheme = null;
 
@@ -19,6 +18,8 @@ let displayedTheme = null;
 loadSettings();
 initSectionNav();
 initColorPickers();
+initThemeLibrary();
+initSiteControls();
 
 form.addEventListener("submit", event => {
   event.preventDefault();
@@ -29,14 +30,75 @@ form.addEventListener("change", () => {
   updateThemeColors();
   updateAdvancedGroups();
   updateColorSwatches();
+  updateAppearancePreview();
   showStatus("Modifications non sauvegardées");
 });
 
 form.addEventListener("input", () => {
   updateThemeColors();
   updateColorSwatches();
+  updateAppearancePreview();
   showStatus("Modifications non sauvegardées");
 });
+
+function syncCurrentSiteRule() {
+  if (!activeSite) return;
+  const select = document.getElementById("current-site-mode");
+  select.value = parseDomainRules(form.elements.domainRules.value).find(rule => rule.domain === activeSite.hostname)?.mode || "default";
+}
+
+function initSiteControls() {
+  const button = document.getElementById("pause-site");
+  const status = document.getElementById("site-status");
+  const ruleButton = document.getElementById("save-site-rule");
+  if (!button || !chrome.tabs?.query || !chrome.runtime?.sendMessage) return;
+  const displayPause = () => {
+    button.textContent = activeSitePaused ? "Réactiver sur ce site" : "Mettre en pause sur ce site";
+    button.setAttribute("aria-pressed", String(activeSitePaused));
+  };
+  chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+    if (chrome.runtime.lastError) { status.textContent = "Impossible de lire le site courant."; return; }
+    const tab = tabs[0];
+    try {
+      const url = new URL(tab?.url);
+      if (!["http:", "https:"].includes(url.protocol)) throw new Error();
+      activeSite = { tabId: tab.id, url: url.href, hostname: url.hostname };
+    } catch { status.textContent = "Disponible depuis une page web."; return; }
+    document.getElementById("current-site").textContent = activeSite.hostname;
+    ruleButton.disabled = false;
+    document.getElementById("current-site-mode").disabled = false;
+    syncCurrentSiteRule();
+    chrome.runtime.sendMessage({ type: "GET_SITE_PAUSE", tabId: activeSite.tabId }, response => {
+      if (chrome.runtime.lastError || !response?.ok) { status.textContent = "État de pause indisponible."; return; }
+      activeSitePaused = response.paused;
+      button.disabled = false;
+      displayPause();
+    });
+  });
+  button.addEventListener("click", () => {
+    if (!activeSite) return;
+    button.disabled = true;
+    chrome.runtime.sendMessage({ type: "SET_SITE_PAUSE", tabId: activeSite.tabId, paused: !activeSitePaused }, response => {
+      button.disabled = false;
+      if (chrome.runtime.lastError || !response?.ok) { status.textContent = "Impossible de modifier la pause. Réessayez."; return; }
+      activeSitePaused = response.paused;
+      displayPause();
+      status.textContent = activeSitePaused ? "Les déclencheurs sont en pause sur ce site." : "Les déclencheurs sont réactivés sur ce site.";
+    });
+  });
+  ruleButton.addEventListener("click", () => {
+    if (!activeSite) return;
+    ruleButton.disabled = true;
+    chrome.runtime.sendMessage({ type: "SET_DOMAIN_RULE", url: activeSite.url,
+      mode: document.getElementById("current-site-mode").value }, response => {
+      ruleButton.disabled = false;
+      if (chrome.runtime.lastError || !response?.ok) { status.textContent = "Impossible de sauvegarder la règle."; return; }
+      form.elements.domainRules.value = response.domainRules;
+      syncCurrentSiteRule();
+      status.textContent = "Règle du site enregistrée.";
+    });
+  });
+}
 
 function initSectionNav() {
   document.querySelectorAll(".section-nav-btn").forEach(btn => {
@@ -122,6 +184,7 @@ function getFormSettings() {
     customTop: form.elements.customTop.value,
     trigger: getRadioValue("trigger"),
     theme: form.elements.theme.value,
+    savedThemes: savedThemesDraft,
     customAccent: customThemeDraft.customAccent,
     customBackground: customThemeDraft.customBackground,
     customHeader: customThemeDraft.customHeader,
@@ -161,6 +224,8 @@ function setFormSettings(settings) {
   form.elements.customLeft.value = clean.customLeft;
   form.elements.customTop.value = clean.customTop;
   setRadioValue("trigger", clean.trigger);
+  savedThemesDraft = clean.savedThemes;
+  populatePeekSavedThemes(form.elements.theme, clean);
   form.elements.theme.value = clean.theme;
   customThemeDraft.customAccent = clean.customAccent;
   customThemeDraft.customBackground = clean.customBackground;
@@ -205,6 +270,9 @@ function setFormSettings(settings) {
   updateThemeColors();
   updateAdvancedGroups();
   updateColorSwatches();
+  updateThemeLibraryControls();
+  updateAppearancePreview();
+  syncCurrentSiteRule();
 }
 
 function rememberCustomTheme() {
@@ -224,15 +292,118 @@ function updateThemeColors() {
       }
     }
   } else {
-    const palette = PEEK_THEME_PRESETS[theme];
+    const saved = savedThemesDraft.find(item => `saved:${item.id}` === theme);
+    const palette = saved ? peekPaletteFromCustom(saved.colors) : PEEK_THEME_PRESETS[theme];
     if (palette) {
       for (const [key, role] of Object.entries(themeColorRoles)) {
         form.elements[key].value = palette[role];
       }
-      form.elements.customBackdropOpacity.value = backdropDraft.dim;
+      form.elements.customBackdropOpacity.value = saved ? saved.colors.customBackdropOpacity : backdropDraft.dim;
     }
   }
+  const changed = displayedTheme !== theme;
   displayedTheme = theme;
+  if (changed) updateThemeLibraryControls();
+}
+
+function selectedThemeColors() {
+  const settings = getFormSettings();
+  const saved = savedThemesDraft.find(item => `saved:${item.id}` === settings.theme);
+  if (saved) return { ...saved.colors };
+  if (settings.theme === "custom") return { ...customThemeDraft };
+  const palette = PEEK_THEME_PRESETS[settings.theme];
+  return {
+    ...Object.fromEntries(Object.entries(themeColorRoles).map(([key, role]) => [key, palette[role]])),
+    customBackdropOpacity: settings.backdropOpacity
+  };
+}
+
+function updateThemeLibraryControls() {
+  const saved = savedThemesDraft.find(item => `saved:${item.id}` === form.elements.theme.value);
+  const name = document.getElementById("theme-name");
+  if (name) name.value = saved?.name || "";
+  const remove = document.getElementById("delete-theme");
+  if (remove) remove.disabled = !saved;
+  const copy = document.getElementById("copy-theme");
+  if (copy) copy.disabled = form.elements.theme.value === "custom";
+}
+
+function initThemeLibrary() {
+  document.getElementById("copy-theme")?.addEventListener("click", () => {
+    Object.assign(customThemeDraft, selectedThemeColors());
+    displayedTheme = null;
+    form.elements.theme.value = "custom";
+    updateThemeColors();
+    updateAdvancedGroups();
+    updateColorSwatches();
+    updateAppearancePreview();
+    showStatus("Copié vers Personnalisé. Modifiez les couleurs puis sauvegardez.");
+  });
+  document.getElementById("save-theme")?.addEventListener("click", () => {
+    const name = document.getElementById("theme-name").value.trim();
+    if (!name) { showStatus("Donnez un nom au thème."); return; }
+    if (!form.checkValidity()) { showStatus("Corrigez les valeurs invalides."); return; }
+    const existing = savedThemesDraft.find(item => item.name.toLocaleLowerCase() === name.toLocaleLowerCase());
+    if (!existing && savedThemesDraft.length >= 50) { showStatus("Maximum 50 thèmes personnels."); return; }
+    const entry = { id: existing?.id || crypto.randomUUID(), name, colors: selectedThemeColors() };
+    const savedThemes = cleanPeekSavedThemes([...savedThemesDraft.filter(item => item.id !== entry.id), entry]);
+    storeSettings({ savedThemes, theme: `saved:${entry.id}` }, () => {
+      savedThemesDraft = savedThemes;
+      populatePeekSavedThemes(form.elements.theme, { savedThemes });
+      form.elements.theme.value = `saved:${entry.id}`;
+      updateThemeColors();
+      updateAdvancedGroups();
+      updateColorSwatches();
+      updateThemeLibraryControls();
+      updateAppearancePreview();
+      showStatus("Thème enregistré dans Mes thèmes.");
+    });
+  });
+  document.getElementById("delete-theme")?.addEventListener("click", () => {
+    const id = form.elements.theme.value;
+    const saved = savedThemesDraft.find(item => `saved:${item.id}` === id);
+    if (!saved) return;
+    const savedThemes = savedThemesDraft.filter(item => item !== saved);
+    storeSettings({ savedThemes, theme: "custom", ...saved.colors }, () => {
+      savedThemesDraft = savedThemes;
+      Object.assign(customThemeDraft, saved.colors);
+      displayedTheme = null;
+      populatePeekSavedThemes(form.elements.theme, { savedThemes });
+      form.elements.theme.value = "custom";
+      updateThemeColors();
+      updateAdvancedGroups();
+      updateColorSwatches();
+      updateAppearancePreview();
+      showStatus("Thème supprimé. Ses couleurs restent dans Personnalisé.");
+    });
+  });
+  document.getElementById("replay-preview")?.addEventListener("click", () => {
+    const panel = document.getElementById("sample-panel");
+    if (!panel) return;
+    panel.classList.remove("sample-animate");
+    void panel.offsetWidth;
+    panel.classList.add("sample-animate");
+  });
+}
+
+function updateAppearancePreview() {
+  const preview = document.getElementById("theme-preview");
+  if (!preview) return;
+  const settings = getFormSettings();
+  applyPeekTheme(preview, settings.theme, settings);
+  preview.dataset.size = settings.size;
+  preview.dataset.frame = settings.frameStyle;
+  preview.dataset.shadow = settings.panelShadow;
+  preview.dataset.animation = settings.animation;
+  preview.dataset.position = settings.position;
+  preview.dataset.backdrop = settings.backdropMode;
+  preview.style.setProperty("--sample-duration", `${peekAnimationDurationMs(settings)}ms`);
+  preview.style.setProperty("--sample-blur", `${settings.backdropBlur / 20}px`);
+  const dimensions = peekEstimateOverlayPanelSize(settings, 1400, 900);
+  preview.style.setProperty("--sample-width", `${Math.max(25, dimensions.width / 1400 * 100)}%`);
+  preview.style.setProperty("--sample-height", `${Math.max(35, dimensions.height / 900 * 100)}%`);
+  preview.style.setProperty("--sample-left", `${Math.min(100, settings.customLeft / 1400 * 100)}%`);
+  preview.style.setProperty("--sample-top", `${Math.min(100, settings.customTop / 900 * 100)}%`);
 }
 
 function updateAdvancedGroups() {
@@ -358,11 +529,15 @@ if (exportButton && importButton && importFileInput) {
     if (!file) {
       return;
     }
+    if (file.size > 1024 * 1024) {
+      showStatus("Fichier trop volumineux (maximum 1 Mo).");
+      importFileInput.value = "";
+      return;
+    }
     const reader = new FileReader();
     reader.onload = e => {
       try {
-        const parsed = JSON.parse(e.target.result);
-        const cleaned = cleanPeekSettings(parsed);
+        const cleaned = parsePeekSettingsImport(e.target.result);
         storeSettings(cleaned, () => {
           setFormSettings(cleaned);
           showStatus("Importé !");
@@ -372,7 +547,13 @@ if (exportButton && importButton && importFileInput) {
         showStatus("Fichier invalide");
       }
     };
-    reader.readAsText(file);
+    reader.onerror = () => showStatus("Impossible de lire le fichier.");
+    reader.onabort = () => showStatus("Lecture du fichier annulée.");
+    try {
+      reader.readAsText(file);
+    } catch {
+      showStatus("Impossible de lire le fichier.");
+    }
     importFileInput.value = ""; // Reset
   });
 }

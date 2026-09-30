@@ -9,8 +9,13 @@ const source = name => fs.readFileSync(path.join(__dirname, '..', name), 'utf8')
 function element() {
   const listeners = {};
   const classes = new Set();
+  const children = [];
   return {
+    children,
+    appendChild(child) { children.push(child); child.remove = () => children.splice(children.indexOf(child), 1); },
+    querySelector(selector) { return selector === '[data-saved-themes]' ? children.find(item => item.dataset.savedThemes) : null; },
     value: '', checked: false, style: { setProperty() {}, removeProperty(name) { delete this[name]; } },
+    setAttribute(name, value) { this[name] = value; },
     listeners, textContent: '', dataset: {},
     addEventListener(name, handler) { listeners[name] = handler; },
     removeEventListener(name, handler) { if (listeners[name] === handler) delete listeners[name]; },
@@ -50,7 +55,7 @@ async function contentHarness({ embedded = false } = {}) {
     requestAnimationFrame() { return 1; }, cancelAnimationFrame() {},
     chrome: {
       storage: { local: { get(defaults, cb) { cb(defaults); } } },
-      runtime: { sendMessage(message, cb) { messages.push(message); cb?.({ ok: true }); } }
+      runtime: { sendMessage(message, cb) { if (message.type !== "GET_SITE_PAUSE") messages.push(message); cb?.({ ok: true, paused: false }); } }
     }
   });
   if (embedded) {
@@ -58,7 +63,7 @@ async function contentHarness({ embedded = false } = {}) {
     vm.runInContext(source('content.js'), context);
     return { ...harness, document, messages };
   }
-  const script = source('content.js').replace(/\}\)\(\);\s*$/, 'this.testApi = { STATE, startPreviewLoadTimer, doClose, openPreview, panelGestureRect, initResizeListeners, applyOverlayLayout }; })();');
+  const script = source('content.js').replace(/\}\)\(\);\s*$/, 'this.testApi = { STATE, startPreviewLoadTimer, doClose, openPreview, panelGestureRect, initResizeListeners, applyOverlayLayout, recordPreviewNavigation, navigatePreviewHistory }; })();');
   vm.runInContext(script, context);
   await Promise.resolve();
   const { STATE } = context.testApi;
@@ -218,6 +223,7 @@ function popupHarness() {
   const node = id => nodes[id] ||= element();
   node('theme-colors').dataset = { enabledBy: 'theme', enabledValue: 'custom' };
   context.document = {
+    createElement: () => element(),
     querySelector: selector => node(selector.slice(1)),
     querySelectorAll: selector => selector === '.advanced-group' ? [node('theme-colors')] : [], getElementById: node
   };
@@ -233,8 +239,15 @@ function popupHarness() {
       }
     } }
   };
+  let themeId = 0;
+  context.crypto = { randomUUID: () => `test-theme-${++themeId}` };
   context.FileReader = class {
-    readAsText(file) { this.onload({ target: { result: file.contents } }); }
+    readAsText(file) {
+      if (file.error) { this.onerror(); return; }
+      if (file.abort) { this.onabort(); return; }
+      if (file.throw) throw new Error('read failed');
+      this.onload({ target: { result: file.contents } });
+    }
   };
   vm.runInContext(source('popup.js'), context);
   function switchMode(mode) {
@@ -534,4 +547,168 @@ test('les couleurs affichées suivent le thème sans écraser le brouillon perso
   assert.equal(fields.customAccent.value, '#abcdef');
   assert.equal(fields.customBackground.value, '#123456');
   assert.equal(Number(fields.customBackdropOpacity.value), 42);
+});
+
+
+test('historique A → B → A : précédent revient à B, puis une nouvelle branche efface suivant', async () => {
+  const { context, STATE } = await contentHarness();
+  STATE.root = element();
+  STATE.title = element();
+  STATE.urlLabel = element();
+  STATE.iframe = {};
+  STATE.currentUrl = 'https://example.com/a';
+  STATE.previewHistory = [STATE.currentUrl];
+  STATE.previewHistoryIndex = 0;
+  context.testApi.recordPreviewNavigation('https://example.com/b');
+  context.testApi.recordPreviewNavigation('https://example.com/a');
+  assert.equal(STATE.previewHistory.length, 3);
+  context.testApi.navigatePreviewHistory(-1);
+  assert.equal(STATE.iframe.src, 'https://example.com/b');
+  context.testApi.recordPreviewNavigation('https://example.com/b');
+  assert.equal(STATE.previewHistory.length, 3, 'la confirmation ne crée pas de doublon');
+  context.testApi.navigatePreviewHistory(1);
+  assert.equal(STATE.iframe.src, 'https://example.com/a');
+  context.testApi.navigatePreviewHistory(-1);
+  context.testApi.recordPreviewNavigation('https://example.com/c');
+  assert.deepEqual(Array.from(STATE.previewHistory), [
+    'https://example.com/a', 'https://example.com/b', 'https://example.com/c'
+  ]);
+});
+
+
+for (const file of [
+  { contents: 'null' }, { contents: '[]' }, { contents: '{"unrelated":1}' },
+  { error: true }, { abort: true }, { throw: true }, { size: 2 * 1024 * 1024 }
+]) {
+  test(`un fichier invalide ou illisible ne modifie pas les réglages : ${JSON.stringify(file)}`, () => {
+    const { node, writes } = popupHarness();
+    node('import-file').listeners.change({ target: { files: [file] } });
+    assert.equal(writes.length, 0);
+    assert.match(node('status').textContent, /invalide|Impossible|annulée|volumineux/);
+  });
+}
+
+test('copier un thème connu prépare les couleurs personnelles sans modifier le thème original', () => {
+  const { node, context } = popupHarness();
+  const form = node('settings-form');
+  form.elements.theme.value = 'nord';
+  form.listeners.change();
+  node('copy-theme').listeners.click();
+  assert.equal(form.elements.theme.value, 'custom');
+  assert.equal(form.elements.customBackground.value, '#2e3440');
+  assert.equal(node('theme-colors').disabled, false);
+  form.elements.customBackground.value = '#123456';
+  form.listeners.input();
+  form.elements.theme.value = 'nord';
+  form.listeners.change();
+  assert.equal(form.elements.customBackground.value, '#2e3440');
+  assert.equal(context.getFormSettings().customBackground, '#123456');
+});
+
+test('enregistrer, remplacer et supprimer un thème personnel', () => {
+  const { node, context, writes } = popupHarness();
+  const form = node('settings-form');
+  node('copy-theme').listeners.click();
+  form.elements.customAccent.value = '#123456';
+  node('theme-name').value = 'Mon thème';
+  node('save-theme').listeners.click();
+  assert.equal(writes.at(-1).savedThemes.length, 1);
+  const id = writes.at(-1).savedThemes[0].id;
+  assert.equal(form.elements.theme.value, `saved:${id}`);
+  assert.equal(context.getFormSettings().savedThemes[0].colors.customAccent, '#123456');
+  assert.equal(node('delete-theme').disabled, false);
+  node('copy-theme').listeners.click();
+  form.elements.customAccent.value = '#abcdef';
+  node('theme-name').value = 'Mon thème';
+  node('save-theme').listeners.click();
+  assert.equal(writes.at(-1).savedThemes.length, 1);
+  assert.equal(writes.at(-1).savedThemes[0].id, id);
+  assert.equal(writes.at(-1).savedThemes[0].colors.customAccent, '#abcdef');
+  node('delete-theme').listeners.click();
+  assert.equal(writes.at(-1).savedThemes.length, 0);
+  assert.equal(form.elements.theme.value, 'custom');
+  assert.equal(form.elements.customAccent.value, '#abcdef');
+});
+
+test('une erreur de sauvegarde de thème ne modifie pas la bibliothèque', () => {
+  const harness = popupHarness();
+  harness.fail();
+  harness.node('theme-name').value = 'Non enregistré';
+  harness.node('save-theme').listeners.click();
+  assert.equal(harness.context.getFormSettings().savedThemes.length, 0);
+  assert.match(harness.node('status').textContent, /Échec/);
+});
+
+test('la miniature suit le thème, le cadre, l’ombre et l’animation', () => {
+  const { node } = popupHarness();
+  const form = node('settings-form');
+  const preview = node('theme-preview');
+  const styles = new Map();
+  preview.style.setProperty = (name, value) => styles.set(name, value);
+  form.elements.theme.value = 'everforest';
+  form.elements.frameStyle.value = 'square';
+  form.elements.panelShadow.value = 'glow';
+  form.elements.animation.value = 'bounce';
+  form.listeners.change();
+  assert.equal(styles.get('--peek-bg'), '#2d353b');
+  assert.equal(preview.dataset.frame, 'square');
+  assert.equal(preview.dataset.shadow, 'glow');
+  assert.equal(preview.dataset.animation, 'bounce');
+  node('replay-preview').listeners.click();
+  assert.equal(node('sample-panel').classList.contains('sample-animate'), true);
+});
+
+test('la pause conserve les clics natifs même si une règle autorise le lien', async () => {
+  const { STATE, click, messages } = await contentHarness();
+  STATE.isPaused = true;
+  STATE.settings.domainRules = 'example.com = compact';
+  for (const type of ['click', 'auxclick']) {
+    assert.deepEqual(click('https://example.com/', type), { prevented: false, stopped: false });
+  }
+  assert.equal(messages.length, 0);
+  STATE.isPaused = false;
+  assert.equal(click('https://example.com/').prevented, true);
+});
+
+test('une règle split explicite prime sur le mode compact', async () => {
+  const { STATE, click, messages } = await contentHarness();
+  STATE.settings.domainRules = 'example.com = split';
+  click('https://example.com/');
+  assert.equal(messages[0].type, 'OPEN_URL_IN_SPLIT_VIEW');
+});
+
+
+test('la popup permet de mettre en pause, réactiver et mémoriser une règle de site', () => {
+  const { context, node } = popupHarness();
+  let paused = false;
+  const requests = [];
+  context.chrome.tabs = { query(options, cb) { cb([{ id: 12, url: 'https://site.example/page' }]); } };
+  context.chrome.runtime.sendMessage = (message, cb) => {
+    requests.push(message);
+    if (message.type === 'SET_SITE_PAUSE') paused = message.paused;
+    cb({ ok: true, paused, domainRules: 'site.example = compact', hostname: 'site.example' });
+  };
+  context.initSiteControls();
+  assert.equal(node('current-site').textContent, 'site.example');
+  node('pause-site').listeners.click();
+  assert.equal(paused, true);
+  assert.match(node('pause-site').textContent, /Réactiver/);
+  node('pause-site').listeners.click();
+  assert.equal(paused, false);
+  node('current-site-mode').value = 'compact';
+  node('save-site-rule').listeners.click();
+  assert.equal(requests.at(-1).url, 'https://site.example/page');
+  assert.equal(requests.at(-1).mode, 'compact');
+  assert.equal(node('settings-form').elements.domainRules.value, 'site.example = compact');
+});
+
+test('une erreur de pause dans la popup conserve le bouton dans son état initial', () => {
+  const { context, node } = popupHarness();
+  context.chrome.tabs = { query(options, cb) { cb([{ id: 1, url: 'https://site.example/' }]); } };
+  context.chrome.runtime.sendMessage = (message, cb) => cb({ ok: message.type === 'GET_SITE_PAUSE', paused: false });
+  context.initSiteControls();
+  node('pause-site').listeners.click();
+  assert.match(node('pause-site').textContent, /Mettre en pause/);
+  assert.equal(node('pause-site').disabled, false);
+  assert.match(node('site-status').textContent, /Impossible/);
 });

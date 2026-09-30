@@ -1431,3 +1431,9 @@
 #peek-preview-extension-root[data-size="full"] .peek-resize-handle {
   display: none;
 }
+
+#peek-preview-extension-root .peek-site-rule { display: grid; gap: 8px; grid-column: 1 / -1; padding-bottom: 12px; border-bottom: 1px solid var(--peek-border); }
+#peek-preview-extension-root .peek-site-host { overflow-wrap: anywhere; }
+#peek-preview-extension-root .peek-site-save { width: auto; padding: 0 12px; }
+#peek-preview-extension-root .peek-site-status { color: var(--peek-muted); font-size: 12px; }
+#peek-preview-extension-root.peek-settings-open .peek-settings { max-height: 65%; overflow: auto; flex-shrink: 0; }

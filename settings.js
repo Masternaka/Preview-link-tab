@@ -8,6 +8,7 @@ const PEEK_DEFAULT_SETTINGS = {
   customTop: 80,
   trigger: "alt",
   theme: "catppuccin",
+  savedThemes: [],
   customAccent: "#2563eb",
   customBackground: "#f8fafc",
   customHeader: "#ffffff",
@@ -154,21 +155,58 @@ const PEEK_THEME_PRESETS = {
   }
 };
 
+const PEEK_THEME_COLOR_ROLES = {
+  customAccent: "accent", customBackground: "bg", customHeader: "header-bg",
+  customFrame: "frame-bg", customText: "text", customMuted: "muted",
+  customBorder: "border", customBackdrop: "backdrop-color"
+};
+
+function peekPaletteFromCustom(colors) {
+  return {
+    ...Object.fromEntries(Object.entries(PEEK_THEME_COLOR_ROLES).map(([key, role]) => [role, colors[key]])),
+    "button-bg": colors.customHeader,
+    "button-hover": colors.customBackground
+  };
+}
+
+function cleanPeekSavedThemes(value) {
+  if (!Array.isArray(value)) return [];
+  const ids = new Set();
+  return value.slice(0, 50).flatMap(item => {
+    if (!item || typeof item.id !== "string" || !/^[a-zA-Z0-9_-]{1,80}$/.test(item.id) ||
+        ids.has(item.id) || typeof item.name !== "string" || !item.name.trim() ||
+        !item.colors || typeof item.colors !== "object" || Array.isArray(item.colors)) return [];
+    ids.add(item.id);
+    const colors = Object.fromEntries(Object.keys(PEEK_THEME_COLOR_ROLES).map(key => [
+      key, cleanHexColor(item.colors[key], PEEK_DEFAULT_SETTINGS[key])
+    ]));
+    colors.customBackdropOpacity = clampNumber(item.colors.customBackdropOpacity, 0, 85, 32);
+    return [{ id: item.id, name: item.name.trim().slice(0, 80), colors }];
+  });
+}
+
+function populatePeekSavedThemes(select, settings) {
+  if (!select) return;
+  select.querySelector('[data-saved-themes]')?.remove();
+  if (!settings.savedThemes?.length) return;
+  const group = document.createElement("optgroup");
+  group.label = "Mes thèmes";
+  group.dataset.savedThemes = "true";
+  for (const item of settings.savedThemes) {
+    const option = document.createElement("option");
+    option.value = `saved:${item.id}`;
+    option.textContent = item.name;
+    group.appendChild(option);
+  }
+  select.appendChild(group);
+}
+
 function applyPeekTheme(element, theme, settings = PEEK_DEFAULT_SETTINGS) {
   const custom = theme === "custom" ? cleanPeekSettings(settings) : null;
-  const palette = custom ? {
-    accent: custom.customAccent,
-    bg: custom.customBackground,
-    "header-bg": custom.customHeader,
-    "frame-bg": custom.customFrame,
-    text: custom.customText,
-    muted: custom.customMuted,
-    border: custom.customBorder,
-    "button-bg": custom.customHeader,
-    "button-hover": custom.customBackground,
-    "backdrop-color": custom.customBackdrop
-  } : PEEK_THEME_PRESETS[theme] || PEEK_THEME_PRESETS.catppuccin;
-  const opacity = (custom ? custom.customBackdropOpacity : 50) / 100;
+  const saved = settings.savedThemes?.find(item => `saved:${item.id}` === theme);
+  const colors = custom || saved?.colors;
+  const palette = colors ? peekPaletteFromCustom(colors) : PEEK_THEME_PRESETS[theme] || PEEK_THEME_PRESETS.catppuccin;
+  const opacity = (colors ? colors.customBackdropOpacity : 50) / 100;
   for (const [role, color] of Object.entries(palette)) {
     if (role === "backdrop-color") {
       const rgb = [1, 3, 5].map(offset => parseInt(color.slice(offset, offset + 2), 16));
@@ -184,12 +222,14 @@ function applyPeekTheme(element, theme, settings = PEEK_DEFAULT_SETTINGS) {
   const [r, g, b] = [1, 3, 5].map(offset => parseInt(palette.bg.slice(offset, offset + 2), 16));
   element.style.setProperty("color-scheme", (0.2126 * r + 0.7152 * g + 0.0722 * b) > 150 ? "light" : "dark");
   if (settings.backdropMode !== "blur") {
-    element.style.setProperty("--peek-backdrop-opacity", String(custom ? opacity : settings.backdropOpacity / 100));
+    element.style.setProperty("--peek-backdrop-opacity", String(colors ? opacity : settings.backdropOpacity / 100));
   }
 }
 
 function cleanPeekSettings(settings) {
-  const next = { ...PEEK_DEFAULT_SETTINGS, ...settings };
+  const next = Object.fromEntries(Object.entries(PEEK_DEFAULT_SETTINGS).map(([key, fallback]) => [
+    key, settings && Object.hasOwn(settings, key) ? settings[key] : fallback
+  ]));
   // Drop the removed hover option when importing older settings.
   delete next.hoverPreviewDelay;
 
@@ -209,7 +249,9 @@ function cleanPeekSettings(settings) {
     next.frameStyle = "square";
   }
 
+  next.savedThemes = cleanPeekSavedThemes(next.savedThemes);
   for (const [key, values] of Object.entries(PEEK_SETTING_OPTIONS)) {
+    if (key === "theme" && next.savedThemes.some(item => `saved:${item.id}` === next.theme)) continue;
     if (!values.includes(next[key])) {
       next[key] = PEEK_DEFAULT_SETTINGS[key];
     }
@@ -246,6 +288,15 @@ function cleanPeekSettings(settings) {
   next.customBorder = cleanHexColor(next.customBorder, PEEK_DEFAULT_SETTINGS.customBorder);
   next.customBackdrop = cleanHexColor(next.customBackdrop, PEEK_DEFAULT_SETTINGS.customBackdrop);
   return next;
+}
+
+function parsePeekSettingsImport(text) {
+  const parsed = JSON.parse(text);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) ||
+      !Object.keys(PEEK_DEFAULT_SETTINGS).some(key => Object.hasOwn(parsed, key))) {
+    throw new Error("Le fichier doit contenir un objet de réglages de l’extension.");
+  }
+  return cleanPeekSettings(parsed);
 }
 
 function cleanBoolean(value, fallback) {
@@ -319,7 +370,7 @@ function parseDomainRules(value) {
     .split(/[\n,;]+/)
     .map(line => line.trim())
     .map(line => {
-      const match = line.match(/^(.+?)\s*(?:=|:)\s*(overlay|compact|blocked)\s*$/i);
+      const match = line.match(/^(.+?)\s*(?:=|:)\s*(overlay|compact|split|blocked)\s*$/i);
       if (!match) {
         return null;
       }
@@ -328,6 +379,19 @@ function parseDomainRules(value) {
     })
     .filter(Boolean)
     .sort((a, b) => b.domain.length - a.domain.length);
+}
+
+function setPeekDomainRule(value, hostname, mode) {
+  const domain = normalizeDomainEntry(hostname);
+  if (!domain || !["default", "overlay", "compact", "split", "blocked"].includes(mode)) {
+    throw new Error("Règle de site invalide.");
+  }
+  const lines = (typeof value === "string" ? value : "").split(/[\n,;]+/).filter(line => {
+    const rule = parseDomainRules(line)[0];
+    return !rule || rule.domain !== domain;
+  }).map(line => line.trim()).filter(Boolean);
+  if (mode !== "default") lines.push(`${domain} = ${mode}`);
+  return lines.join("\n");
 }
 
 function hostMatchesDomain(host, domain) {

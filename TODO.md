@@ -9,11 +9,13 @@ Les cases cochées dans « Déjà implémenté » indiquent du code présent, pa
 ## Prochaines étapes conseillées
 
 1. **Valider l’ouverture et la fermeture dans les navigateurs utilisés au quotidien.** Confirmer que le scintillement a disparu avant d’ajouter d’autres animations ou modes.
-2. **Fiabiliser la navigation.** Corriger l’historique avec URL répétées. La protection de la saisie et les limites de déplacement/redimensionnement sont implémentées ; leurs essais dans les navigateurs restent à faire.
-3. **Simplifier les règles par site.** Ajouter une action « Toujours ouvrir ce site en… » pour éviter de modifier une liste à la main.
+2. **Valider la navigation et les nouveaux réglages.** L’historique avec URL répétées et l’import sont corrigés. Tester les thèmes enregistrés, les règles rapides et la pause dans les navigateurs utilisés.
+3. **Vérifier la première exécution sur GitHub.** Le workflow est ajouté ; pousser les changements puis vérifier les résultats dans Actions.
 4. **Préparer une version stable à partager.** Documenter les limites réelles, automatiser les tests et préparer un paquet propre.
 
 ## À vérifier
+
+- [ ] **P1 — Nouvelles commandes.** Vérifier visuellement la miniature, les thèmes personnels, les règles rapides et la pause dans les navigateurs. Le test Chrome temporaire n’a pas été autorisé pendant cette session ; les tests automatisés utilisent des API simulées.
 
 - [ ] **P1 — Ouverture sans scintillement.** Tester plusieurs ouvertures/fermetures rapides, le changement de lien, les différentes positions et les thèmes clair/sombre. Le panneau et ses boutons doivent apparaître directement au bon endroit.
 - [ ] **P1 — Chargement des pages.** Tester une page compatible, une page lente, une redirection et un site refusant l’intégration. Après 12 secondes sans confirmation, les alternatives doivent être accessibles ; une confirmation tardive doit afficher la page.
@@ -36,15 +38,15 @@ Ces points sont issus de la lecture du code ; ajouter un scénario reproductible
 
 - [x] **P1 — Raccourcis et zones éditables.** Protéger les champs, les zones `contenteditable` (y compris leurs enfants), les champs dans un Shadow DOM ouvert et la composition IME. Trois tests de non-régression ajoutés ; validation dans les navigateurs à poursuivre.
 - [ ] **P2 — Raccourcis dans l’iframe.** Seul Échap est actuellement relayé, comme indiqué dans le README ; la composition IME est protégée. Décider s’il est utile de relayer d’autres actions, en préservant les raccourcis et la saisie du site intégré.
-- [ ] **P2 — Historique avec URL répétées.** Revoir `recordPreviewNavigation` : retrouver une ancienne URL ne signifie pas forcément que l’utilisateur est revenu en arrière. Vérifier le parcours A → B → A → précédent, qui doit revenir à B.
+- [x] **P2 — Historique avec URL répétées.** Une URL revisitée crée une nouvelle entrée. Le parcours A → B → A → précédent revient à B ; confirmation de chargement et nouvelle branche couvertes par les tests.
 - [x] **P2 — Débordement pendant le redimensionnement.** Les limites tiennent compte de la position du panneau et conservent le bord opposé. Tests des huit directions, petits viewports et sauvegarde de la position ; validation visuelle à poursuivre.
 - [ ] **P2 — Réglages de secours.** Revoir le stockage dans le `localStorage` du site quand le contexte de l’extension est indisponible. Préférer un état temporaire en mémoire et une invitation à recharger la page pour garder les préférences dans l’extension.
-- [ ] **P2 — Import plus strict.** Refuser les valeurs JSON qui ne sont pas un objet de réglages, ignorer les clés inconnues et signaler les erreurs de lecture du fichier.
+- [x] **P2 — Import plus strict.** Objet contenant au moins une clé de réglage requis ; clés inconnues ignorées, thèmes personnels normalisés, fichiers limités à 1 Mo. Erreurs de lecture et annulations signalées sans écriture.
 - [ ] **P2 — Liste d’autorisation vide.** Décider explicitement du résultat attendu : actuellement, une liste vide autorise tous les domaines, même en mode liste d’autorisation. Clarifier l’interface et couvrir le choix par un test.
 
 ## Améliorations
 
-- [ ] **P1 — Tests automatiques à chaque modification.** Ajouter une action GitHub qui exécute la suite Node.js sur les commits et les pull requests.
+- [x] **P1 — Tests automatiques à chaque modification.** Workflow GitHub Actions ajouté pour les push, pull requests et lancements manuels sur Node.js 22 et 24. Première exécution distante à vérifier après le push.
 - [ ] **P2 — Tests avec un vrai navigateur.** Ajouter des pages de test locales pour l’ouverture, le focus, les redirections et les refus d’intégration. Les tests simulés actuels ne valident pas le rendu ni les API réelles des navigateurs.
 - [ ] **P2 — Interface cohérente.** Harmoniser les réglages de la popup, du panneau intégré et du menu compact, ainsi que leurs messages de sauvegarde.
 - [ ] **P2 — Réglages simples et avancés.** Mettre le mode d’ouverture, le déclencheur, la taille et la fermeture en premier ; regrouper couleurs, animations et règles détaillées dans une section avancée.
@@ -56,10 +58,12 @@ Ces points sont issus de la lecture du code ; ajouter un scénario reproductible
 
 ## Fonctionnalités à ajouter
 
-- [ ] **P2 — « Toujours ouvrir ce site en… ».** Depuis l’aperçu, choisir intégré, compact, vue partagée ou désactivé. Étendre les règles de domaine au mode Split View et permettre d’annuler facilement ce choix.
+- [x] **P2 — « Toujours ouvrir ce site en… ».** Depuis les paramètres de l’aperçu et la popup : intégré, compact, split natif ou désactivé. Le choix général/hérité supprime la règle exacte. Écritures rapides sérialisées avec lecture des dernières règles.
 - [x] **P2 — Déplacer le panneau à la souris.** Glissement par l’en-tête, position bornée et mémorisée, barre d’actions repositionnée pendant le geste. Gestion du relâchement, de la perte de capture et de focus ; désactivé en plein écran. Validation visuelle à poursuivre.
-- [ ] **P2 — Prévisualisation des réglages.** Afficher un exemple local du panneau dans les paramètres pour voir immédiatement les changements de thème, taille et animation sans charger un site externe.
-- [ ] **P3 — Pause rapide.** Désactiver temporairement les déclencheurs sur le site courant et proposer une réactivation visible.
+- [x] **P2 — Prévisualisation des réglages.** Miniature locale dans Apparence : thème, taille, position, cadre, ombre, arrière-plan et bouton pour rejouer l’animation. Respect de la réduction des animations ; validation visuelle à poursuivre.
+- [x] **P3 — Pause rapide.** Commande Pause/Réactiver dans la popup, badge II et propagation aux onglets du même hôte. État en session, séparé pour les fenêtres privées ; effacé au redémarrage du navigateur ou rechargement de l’extension.
+- [x] **P2 — Copier un thème connu.** Copier ses couleurs vers Personnalisé pour les modifier sans toucher à la palette originale.
+- [x] **P2 — Enregistrer plusieurs thèmes personnels.** Bibliothèque Mes thèmes (50 maximum), remplacement par nom, suppression, sélection dans les trois interfaces et export/import.
 - [ ] **P3 — Profils de réglages.** Enregistrer quelques configurations personnelles et passer facilement de l’une à l’autre.
 - [ ] **P3 — Raccourcis des actions personnalisables.** Permettre de modifier ou désactiver les raccourcis internes en signalant les conflits. Le raccourci global est déjà configurable dans le navigateur.
 
@@ -83,7 +87,7 @@ Ces points sont issus de la lecture du code ; ajouter un scénario reproductible
 - [x] Préparer le placement du panneau avant affichage pour réduire le scintillement.
 - [x] Ajouter le mode et le bouton de vue partagée native avec un message d’aide si l’API manque.
 - [x] Intégrer les nouvelles icônes aux bonnes dimensions et conserver leurs sources.
-- [x] Disposer de 41 tests automatisés réussis lors de la dernière exécution ; compléter par les vérifications dans les navigateurs ci-dessus.
+- [x] Disposer de 65 tests automatisés réussis lors de la dernière exécution ; compléter par les vérifications dans les navigateurs ci-dessus.
 
 **Conseil de suivi :** traiter un chantier à la fois, noter le résultat de ses vérifications et choisir ensuite la prochaine priorité. Garder les fonctionnalités P3 comme idées, sans les considérer comme des engagements.
 
