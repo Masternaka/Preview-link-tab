@@ -10,10 +10,12 @@ Les cases cochées dans « Déjà implémenté » indiquent du code présent, pa
 
 1. **Valider l’ouverture et la fermeture dans les navigateurs utilisés au quotidien.** Confirmer que le scintillement a disparu avant d’ajouter d’autres animations ou modes.
 2. **Valider la navigation et les nouveaux réglages.** L’historique avec URL répétées et l’import sont corrigés. Tester les thèmes enregistrés, les règles rapides et la pause dans les navigateurs utilisés.
-3. **Vérifier la première exécution sur GitHub.** Le workflow est ajouté ; pousser les changements puis vérifier les résultats dans Actions.
+3. **Première exécution sur GitHub validée.** L’utilisateur confirme que GitHub Actions est entièrement au vert le 30 septembre 2026.
 4. **Préparer une version stable à partager.** Documenter les limites réelles, automatiser les tests et préparer un paquet propre.
 
 ## À vérifier
+
+- [ ] **P1 — Popup Apparence après correction de mise en page.** Hauteur indépendante du viewport initial, défilement limité au contenu et effets de miniature confinés. Les champs radio invisibles sont ancrés dans leurs libellés ; `overflow: clip` empêche le focus de faire défiler la racine de la popup. Après rechargement de l’extension, changer le thème, le flou et le cadre, déplier les couleurs et naviguer au clavier : vérifier que la sauvegarde reste en bas, sans zone vide ni noircissement. Signalement utilisateur du 30 septembre 2026 ; validation visuelle encore nécessaire.
 
 - [ ] **P1 — Nouvelles commandes.** Vérifier visuellement la miniature, les thèmes personnels, les règles rapides et la pause dans les navigateurs. Le test Chrome temporaire n’a pas été autorisé pendant cette session ; les tests automatisés utilisent des API simulées.
 
@@ -46,10 +48,10 @@ Ces points sont issus de la lecture du code ; ajouter un scénario reproductible
 
 ## Améliorations
 
-- [x] **P1 — Tests automatiques à chaque modification.** Workflow GitHub Actions ajouté pour les push, pull requests et lancements manuels sur Node.js 22 et 24. Première exécution distante à vérifier après le push.
+- [x] **P1 — Tests automatiques à chaque modification.** Workflow GitHub Actions ajouté pour les push, pull requests et lancements manuels sur Node.js 22 et 24. Exécution sur GitHub confirmée entièrement au vert par l’utilisateur le 30 septembre 2026.
 - [ ] **P2 — Tests avec un vrai navigateur.** Ajouter des pages de test locales pour l’ouverture, le focus, les redirections et les refus d’intégration. Les tests simulés actuels ne valident pas le rendu ni les API réelles des navigateurs.
-- [ ] **P2 — Interface cohérente.** Harmoniser les réglages de la popup, du panneau intégré et du menu compact, ainsi que leurs messages de sauvegarde.
-- [ ] **P2 — Réglages simples et avancés.** Mettre le mode d’ouverture, le déclencheur, la taille et la fermeture en premier ; regrouper couleurs, animations et règles détaillées dans une section avancée.
+- [ ] **P2 — Interface cohérente.** Popup réorganisée en quatre rubriques avec sauvegarde fixe et navigation clavier. Harmoniser encore le panneau intégré et le menu compact.
+- [x] **P2 — Réglages simples et avancés (popup).** Utilisation regroupe ouverture et fermeture ; Apparence montre la miniature et le thème, avec options détaillées repliables. Sites rassemble pause, listes et règles ; Données contient import, export et réinitialisation. Rendu à valider dans les navigateurs.
 - [ ] **P2 — Code plus facile à maintenir.** Séparer progressivement la navigation, le placement, les réglages et les événements de `content.js`, en conservant des tests sur les comportements existants.
 - [ ] **P2 — Isolation visuelle.** Évaluer un Shadow DOM pour limiter les conflits avec les styles des sites. Valider d’abord le focus, les boutons et les thèmes sur un prototype.
 - [ ] **P2 — Règles de domaine compréhensibles.** Signaler les lignes invalides et montrer quelle règle sera appliquée à un domaine donné.
@@ -87,7 +89,7 @@ Ces points sont issus de la lecture du code ; ajouter un scénario reproductible
 - [x] Préparer le placement du panneau avant affichage pour réduire le scintillement.
 - [x] Ajouter le mode et le bouton de vue partagée native avec un message d’aide si l’API manque.
 - [x] Intégrer les nouvelles icônes aux bonnes dimensions et conserver leurs sources.
-- [x] Disposer de 65 tests automatisés réussis lors de la dernière exécution ; compléter par les vérifications dans les navigateurs ci-dessus.
+- [x] Disposer de 67 tests automatisés réussis lors de la dernière exécution ; compléter par les vérifications dans les navigateurs ci-dessus.
 
 **Conseil de suivi :** traiter un chantier à la fois, noter le résultat de ses vérifications et choisir ensuite la prochaine priorité. Garder les fonctionnalités P3 comme idées, sans les considérer comme des engagements.
 

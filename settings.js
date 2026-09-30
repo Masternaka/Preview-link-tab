@@ -53,11 +53,11 @@ const PEEK_SETTING_OPTIONS = {
 
 const PEEK_ANIMATION_SPEED_MS = {
   instant: 70,
-  quick: 110,
-  normal: 180,
-  relaxed: 260,
-  slow: 340,
-  leisurely: 480
+  quick: 160,
+  normal: 300,
+  relaxed: 420,
+  slow: 560,
+  leisurely: 720
 };
 
 function peekAnimationDurationMs(settings) {

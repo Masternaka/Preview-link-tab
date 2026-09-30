@@ -1,270 +1,967 @@
 <!doctype html>
 <html lang="fr">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Paramètres — Preview link tab</title>
-  <link rel="stylesheet" href="popup.css">
-</head>
-<body>
-  <main class="popup-shell">
-    <header class="popup-header">
-      <div class="brand"><img class="brand-icon" src="icons/icon48.png" width="36" height="36" alt=""><div><span class="eyebrow">PREVIEW LINK TAB</span><h1>Vos paramètres</h1></div></div>
-      <span class="header-note">À votre façon.</span>
-    </header>
-    <nav class="section-nav" role="tablist" aria-label="Rubriques des paramètres"><button type="button" id="tab-general" class="section-nav-btn section-nav-btn-active" data-section="general" role="tab" aria-controls="section-general" aria-selected="true" tabindex="0"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg>Utilisation</button><button type="button" id="tab-appearance" class="section-nav-btn" data-section="appearance" role="tab" aria-controls="section-appearance" aria-selected="false" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-3.7 1.5 1.5 0 0 1 1-2.8h2A4 4 0 0 0 21 10a9 9 0 0 0-9-7Z"/><circle cx="7" cy="10" r=".5"/><circle cx="10" cy="6.5" r=".5"/><circle cx="15" cy="7" r=".5"/></svg>Apparence</button><button type="button" id="tab-sites" class="section-nav-btn" data-section="sites" role="tab" aria-controls="section-sites" aria-selected="false" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z"/></svg>Sites</button><button type="button" id="tab-data" class="section-nav-btn" data-section="data" role="tab" aria-controls="section-data" aria-selected="false" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 15v5h14v-5"/></svg>Données</button></nav>
-    <div class="settings-scroll">
-      <form id="settings-form" class="settings-form">
-<section id="section-general" class="form-section form-section-active" data-section="general" role="tabpanel" aria-labelledby="tab-general" tabindex="0"><div class="section-intro"><h2>Une navigation à votre rythme</h2><p>Les essentiels pour ouvrir et fermer vos aperçus.</p></div><div class="settings-card"><div class="card-heading"><h3>Ouvrir un aperçu</h3><p>Choisissez comment consulter vos liens.</p></div><div class="card-fields"><label>
-            <span>Mode d'ouverture</span>
-            <select name="openMode">
-              <option value="overlay">Aperçu intégré</option>
-              <option value="compact">Fenêtre compacte</option>
-                <option value="split">Vue partagée (Split View)</option>
-            </select>
-          </label><fieldset class="segmented-field">
-            <legend>Raccourci + clic</legend>
-            <div class="segmented" role="radiogroup" aria-label="Raccourci">
-              <label><input type="radio" name="trigger" value="alt"><span>Alt</span></label>
-              <label><input type="radio" name="trigger" value="meta"><span>Ctrl/Cmd</span></label>
-              <label><input type="radio" name="trigger" value="shift"><span>Maj</span></label>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>
+      Paramètres — Preview link tab
+    </title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="popup-shell">
+      <header class="popup-header">
+        <div class="brand">
+          <img class="brand-icon" src="icons/icon48.png" width="36" height="36" alt="">
+          <div>
+            <span class="eyebrow">
+              PREVIEW LINK TAB
+            </span>
+            <h1>
+              Vos paramètres
+            </h1>
+          </div>
+        </div>
+        <span class="header-note">
+          À votre façon.
+        </span>
+      </header>
+      <nav class="section-nav" role="tablist" aria-label="Rubriques des paramètres">
+        <button type="button" id="tab-general" class="section-nav-btn section-nav-btn-active" data-section="general" role="tab" aria-controls="section-general" aria-selected="true" tabindex="0">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 7h16M4 17h16"/>
+            <circle cx="9" cy="7" r="3"/>
+            <circle cx="15" cy="17" r="3"/>
+          </svg>
+          Utilisation
+        </button>
+        <button type="button" id="tab-appearance" class="section-nav-btn" data-section="appearance" role="tab" aria-controls="section-appearance" aria-selected="false" tabindex="-1">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-3.7 1.5 1.5 0 0 1 1-2.8h2A4 4 0 0 0 21 10a9 9 0 0 0-9-7Z"/>
+            <circle cx="7" cy="10" r=".5"/>
+            <circle cx="10" cy="6.5" r=".5"/>
+            <circle cx="15" cy="7" r=".5"/>
+          </svg>
+          Apparence
+        </button>
+        <button type="button" id="tab-sites" class="section-nav-btn" data-section="sites" role="tab" aria-controls="section-sites" aria-selected="false" tabindex="-1">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z"/>
+          </svg>
+          Sites
+        </button>
+        <button type="button" id="tab-data" class="section-nav-btn" data-section="data" role="tab" aria-controls="section-data" aria-selected="false" tabindex="-1">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 3v12m-4-4 4 4 4-4M5 15v5h14v-5"/>
+          </svg>
+          Données
+        </button>
+      </nav>
+      <div class="settings-scroll">
+        <form id="settings-form" class="settings-form">
+          <section id="section-general" class="form-section form-section-active" data-section="general" role="tabpanel" aria-labelledby="tab-general" tabindex="0">
+            <div class="section-intro">
+              <h2>
+                Une navigation à votre rythme
+              </h2>
+              <p>
+                Les essentiels pour ouvrir et fermer vos aperçus.
+              </p>
             </div>
-          </fieldset><label class="check-row">
-            <input type="checkbox" name="middleClick">
-            <span class="switch" aria-hidden="true"></span>
-            <span>Aperçu au clic molette sur un lien</span>
-          </label></div></div><div class="settings-card"><div class="card-heading"><h3>Fermer l’aperçu</h3><p>Gardez le contrôle sur sa fermeture.</p></div><div class="card-fields"><label class="check-row">
-            <input type="checkbox" name="closeOutside">
-            <span class="switch" aria-hidden="true"></span>
-            <span>Fermer au clic extérieur</span>
-          </label><label class="check-row">
-            <input type="checkbox" name="closeWithEsc">
-            <span class="switch" aria-hidden="true"></span>
-            <span>Fermer avec Échap</span>
-          </label><label class="check-row">
-            <input type="checkbox" name="closeAfterOpen">
-            <span class="switch" aria-hidden="true"></span>
-            <span>Fermer après ouverture externe</span>
-          </label></div></div><p class="hint keyboard-hint">Pour ouvrir le dernier lien survolé : <kbd>Alt</kbd> + <kbd>Maj</kbd> + <kbd>P</kbd>.<br>Raccourci modifiable dans <code>chrome://extensions/shortcuts</code>.</p></section><section id="section-appearance" class="form-section" data-section="appearance" role="tabpanel" aria-labelledby="tab-appearance" tabindex="0" hidden><div class="section-intro"><h2>Un aperçu qui vous ressemble</h2><p>Visualisez vos changements avant de les sauvegarder.</p></div><div class="appearance-example wide-field">
-            <div class="example-heading"><strong>Aperçu des réglages</strong><button type="button" id="replay-preview">Rejouer l’animation</button></div>
-            <div id="theme-preview" class="theme-preview" role="img" aria-label="Exemple local de l’aperçu avec vos réglages">
-              <div class="example-page" aria-hidden="true">Votre page reste ici<div></div><div></div><div></div></div>
-              <div class="example-backdrop"></div>
-              <div id="sample-panel" class="sample-panel" aria-hidden="true">
-                <div class="sample-header"><strong>Aperçu du lien</strong><span>×</span></div>
-                <div class="sample-content"><strong>Une page à découvrir</strong><p>Un exemple de contenu pour visualiser vos réglages.</p><span class="sample-link">Consulter la page →</span></div>
+            <div class="settings-card">
+              <div class="card-heading">
+                <h3>
+                  Ouvrir un aperçu
+                </h3>
+                <p>
+                  Choisissez comment consulter vos liens.
+                </p>
+              </div>
+              <div class="card-fields">
+                <label>
+                  <span>
+                    Mode d'ouverture
+                  </span>
+                  <select name="openMode">
+                    <option value="overlay">
+                      Aperçu intégré
+                    </option>
+                    <option value="compact">
+                      Fenêtre compacte
+                    </option>
+                    <option value="split">
+                      Vue partagée (Split View)
+                    </option>
+                  </select>
+                </label>
+                <fieldset class="segmented-field">
+                  <legend>
+                    Raccourci + clic
+                  </legend>
+                  <div class="segmented" role="radiogroup" aria-label="Raccourci">
+                    <label>
+                      <input type="radio" name="trigger" value="alt">
+                      <span>
+                        Alt
+                      </span>
+                    </label>
+                    <label>
+                      <input type="radio" name="trigger" value="meta">
+                      <span>
+                        Ctrl/Cmd
+                      </span>
+                    </label>
+                    <label>
+                      <input type="radio" name="trigger" value="shift">
+                      <span>
+                        Maj
+                      </span>
+                    </label>
+                  </div>
+                </fieldset>
+                <label class="check-row">
+                  <input type="checkbox" name="middleClick">
+                  <span class="switch" aria-hidden="true">
+                  </span>
+                  <span>
+                    Aperçu au clic molette sur un lien
+                  </span>
+                </label>
               </div>
             </div>
-            <p class="hint">Exemple miniature, sans charger de site. Les couleurs des pages réelles restent propres aux sites.</p>
-          </div><div class="settings-card"><div class="card-heading"><h3>Thème & couleurs</h3><p>Un thème connu ou votre propre palette.</p></div><div class="card-fields"><label>
-            <span>Thème</span>
-            <select name="theme">
-              <option value="catppuccin">Catppuccin</option>
-              <option value="nordic">Nordic</option>
-              <option value="nord">Nord</option>
-              <option value="gruvbox">Gruvbox</option>
-              <option value="tokyoNight">Tokyo Night</option>
-              <option value="dracula">Dracula</option>
-              <option value="everforest">Everforest</option>
-              <option value="custom">Personnalisé</option>
-            </select>
-          </label><button type="button" id="copy-theme" class="secondary-button">Copier vers Personnalisé</button><details class="settings-details"><summary><span>Couleurs du thème<small>Consulter la palette ou modifier vos couleurs personnelles</small></span><span class="disclosure" aria-hidden="true">⌄</span></summary><div class="details-content"><fieldset class="advanced-group color-group" data-enabled-by="theme" data-enabled-value="custom">
-            <legend>Couleurs du thème</legend>
-            <p class="hint wide-field">Couleurs du thème sélectionné. Choisissez « Personnalisé » pour les modifier.</p>
-            <label>
-              <span>Accent</span>
-              <span class="color-input">
-                <input type="color" class="color-swatch" data-color-for="customAccent" aria-label="Couleur : Accent">
-                <input type="text" name="customAccent" aria-label="Code couleur : Accent" pattern="#[0-9a-fA-F]{6}" placeholder="#2563eb">
-              </span>
-            </label>
-            <label>
-              <span>Fond</span>
-              <span class="color-input">
-                <input type="color" class="color-swatch" data-color-for="customBackground" aria-label="Couleur : Fond">
-                <input type="text" name="customBackground" aria-label="Code couleur : Fond" pattern="#[0-9a-fA-F]{6}" placeholder="#f8fafc">
-              </span>
-            </label>
-            <label>
-              <span>En-tête</span>
-              <span class="color-input">
-                <input type="color" class="color-swatch" data-color-for="customHeader" aria-label="Couleur : En-tête">
-                <input type="text" name="customHeader" aria-label="Code couleur : En-tête" pattern="#[0-9a-fA-F]{6}" placeholder="#ffffff">
-              </span>
-            </label>
-            <label>
-              <span>Page</span>
-              <span class="color-input">
-                <input type="color" class="color-swatch" data-color-for="customFrame" aria-label="Couleur : Page">
-                <input type="text" name="customFrame" aria-label="Code couleur : Page" pattern="#[0-9a-fA-F]{6}" placeholder="#ffffff">
-              </span>
-            </label>
-            <label>
-              <span>Texte</span>
-              <span class="color-input">
-                <input type="color" class="color-swatch" data-color-for="customText" aria-label="Couleur : Texte">
-                <input type="text" name="customText" aria-label="Code couleur : Texte" pattern="#[0-9a-fA-F]{6}" placeholder="#0f172a">
-              </span>
-            </label>
-            <label>
-              <span>Texte secondaire</span>
-              <span class="color-input">
-                <input type="color" class="color-swatch" data-color-for="customMuted" aria-label="Couleur : Texte secondaire">
-                <input type="text" name="customMuted" aria-label="Code couleur : Texte secondaire" pattern="#[0-9a-fA-F]{6}" placeholder="#64748b">
-              </span>
-            </label>
-            <label>
-              <span>Bordure</span>
-              <span class="color-input">
-                <input type="color" class="color-swatch" data-color-for="customBorder" aria-label="Couleur : Bordure">
-                <input type="text" name="customBorder" aria-label="Code couleur : Bordure" pattern="#[0-9a-fA-F]{6}" placeholder="#cbd5e1">
-              </span>
-            </label>
-            <label>
-              <span>Arrière-plan</span>
-              <span class="color-input">
-                <input type="color" class="color-swatch" data-color-for="customBackdrop" aria-label="Couleur : Arrière-plan">
-                <input type="text" name="customBackdrop" aria-label="Code couleur : Arrière-plan" pattern="#[0-9a-fA-F]{6}" placeholder="#111827">
-              </span>
-            </label>
-            <label class="wide-field">
-              <span>Opacité de l'arrière-plan (%)</span>
-              <input type="number" name="customBackdropOpacity" min="0" max="85" step="5">
-            </label>
-          </fieldset></div></details></div></div><details class="settings-details"><summary><span>Mes thèmes<small>Nommer, enregistrer ou supprimer une palette</small></span><span class="disclosure" aria-hidden="true">⌄</span></summary><div class="details-content"><div class="theme-library wide-field">
-            
-            <label><span>Nom de mon thème</span><input id="theme-name" type="text" maxlength="80" placeholder="Mon thème"></label>
-            <div class="backup-actions">
-              <button type="button" id="save-theme">Enregistrer ce thème</button>
-              <button type="button" id="delete-theme" disabled>Supprimer ce thème</button>
+            <div class="settings-card">
+              <div class="card-heading">
+                <h3>
+                  Fermer l’aperçu
+                </h3>
+                <p>
+                  Gardez le contrôle sur sa fermeture.
+                </p>
+              </div>
+              <div class="card-fields">
+                <label class="check-row">
+                  <input type="checkbox" name="closeOutside">
+                  <span class="switch" aria-hidden="true">
+                  </span>
+                  <span>
+                    Fermer au clic extérieur
+                  </span>
+                </label>
+                <label class="check-row">
+                  <input type="checkbox" name="closeWithEsc">
+                  <span class="switch" aria-hidden="true">
+                  </span>
+                  <span>
+                    Fermer avec Échap
+                  </span>
+                </label>
+                <label class="check-row">
+                  <input type="checkbox" name="closeAfterOpen">
+                  <span class="switch" aria-hidden="true">
+                  </span>
+                  <span>
+                    Fermer après ouverture externe
+                  </span>
+                </label>
+              </div>
             </div>
-            <p class="hint">Vos thèmes apparaissent dans « Mes thèmes ». Un nom existant remplace sa palette.</p>
-          </div></div></details><details class="settings-details"><summary><span>Taille & position<small>Ajuster les dimensions et le placement du panneau</small></span><span class="disclosure" aria-hidden="true">⌄</span></summary><div class="details-content"><fieldset class="segmented-field">
-            <legend>Taille</legend>
-            <div class="segmented" role="radiogroup" aria-label="Taille">
-              <label><input type="radio" name="size" value="small"><span>Petite</span></label>
-              <label><input type="radio" name="size" value="medium"><span>Moyenne</span></label>
-              <label><input type="radio" name="size" value="large"><span>Grande</span></label>
-              <label><input type="radio" name="size" value="full"><span>Plein écran</span></label>
-              <label><input type="radio" name="size" value="custom"><span>Perso.</span></label>
+            <p class="hint keyboard-hint">
+              Pour ouvrir le dernier lien survolé :
+              <kbd>
+                Alt
+              </kbd>
+              +
+              <kbd>
+                Maj
+              </kbd>
+              +
+              <kbd>
+                P
+              </kbd>
+              .
+              <br>
+              Raccourci modifiable dans
+              <code>
+                chrome://extensions/shortcuts
+              </code>
+              .
+            </p>
+          </section>
+          <section id="section-appearance" class="form-section" data-section="appearance" role="tabpanel" aria-labelledby="tab-appearance" tabindex="0" hidden>
+            <div class="section-intro">
+              <h2>
+                Un aperçu qui vous ressemble
+              </h2>
+              <p>
+                Visualisez vos changements avant de les sauvegarder.
+              </p>
             </div>
-          </fieldset><fieldset class="advanced-group" data-enabled-by="size" data-enabled-value="custom">
-            <legend>Dimensions personnalisées</legend>
-            <label>
-              <span>Largeur (px)</span>
-              <input type="number" name="customWidth" min="320" max="1800" step="10">
-            </label>
-            <label>
-              <span>Hauteur (px)</span>
-              <input type="number" name="customHeight" min="240" max="1200" step="10">
-            </label>
-          </fieldset><label>
-            <span>Position</span>
-            <select name="position">
-              <option value="topRight">En haut à droite</option>
-              <option value="bottomRight">En bas à droite</option>
-              <option value="topLeft">En haut à gauche</option>
-              <option value="bottomLeft">En bas à gauche</option>
-              <option value="center">Centre</option>
-              <option value="custom">Personnalisée</option>
-            </select>
-          </label><fieldset class="advanced-group" data-enabled-by="position" data-enabled-value="custom">
-            <legend>Position personnalisée</legend>
-            <label>
-              <span>X (px)</span>
-              <input type="number" name="customLeft" min="0" max="4000" step="10">
-            </label>
-            <label>
-              <span>Y (px)</span>
-              <input type="number" name="customTop" min="0" max="3000" step="10">
-            </label>
-          </fieldset></div></details><details class="settings-details"><summary><span>Cadre & arrière-plan<small>Bordures, ombre, assombrissement et flou</small></span><span class="disclosure" aria-hidden="true">⌄</span></summary><div class="details-content"><label>
-            <span>Cadre</span>
-            <select name="frameStyle">
-              <option value="rounded">Arrondi</option>
-              <option value="square">Carré</option>
-              <option value="glass">Verre dépoli</option>
-              <option value="outlined">Contour accent</option>
-            </select>
-          </label><label>
-            <span>Ombre du panneau</span>
-            <select name="panelShadow">
-              <option value="default">Selon le thème</option>
-              <option value="none">Aucune</option>
-              <option value="subtle">Légère</option>
-              <option value="medium">Moyenne</option>
-              <option value="strong">Forte</option>
-              <option value="dramatic">Dramatique</option>
-              <option value="glow">Lueur (couleur accent)</option>
-            </select>
-          </label><div class="backdrop-control wide-field">
-            <label><span>Arrière-plan lors de l'aperçu</span></label>
-            <div class="backdrop-mode">
-              <label class="backdrop-mode-btn">
-                <input type="radio" name="backdropMode" value="dim">
-                <span>Assombrissement</span>
-              </label>
-              <label class="backdrop-mode-btn">
-                <input type="radio" name="backdropMode" value="blur">
-                <span>Flou</span>
-              </label>
+            <div class="appearance-example wide-field">
+              <div class="example-heading">
+                <strong>
+                  Aperçu des réglages
+                </strong>
+                <button type="button" id="replay-preview">
+                  Rejouer l’animation
+                </button>
+              </div>
+              <div id="theme-preview" class="theme-preview" role="img" aria-label="Exemple local de l’aperçu avec vos réglages">
+                <div class="example-page" aria-hidden="true">
+                  Votre page reste ici
+                  <div>
+                  </div>
+                  <div>
+                  </div>
+                  <div>
+                  </div>
+                </div>
+                <div class="example-backdrop">
+                </div>
+                <div id="sample-panel" class="sample-panel" aria-hidden="true">
+                  <div class="sample-header">
+                    <strong>
+                      Aperçu du lien
+                    </strong>
+                    <span>
+                      ×
+                    </span>
+                  </div>
+                  <div class="sample-content">
+                    <strong>
+                      Une page à découvrir
+                    </strong>
+                    <p>
+                      Un exemple de contenu pour visualiser vos réglages.
+                    </p>
+                    <span class="sample-link">
+                      Consulter la page →
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <p class="hint">
+                Exemple miniature, sans charger de site. Les couleurs des pages réelles restent propres aux sites.
+              </p>
             </div>
-            <div class="backdrop-slider-row">
-              <input type="range" id="backdropIntensitySlider" aria-label="Intensité de l’arrière-plan" class="backdrop-slider" name="backdropIntensity" min="0" max="100" step="1">
-              <span class="backdrop-value" id="backdropIntensityValue">50%</span>
+            <div class="settings-card">
+              <div class="card-heading">
+                <h3>
+                  Thème
+                  &
+                  couleurs
+                </h3>
+                <p>
+                  Un thème connu ou votre propre palette.
+                </p>
+              </div>
+              <div class="card-fields">
+                <label>
+                  <span>
+                    Thème
+                  </span>
+                  <select name="theme">
+                    <option value="catppuccin">
+                      Catppuccin
+                    </option>
+                    <option value="nordic">
+                      Nordic
+                    </option>
+                    <option value="nord">
+                      Nord
+                    </option>
+                    <option value="gruvbox">
+                      Gruvbox
+                    </option>
+                    <option value="tokyoNight">
+                      Tokyo Night
+                    </option>
+                    <option value="dracula">
+                      Dracula
+                    </option>
+                    <option value="everforest">
+                      Everforest
+                    </option>
+                    <option value="custom">
+                      Personnalisé
+                    </option>
+                  </select>
+                </label>
+                <button type="button" id="copy-theme" class="secondary-button">
+                  Copier vers Personnalisé
+                </button>
+                <details class="settings-details">
+                  <summary>
+                    <span>
+                      Couleurs du thème
+                      <small>
+                        Consulter la palette ou modifier vos couleurs personnelles
+                      </small>
+                    </span>
+                    <span class="disclosure" aria-hidden="true">
+                      ⌄
+                    </span>
+                  </summary>
+                  <div class="details-content">
+                    <fieldset class="advanced-group color-group" data-enabled-by="theme" data-enabled-value="custom">
+                      <legend>
+                        Couleurs du thème
+                      </legend>
+                      <p class="hint wide-field">
+                        Couleurs du thème sélectionné. Choisissez « Personnalisé » pour les modifier.
+                      </p>
+                      <label>
+                        <span>
+                          Accent
+                        </span>
+                        <span class="color-input">
+                          <input type="color" class="color-swatch" data-color-for="customAccent" aria-label="Couleur : Accent">
+                          <input type="text" name="customAccent" aria-label="Code couleur : Accent" pattern="#[0-9a-fA-F]{6}" placeholder="#2563eb">
+                        </span>
+                      </label>
+                      <label>
+                        <span>
+                          Fond
+                        </span>
+                        <span class="color-input">
+                          <input type="color" class="color-swatch" data-color-for="customBackground" aria-label="Couleur : Fond">
+                          <input type="text" name="customBackground" aria-label="Code couleur : Fond" pattern="#[0-9a-fA-F]{6}" placeholder="#f8fafc">
+                        </span>
+                      </label>
+                      <label>
+                        <span>
+                          En-tête
+                        </span>
+                        <span class="color-input">
+                          <input type="color" class="color-swatch" data-color-for="customHeader" aria-label="Couleur : En-tête">
+                          <input type="text" name="customHeader" aria-label="Code couleur : En-tête" pattern="#[0-9a-fA-F]{6}" placeholder="#ffffff">
+                        </span>
+                      </label>
+                      <label>
+                        <span>
+                          Page
+                        </span>
+                        <span class="color-input">
+                          <input type="color" class="color-swatch" data-color-for="customFrame" aria-label="Couleur : Page">
+                          <input type="text" name="customFrame" aria-label="Code couleur : Page" pattern="#[0-9a-fA-F]{6}" placeholder="#ffffff">
+                        </span>
+                      </label>
+                      <label>
+                        <span>
+                          Texte
+                        </span>
+                        <span class="color-input">
+                          <input type="color" class="color-swatch" data-color-for="customText" aria-label="Couleur : Texte">
+                          <input type="text" name="customText" aria-label="Code couleur : Texte" pattern="#[0-9a-fA-F]{6}" placeholder="#0f172a">
+                        </span>
+                      </label>
+                      <label>
+                        <span>
+                          Texte secondaire
+                        </span>
+                        <span class="color-input">
+                          <input type="color" class="color-swatch" data-color-for="customMuted" aria-label="Couleur : Texte secondaire">
+                          <input type="text" name="customMuted" aria-label="Code couleur : Texte secondaire" pattern="#[0-9a-fA-F]{6}" placeholder="#64748b">
+                        </span>
+                      </label>
+                      <label>
+                        <span>
+                          Bordure
+                        </span>
+                        <span class="color-input">
+                          <input type="color" class="color-swatch" data-color-for="customBorder" aria-label="Couleur : Bordure">
+                          <input type="text" name="customBorder" aria-label="Code couleur : Bordure" pattern="#[0-9a-fA-F]{6}" placeholder="#cbd5e1">
+                        </span>
+                      </label>
+                      <label>
+                        <span>
+                          Arrière-plan
+                        </span>
+                        <span class="color-input">
+                          <input type="color" class="color-swatch" data-color-for="customBackdrop" aria-label="Couleur : Arrière-plan">
+                          <input type="text" name="customBackdrop" aria-label="Code couleur : Arrière-plan" pattern="#[0-9a-fA-F]{6}" placeholder="#111827">
+                        </span>
+                      </label>
+                      <label class="wide-field">
+                        <span>
+                          Opacité de l'arrière-plan (%)
+                        </span>
+                        <input type="number" name="customBackdropOpacity" min="0" max="85" step="5">
+                      </label>
+                    </fieldset>
+                  </div>
+                </details>
+              </div>
             </div>
-          </div></div></details><details class="settings-details"><summary><span>Animations<small>Choisir une transition et sa vitesse</small></span><span class="disclosure" aria-hidden="true">⌄</span></summary><div class="details-content"><label class="wide-field">
-            <span>Animation</span>
-            <select name="animation">
-              <option value="slide">Glissement</option>
-              <option value="slideUp">Montée</option>
-              <option value="slideDown">Descente</option>
-              <option value="scale">Zoom</option>
-              <option value="fade">Fondu</option>
-              <option value="bounce">Rebond</option>
-              <option value="blur">Flou</option>
-              <option value="none">Aucune</option>
-            </select>
-          </label><fieldset class="segmented-field">
-            <legend>Vitesse</legend>
-            <div class="segmented segmented-wrap" role="radiogroup" aria-label="Vitesse">
-              <label><input type="radio" name="animationSpeed" value="instant"><span>Instant.</span></label>
-              <label><input type="radio" name="animationSpeed" value="quick"><span>Rapide</span></label>
-              <label><input type="radio" name="animationSpeed" value="normal"><span>Normale</span></label>
-              <label><input type="radio" name="animationSpeed" value="relaxed"><span>Détendue</span></label>
-              <label><input type="radio" name="animationSpeed" value="slow"><span>Lente</span></label>
-              <label><input type="radio" name="animationSpeed" value="leisurely"><span>Très lente</span></label>
+            <details class="settings-details">
+              <summary>
+                <span>
+                  Mes thèmes
+                  <small>
+                    Nommer, enregistrer ou supprimer une palette
+                  </small>
+                </span>
+                <span class="disclosure" aria-hidden="true">
+                  ⌄
+                </span>
+              </summary>
+              <div class="details-content">
+                <div class="theme-library wide-field">
+                  <label>
+                    <span>
+                      Nom de mon thème
+                    </span>
+                    <input id="theme-name" type="text" maxlength="80" placeholder="Mon thème">
+                  </label>
+                  <div class="backup-actions">
+                    <button type="button" id="save-theme">
+                      Enregistrer ce thème
+                    </button>
+                    <button type="button" id="delete-theme" disabled>
+                      Supprimer ce thème
+                    </button>
+                  </div>
+                  <p class="hint">
+                    Vos thèmes apparaissent dans « Mes thèmes ». Un nom existant remplace sa palette.
+                  </p>
+                </div>
+              </div>
+            </details>
+            <details class="settings-details">
+              <summary>
+                <span>
+                  Taille
+                  &
+                  position
+                  <small>
+                    Ajuster les dimensions et le placement du panneau
+                  </small>
+                </span>
+                <span class="disclosure" aria-hidden="true">
+                  ⌄
+                </span>
+              </summary>
+              <div class="details-content">
+                <fieldset class="segmented-field">
+                  <legend>
+                    Taille
+                  </legend>
+                  <div class="segmented" role="radiogroup" aria-label="Taille">
+                    <label>
+                      <input type="radio" name="size" value="small">
+                      <span>
+                        Petite
+                      </span>
+                    </label>
+                    <label>
+                      <input type="radio" name="size" value="medium">
+                      <span>
+                        Moyenne
+                      </span>
+                    </label>
+                    <label>
+                      <input type="radio" name="size" value="large">
+                      <span>
+                        Grande
+                      </span>
+                    </label>
+                    <label>
+                      <input type="radio" name="size" value="full">
+                      <span>
+                        Plein écran
+                      </span>
+                    </label>
+                    <label>
+                      <input type="radio" name="size" value="custom">
+                      <span>
+                        Perso.
+                      </span>
+                    </label>
+                  </div>
+                </fieldset>
+                <fieldset class="advanced-group" data-enabled-by="size" data-enabled-value="custom">
+                  <legend>
+                    Dimensions personnalisées
+                  </legend>
+                  <label>
+                    <span>
+                      Largeur (px)
+                    </span>
+                    <input type="number" name="customWidth" min="320" max="1800" step="10">
+                  </label>
+                  <label>
+                    <span>
+                      Hauteur (px)
+                    </span>
+                    <input type="number" name="customHeight" min="240" max="1200" step="10">
+                  </label>
+                </fieldset>
+                <label>
+                  <span>
+                    Position
+                  </span>
+                  <select name="position">
+                    <option value="topRight">
+                      En haut à droite
+                    </option>
+                    <option value="bottomRight">
+                      En bas à droite
+                    </option>
+                    <option value="topLeft">
+                      En haut à gauche
+                    </option>
+                    <option value="bottomLeft">
+                      En bas à gauche
+                    </option>
+                    <option value="center">
+                      Centre
+                    </option>
+                    <option value="custom">
+                      Personnalisée
+                    </option>
+                  </select>
+                </label>
+                <fieldset class="advanced-group" data-enabled-by="position" data-enabled-value="custom">
+                  <legend>
+                    Position personnalisée
+                  </legend>
+                  <label>
+                    <span>
+                      X (px)
+                    </span>
+                    <input type="number" name="customLeft" min="0" max="4000" step="10">
+                  </label>
+                  <label>
+                    <span>
+                      Y (px)
+                    </span>
+                    <input type="number" name="customTop" min="0" max="3000" step="10">
+                  </label>
+                </fieldset>
+              </div>
+            </details>
+            <details class="settings-details">
+              <summary>
+                <span>
+                  Cadre
+                  &
+                  arrière-plan
+                  <small>
+                    Bordures, ombre, assombrissement et flou
+                  </small>
+                </span>
+                <span class="disclosure" aria-hidden="true">
+                  ⌄
+                </span>
+              </summary>
+              <div class="details-content">
+                <label>
+                  <span>
+                    Cadre
+                  </span>
+                  <select name="frameStyle">
+                    <option value="rounded">
+                      Arrondi
+                    </option>
+                    <option value="square">
+                      Carré
+                    </option>
+                    <option value="glass">
+                      Verre dépoli
+                    </option>
+                    <option value="outlined">
+                      Contour accent
+                    </option>
+                  </select>
+                </label>
+                <label>
+                  <span>
+                    Ombre du panneau
+                  </span>
+                  <select name="panelShadow">
+                    <option value="default">
+                      Selon le thème
+                    </option>
+                    <option value="none">
+                      Aucune
+                    </option>
+                    <option value="subtle">
+                      Légère
+                    </option>
+                    <option value="medium">
+                      Moyenne
+                    </option>
+                    <option value="strong">
+                      Forte
+                    </option>
+                    <option value="dramatic">
+                      Dramatique
+                    </option>
+                    <option value="glow">
+                      Lueur (couleur accent)
+                    </option>
+                  </select>
+                </label>
+                <div class="backdrop-control wide-field">
+                  <label>
+                    <span>
+                      Arrière-plan lors de l'aperçu
+                    </span>
+                  </label>
+                  <div class="backdrop-mode">
+                    <label class="backdrop-mode-btn">
+                      <input type="radio" name="backdropMode" value="dim">
+                      <span>
+                        Assombrissement
+                      </span>
+                    </label>
+                    <label class="backdrop-mode-btn">
+                      <input type="radio" name="backdropMode" value="blur">
+                      <span>
+                        Flou
+                      </span>
+                    </label>
+                  </div>
+                  <div class="backdrop-slider-row">
+                    <input type="range" id="backdropIntensitySlider" aria-label="Intensité de l’arrière-plan" class="backdrop-slider" name="backdropIntensity" min="0" max="100" step="1">
+                    <span class="backdrop-value" id="backdropIntensityValue">
+                      50%
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </details>
+            <details class="settings-details">
+              <summary>
+                <span>
+                  Animations
+                  <small>
+                    Choisir une transition et sa vitesse
+                  </small>
+                </span>
+                <span class="disclosure" aria-hidden="true">
+                  ⌄
+                </span>
+              </summary>
+              <div class="details-content">
+                <label class="wide-field">
+                  <span>
+                    Animation
+                  </span>
+                  <select name="animation">
+                    <option value="slide">
+                      Glissement
+                    </option>
+                    <option value="slideUp">
+                      Montée
+                    </option>
+                    <option value="slideDown">
+                      Descente
+                    </option>
+                    <option value="scale">
+                      Zoom
+                    </option>
+                    <option value="fade">
+                      Fondu
+                    </option>
+                    <option value="bounce">
+                      Rebond
+                    </option>
+                    <option value="blur">
+                      Flou
+                    </option>
+                    <option value="none">
+                      Aucune
+                    </option>
+                  </select>
+                </label>
+                <fieldset class="segmented-field">
+                  <legend>
+                    Vitesse
+                  </legend>
+                  <div class="segmented segmented-wrap" role="radiogroup" aria-label="Vitesse">
+                    <label>
+                      <input type="radio" name="animationSpeed" value="instant">
+                      <span>
+                        Instant.
+                      </span>
+                    </label>
+                    <label>
+                      <input type="radio" name="animationSpeed" value="quick">
+                      <span>
+                        Rapide
+                      </span>
+                    </label>
+                    <label>
+                      <input type="radio" name="animationSpeed" value="normal">
+                      <span>
+                        Normale
+                      </span>
+                    </label>
+                    <label>
+                      <input type="radio" name="animationSpeed" value="relaxed">
+                      <span>
+                        Détendue
+                      </span>
+                    </label>
+                    <label>
+                      <input type="radio" name="animationSpeed" value="slow">
+                      <span>
+                        Lente
+                      </span>
+                    </label>
+                    <label>
+                      <input type="radio" name="animationSpeed" value="leisurely">
+                      <span>
+                        Très lente
+                      </span>
+                    </label>
+                  </div>
+                </fieldset>
+              </div>
+            </details>
+          </section>
+          <section id="section-sites" class="form-section" data-section="sites" role="tabpanel" aria-labelledby="tab-sites" tabindex="0" hidden>
+            <div class="section-intro">
+              <h2>
+                Chaque site, ses préférences
+              </h2>
+              <p>
+                Une pause temporaire ou une règle qui reste.
+              </p>
             </div>
-          </fieldset></div></details></section><section id="section-sites" class="form-section" data-section="sites" role="tabpanel" aria-labelledby="tab-sites" tabindex="0" hidden><div class="section-intro"><h2>Chaque site, ses préférences</h2><p>Une pause temporaire ou une règle qui reste.</p></div><div class="settings-card current-site-card"><div class="current-site-heading"><span class="site-dot" aria-hidden="true"></span><div><span class="eyebrow">SITE COURANT</span><strong id="current-site">Ouvrez une page web</strong></div></div><button type="button" id="pause-site" class="secondary-button" disabled>Mettre en pause sur ce site</button><p class="hint">Jusqu’à réactivation ou redémarrage du navigateur.</p><div class="site-rule-fields"><label><span>Ouvrir les liens vers ce site en…</span><select id="current-site-mode" disabled><option value="default">Réglage général / règle héritée</option><option value="overlay">Aperçu intégré</option><option value="compact">Fenêtre compacte</option><option value="split">Vue partagée native</option><option value="blocked">Désactivé</option></select></label><button type="button" id="save-site-rule" disabled>Mémoriser la règle</button></div><p id="site-status" class="hint" role="status"></p></div><details class="settings-details"><summary><span>Autoriser ou exclure des sites<small>Définir les domaines où l’aperçu est disponible</small></span><span class="disclosure" aria-hidden="true">⌄</span></summary><div class="details-content"><label>
-            <span>Liste de domaines</span>
-            <select name="domainListMode">
-              <option value="off">Désactivée</option>
-              <option value="blacklist">Exclure ces domaines</option>
-              <option value="whitelist">Autoriser uniquement ces domaines</option>
-            </select>
-          </label><label class="wide-field">
-            <span>Domaines (un par ligne ou séparés par des virgules)</span>
-            <textarea name="domainList" rows="3" placeholder="exemple.com, banque.fr"></textarea>
-          </label></div></details><details class="settings-details"><summary><span>Règles avancées<small>Attribuer un mode d’ouverture à chaque domaine</small></span><span class="disclosure" aria-hidden="true">⌄</span></summary><div class="details-content"><label class="wide-field">
-            <span>Règles par domaine</span>
-            <textarea name="domainRules" rows="3" placeholder="github.com = compact&#10;docs.exemple.com = overlay&#10;banque.fr = blocked"></textarea>
-          </label><p class="hint">Une règle par ligne. Valeurs : <code>overlay</code>, <code>compact</code>, <code>split</code> ou <code>blocked</code>. La règle la plus spécifique est prioritaire.</p></div></details><details class="settings-details"><summary><span>Sites incompatibles<small>Préférer une fenêtre compacte quand l’intégration est bloquée</small></span><span class="disclosure" aria-hidden="true">⌄</span></summary><div class="details-content"><label class="check-row">
-            <input type="checkbox" name="autoCompactFallback">
-            <span class="switch" aria-hidden="true"></span>
-            <span>Ouverture compacte automatique pour les sites bloqués</span>
-          </label><label class="wide-field">
-            <span>Domaines redirigés (un par ligne ou séparés par des virgules)</span>
-            <textarea name="compactFallbackDomains" rows="2" placeholder="site-incompatible.com, autre.net"></textarea>
-          </label></div></details></section><section id="section-data" class="form-section" data-section="data" role="tabpanel" aria-labelledby="tab-data" tabindex="0" hidden><div class="section-intro"><h2>Vos réglages, bien conservés</h2><p>Transférez vos préférences ou repartez de zéro.</p></div><div class="settings-card"><div class="card-heading"><h3>Sauvegarder & transférer</h3><p>Exportez vos préférences et vos thèmes personnels.</p></div><div class="card-fields"><div class="backup-actions">
-              <button type="button" id="save-theme">Enregistrer ce thème</button>
-              <button type="button" id="delete-theme" disabled>Supprimer ce thème</button>
-            </div><p class="hint">Fichier JSON, maximum 1 Mo. L’import remplace les réglages actuels.</p></div></div><div class="settings-card"><div class="card-heading"><h3>Revenir aux valeurs initiales</h3><p>Rétablir les préférences et effacer la bibliothèque de thèmes personnels.</p></div><div class="card-fields"><button id="reset" class="danger-button" type="button">Réinitialiser les réglages</button></div></div></section>
-      </form>
-    </div>
-    <footer class="save-bar"><div class="save-feedback"><span class="eyebrow">PRÉFÉRENCES</span><p id="status" class="status" role="status">Prêt à personnaliser</p></div><button id="save" class="primary-button" type="submit" form="settings-form">Sauvegarder</button></footer>
-    <div id="save-toast" class="save-toast" role="status" aria-live="polite">Paramètres sauvegardés</div>
-  </main>
-  <script src="settings.js"></script>
-  <script src="popup.js"></script>
-</body>
+            <div class="settings-card current-site-card">
+              <div class="current-site-heading">
+                <span class="site-dot" aria-hidden="true">
+                </span>
+                <div>
+                  <span class="eyebrow">
+                    SITE COURANT
+                  </span>
+                  <strong id="current-site">
+                    Ouvrez une page web
+                  </strong>
+                </div>
+              </div>
+              <button type="button" id="pause-site" class="secondary-button" disabled>
+                Mettre en pause sur ce site
+              </button>
+              <p class="hint">
+                Jusqu’à réactivation ou redémarrage du navigateur.
+              </p>
+              <div class="site-rule-fields">
+                <label>
+                  <span>
+                    Ouvrir les liens vers ce site en…
+                  </span>
+                  <select id="current-site-mode" disabled>
+                    <option value="default">
+                      Réglage général / règle héritée
+                    </option>
+                    <option value="overlay">
+                      Aperçu intégré
+                    </option>
+                    <option value="compact">
+                      Fenêtre compacte
+                    </option>
+                    <option value="split">
+                      Vue partagée native
+                    </option>
+                    <option value="blocked">
+                      Désactivé
+                    </option>
+                  </select>
+                </label>
+                <button type="button" id="save-site-rule" disabled>
+                  Mémoriser la règle
+                </button>
+              </div>
+              <p id="site-status" class="hint" role="status">
+              </p>
+            </div>
+            <details class="settings-details">
+              <summary>
+                <span>
+                  Autoriser ou exclure des sites
+                  <small>
+                    Définir les domaines où l’aperçu est disponible
+                  </small>
+                </span>
+                <span class="disclosure" aria-hidden="true">
+                  ⌄
+                </span>
+              </summary>
+              <div class="details-content">
+                <label>
+                  <span>
+                    Liste de domaines
+                  </span>
+                  <select name="domainListMode">
+                    <option value="off">
+                      Désactivée
+                    </option>
+                    <option value="blacklist">
+                      Exclure ces domaines
+                    </option>
+                    <option value="whitelist">
+                      Autoriser uniquement ces domaines
+                    </option>
+                  </select>
+                </label>
+                <label class="wide-field">
+                  <span>
+                    Domaines (un par ligne ou séparés par des virgules)
+                  </span>
+                  <textarea name="domainList" rows="3" placeholder="exemple.com, banque.fr">
+                  </textarea>
+                </label>
+              </div>
+            </details>
+            <details class="settings-details">
+              <summary>
+                <span>
+                  Règles avancées
+                  <small>
+                    Attribuer un mode d’ouverture à chaque domaine
+                  </small>
+                </span>
+                <span class="disclosure" aria-hidden="true">
+                  ⌄
+                </span>
+              </summary>
+              <div class="details-content">
+                <label class="wide-field">
+                  <span>
+                    Règles par domaine
+                  </span>
+                  <textarea name="domainRules" rows="3" placeholder="github.com = compact&#10;docs.exemple.com = overlay&#10;banque.fr = blocked">
+                  </textarea>
+                </label>
+                <p class="hint">
+                  Une règle par ligne. Valeurs :
+                  <code>
+                    overlay
+                  </code>
+                  ,
+                  <code>
+                    compact
+                  </code>
+                  ,
+                  <code>
+                    split
+                  </code>
+                  ou
+                  <code>
+                    blocked
+                  </code>
+                  . La règle la plus spécifique est prioritaire.
+                </p>
+              </div>
+            </details>
+            <details class="settings-details">
+              <summary>
+                <span>
+                  Sites incompatibles
+                  <small>
+                    Préférer une fenêtre compacte quand l’intégration est bloquée
+                  </small>
+                </span>
+                <span class="disclosure" aria-hidden="true">
+                  ⌄
+                </span>
+              </summary>
+              <div class="details-content">
+                <label class="check-row">
+                  <input type="checkbox" name="autoCompactFallback">
+                  <span class="switch" aria-hidden="true">
+                  </span>
+                  <span>
+                    Ouverture compacte automatique pour les sites bloqués
+                  </span>
+                </label>
+                <label class="wide-field">
+                  <span>
+                    Domaines redirigés (un par ligne ou séparés par des virgules)
+                  </span>
+                  <textarea name="compactFallbackDomains" rows="2" placeholder="site-incompatible.com, autre.net">
+                  </textarea>
+                </label>
+              </div>
+            </details>
+          </section>
+          <section id="section-data" class="form-section" data-section="data" role="tabpanel" aria-labelledby="tab-data" tabindex="0" hidden>
+            <div class="section-intro">
+              <h2>
+                Vos réglages, bien conservés
+              </h2>
+              <p>
+                Transférez vos préférences ou repartez de zéro.
+              </p>
+            </div>
+            <div class="settings-card">
+              <div class="card-heading">
+                <h3>
+                  Sauvegarder
+                  &
+                  transférer
+                </h3>
+                <p>
+                  Exportez vos préférences et vos thèmes personnels.
+                </p>
+              </div>
+              <div class="card-fields">
+                <div class="backup-actions">
+                  <button type="button" id="export-settings" class="backup-button">
+                    Exporter les réglages
+                  </button>
+                  <button type="button" id="import-settings" class="backup-button">
+                    Importer un fichier
+                  </button>
+                  <input type="file" id="import-file" accept=".json" hidden>
+                </div>
+                <p class="hint">
+                  Fichier JSON, maximum 1 Mo. L’import remplace les réglages actuels.
+                </p>
+              </div>
+            </div>
+            <div class="settings-card">
+              <div class="card-heading">
+                <h3>
+                  Revenir aux valeurs initiales
+                </h3>
+                <p>
+                  Rétablir les préférences et effacer la bibliothèque de thèmes personnels.
+                </p>
+              </div>
+              <div class="card-fields">
+                <button id="reset" class="danger-button" type="button">
+                  Réinitialiser les réglages
+                </button>
+              </div>
+            </div>
+          </section>
+        </form>
+      </div>
+      <footer class="save-bar">
+        <div class="save-feedback">
+          <span class="eyebrow">
+            PRÉFÉRENCES
+          </span>
+          <p id="status" class="status" role="status">
+            Prêt à personnaliser
+          </p>
+        </div>
+        <button id="save" class="primary-button" type="submit" form="settings-form">
+          Sauvegarder
+        </button>
+      </footer>
+      <div id="save-toast" class="save-toast" role="status" aria-live="polite">
+        Paramètres sauvegardés
+      </div>
+    </main>
+    <script src="settings.js">
+    </script>
+    <script src="popup.js">
+    </script>
+  </body>
 </html>

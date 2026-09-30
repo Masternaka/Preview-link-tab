@@ -712,3 +712,54 @@ test('une erreur de pause dans la popup conserve le bouton dans son état initia
   assert.equal(node('pause-site').disabled, false);
   assert.match(node('site-status').textContent, /Impossible/);
 });
+
+function popupNavigation(harness) {
+  const keys = ['general', 'appearance', 'sites', 'data'];
+  const buttons = keys.map(section => Object.assign(element(), {
+    dataset: { section }, focus() { this.focused = true; }
+  }));
+  const sections = keys.map(section => Object.assign(element(), { dataset: { section } }));
+  const original = harness.context.document.querySelectorAll;
+  harness.context.document.querySelectorAll = selector => selector === '.section-nav-btn' ? buttons
+    : selector === '.form-section' ? sections : original(selector);
+  harness.context.initSectionNav();
+  return { buttons, sections };
+}
+
+test('les rubriques se parcourent au clavier avec sélection et focus synchronisés', () => {
+  const harness = popupHarness();
+  const { buttons, sections } = popupNavigation(harness);
+  let prevented = false;
+  buttons[0].listeners.keydown({ key: 'ArrowLeft', preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.equal(buttons[3].focused, true);
+  assert.equal(buttons[3]['aria-selected'], 'true');
+  assert.equal(buttons[3].tabIndex, 0);
+  assert.equal(buttons[0].tabIndex, -1);
+  assert.equal(sections[3].hidden, false);
+  assert.equal(sections[0].hidden, true);
+  buttons[3].listeners.keydown({ key: 'Home', preventDefault() {} });
+  assert.equal(sections[0].hidden, false);
+  buttons[0].listeners.keydown({ key: 'End', preventDefault() {} });
+  assert.equal(sections[3].hidden, false);
+  buttons[1].listeners.click();
+  assert.equal(sections[1].hidden, false);
+  assert.equal(sections[3].hidden, true);
+});
+
+test('une valeur invalide révèle sa rubrique et ses sections repliées', () => {
+  const harness = popupHarness();
+  const { sections } = popupNavigation(harness);
+  const outer = { tagName: 'DETAILS', open: false, parentElement: harness.node('settings-form') };
+  const inner = { tagName: 'DETAILS', open: false, parentElement: outer };
+  let focused = false;
+  harness.node('settings-form').listeners.invalid({ target: {
+    closest() { return sections[1]; }, parentElement: inner, focus() { focused = true; }
+  } });
+  assert.equal(sections[1].hidden, false);
+  assert.equal(sections[0].hidden, true);
+  assert.equal(inner.open, true);
+  assert.equal(outer.open, true);
+  assert.equal(focused, true);
+  assert.equal(harness.writes.length, 0);
+});

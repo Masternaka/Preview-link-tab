@@ -44,7 +44,9 @@ de texte enrichi. Pendant une composition de texte (IME), Échap est également
 ignoré pour permettre d'annuler la composition sans fermer l'aperçu.
 Lorsque la page intégrée a le focus, seul Échap est relayé vers l'aperçu.
 
-Chaque réglage d'ouverture est disponible dans **Comportement** et **Apparence** :
+La popup regroupe les réglages dans quatre rubriques : **Utilisation**, **Apparence**,
+**Sites** et **Données**. Le bouton de sauvegarde reste toujours visible ; les
+options détaillées se déplient au besoin. Les réglages disponibles comprennent :
 mode d'ouverture (intégré, fenêtre compacte, vue partagée), taille, position,
 thème, animation, cadre, ombre, déclencheur au clic, clic
 molette, fermeture au clic extérieur ou avec Échap, arrière-plan (assombrissement
@@ -57,7 +59,7 @@ sources des palettes sont détaillées dans [THEMES.md](THEMES.md).
 
 ## Règles par domaine
 
-Dans **Comportement**, ajouter une règle par ligne sous la forme
+Dans la popup, ouvrir **Sites → Règles par domaine** et ajouter une règle par ligne sous la forme
 `domaine = overlay`, `domaine = compact`, `domaine = split` ou `domaine = blocked`. Une règle de
 sous-domaine plus spécifique est prioritaire. Les listes de domaines acceptent
 aussi des URL et la forme `*.domaine`.
@@ -78,7 +80,7 @@ pour mémoriser un mode pour le domaine du lien affiché. Dans la popup, la comm
 règle de domaine parent peut encore s’appliquer. La vue partagée reste native et
 nécessite l’API du navigateur.
 
-**Mettre en pause sur ce site**, en haut de la popup, suspend les déclencheurs
+**Mettre en pause sur ce site**, dans la rubrique **Sites** de la popup, suspend les déclencheurs
 sur les pages du même nom d’hôte. Les clics gardent leur comportement normal.
 Le bouton devient **Réactiver sur ce site** et l’icône affiche le badge **II**.
 La pause ne ferme pas les aperçus déjà ouverts. Elle s’applique aux onglets du

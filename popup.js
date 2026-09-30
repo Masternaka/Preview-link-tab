@@ -26,11 +26,17 @@ form.addEventListener("submit", event => {
   saveSettings();
 });
 
-form.addEventListener("change", () => {
+form.addEventListener("invalid", event => {
+  revealInvalidField(event.target);
+  showStatus("Vérifiez la valeur indiquée.");
+}, true);
+
+form.addEventListener("change", event => {
   updateThemeColors();
   updateAdvancedGroups();
   updateColorSwatches();
   updateAppearancePreview();
+  if (["animation", "animationSpeed"].includes(event?.target?.name)) replayAppearanceAnimation();
   showStatus("Modifications non sauvegardées");
 });
 
@@ -101,8 +107,20 @@ function initSiteControls() {
 }
 
 function initSectionNav() {
-  document.querySelectorAll(".section-nav-btn").forEach(btn => {
+  const buttons = [...document.querySelectorAll(".section-nav-btn")];
+  buttons.forEach((btn, index) => {
     btn.addEventListener("click", () => switchSection(btn.dataset.section));
+    btn.addEventListener("keydown", event => {
+      let next;
+      if (event.key === "ArrowRight") next = (index + 1) % buttons.length;
+      else if (event.key === "ArrowLeft") next = (index - 1 + buttons.length) % buttons.length;
+      else if (event.key === "Home") next = 0;
+      else if (event.key === "End") next = buttons.length - 1;
+      else return;
+      event.preventDefault();
+      switchSection(buttons[next].dataset.section);
+      buttons[next].focus();
+    });
   });
 }
 
@@ -110,16 +128,32 @@ function switchSection(sectionId) {
   document.querySelectorAll(".section-nav-btn").forEach(btn => {
     const active = btn.dataset.section === sectionId;
     btn.classList.toggle("section-nav-btn-active", active);
+    btn.setAttribute("aria-selected", String(active));
+    btn.tabIndex = active ? 0 : -1;
   });
   document.querySelectorAll(".form-section").forEach(section => {
     const active = section.dataset.section === sectionId;
     section.classList.toggle("form-section-active", active);
     section.hidden = !active;
   });
+  const scrollArea = document.querySelector(".settings-scroll");
+  if (scrollArea) scrollArea.scrollTop = 0;
+}
+
+function revealInvalidField(invalid) {
+  const section = invalid?.closest(".form-section");
+  if (section) switchSection(section.dataset.section);
+  let container = invalid?.parentElement;
+  while (container && container !== form) {
+    if (container.tagName === "DETAILS") container.open = true;
+    container = container.parentElement;
+  }
+  invalid?.focus();
 }
 
 function saveSettings() {
   if (!form.checkValidity()) {
+    revealInvalidField(form.querySelector("input:invalid, select:invalid, textarea:invalid"));
     showStatus("Valeur invalide");
     return;
   }
@@ -304,6 +338,10 @@ function updateThemeColors() {
   const changed = displayedTheme !== theme;
   displayedTheme = theme;
   if (changed) updateThemeLibraryControls();
+  if (changed && theme === "custom") {
+    const colorsSection = document.querySelector(".color-group")?.closest?.("details");
+    if (colorsSection) colorsSection.open = true;
+  }
 }
 
 function selectedThemeColors() {
@@ -377,13 +415,15 @@ function initThemeLibrary() {
       showStatus("Thème supprimé. Ses couleurs restent dans Personnalisé.");
     });
   });
-  document.getElementById("replay-preview")?.addEventListener("click", () => {
-    const panel = document.getElementById("sample-panel");
-    if (!panel) return;
-    panel.classList.remove("sample-animate");
-    void panel.offsetWidth;
-    panel.classList.add("sample-animate");
-  });
+  document.getElementById("replay-preview")?.addEventListener("click", replayAppearanceAnimation);
+}
+
+function replayAppearanceAnimation() {
+  const panel = document.getElementById("sample-panel");
+  if (!panel) return;
+  panel.classList.remove("sample-animate");
+  void panel.offsetWidth;
+  panel.classList.add("sample-animate");
 }
 
 function updateAppearancePreview() {
@@ -487,9 +527,10 @@ function rememberBackdropIntensity() {
 function showStatus(text) {
   statusEl.textContent = text;
   window.clearTimeout(showStatus.timeoutId);
+  if (text === "Modifications non sauvegardées") return;
   showStatus.timeoutId = window.setTimeout(() => {
     statusEl.textContent = "";
-  }, 1400);
+  }, 4000);
 }
 
 function showSaveNotification() {
