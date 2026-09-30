@@ -7,6 +7,14 @@ const backdropDraft = {
   blur: PEEK_DEFAULT_SETTINGS.backdropBlur
 };
 let backdropDraftMode = "dim";
+const themeColorRoles = {
+  customAccent: "accent", customBackground: "bg", customHeader: "header-bg",
+  customFrame: "frame-bg", customText: "text", customMuted: "muted",
+  customBorder: "border", customBackdrop: "backdrop-color"
+};
+const customThemeDraft = {};
+let displayedTheme = null;
+
 
 loadSettings();
 initSectionNav();
@@ -18,13 +26,14 @@ form.addEventListener("submit", event => {
 });
 
 form.addEventListener("change", () => {
-  applyThemePresetToFields();
+  updateThemeColors();
   updateAdvancedGroups();
   updateColorSwatches();
   showStatus("Modifications non sauvegardées");
 });
 
 form.addEventListener("input", () => {
+  updateThemeColors();
   updateColorSwatches();
   showStatus("Modifications non sauvegardées");
 });
@@ -55,7 +64,6 @@ function saveSettings() {
   const settings = getFormSettings();
   storeSettings(settings, () => {
     updateAdvancedGroups();
-    updateColorSwatches();
     showStatus("Sauvegardé");
     showSaveNotification();
   });
@@ -102,6 +110,8 @@ function setRadioValue(name, value) {
 
 function getFormSettings() {
   rememberBackdropIntensity();
+  updateThemeColors();
+  rememberCustomTheme();
   return cleanPeekSettings({
     openMode: form.elements.openMode.value,
     size: getRadioValue("size"),
@@ -112,15 +122,15 @@ function getFormSettings() {
     customTop: form.elements.customTop.value,
     trigger: getRadioValue("trigger"),
     theme: form.elements.theme.value,
-    customAccent: form.elements.customAccent.value,
-    customBackground: form.elements.customBackground.value,
-    customHeader: form.elements.customHeader.value,
-    customFrame: form.elements.customFrame.value,
-    customText: form.elements.customText.value,
-    customMuted: form.elements.customMuted.value,
-    customBorder: form.elements.customBorder.value,
-    customBackdrop: form.elements.customBackdrop.value,
-    customBackdropOpacity: form.elements.customBackdropOpacity.value,
+    customAccent: customThemeDraft.customAccent,
+    customBackground: customThemeDraft.customBackground,
+    customHeader: customThemeDraft.customHeader,
+    customFrame: customThemeDraft.customFrame,
+    customText: customThemeDraft.customText,
+    customMuted: customThemeDraft.customMuted,
+    customBorder: customThemeDraft.customBorder,
+    customBackdrop: customThemeDraft.customBackdrop,
+    customBackdropOpacity: customThemeDraft.customBackdropOpacity,
     animation: form.elements.animation.value,
     animationSpeed: getRadioValue("animationSpeed"),
     frameStyle: form.elements.frameStyle.value,
@@ -132,7 +142,6 @@ function getFormSettings() {
     domainList: form.elements.domainList.value,
     domainRules: form.elements.domainRules.value,
     middleClick: form.elements.middleClick.checked,
-    hoverPreviewDelay: form.elements.hoverPreviewDelay.value,
     closeOutside: form.elements.closeOutside.checked,
     closeWithEsc: form.elements.closeWithEsc.checked,
     dimBackdrop: true,
@@ -144,10 +153,6 @@ function getFormSettings() {
 
 function setFormSettings(settings) {
   const clean = cleanPeekSettings(settings);
-  const display = {
-    ...clean,
-    ...(PEEK_THEME_PRESETS[clean.theme] || {})
-  };
   setRadioValue("size", clean.size);
   form.elements.openMode.value = clean.openMode;
   form.elements.customWidth.value = clean.customWidth;
@@ -157,15 +162,15 @@ function setFormSettings(settings) {
   form.elements.customTop.value = clean.customTop;
   setRadioValue("trigger", clean.trigger);
   form.elements.theme.value = clean.theme;
-  form.elements.customAccent.value = display.customAccent;
-  form.elements.customBackground.value = display.customBackground;
-  form.elements.customHeader.value = display.customHeader;
-  form.elements.customFrame.value = display.customFrame;
-  form.elements.customText.value = display.customText;
-  form.elements.customMuted.value = display.customMuted;
-  form.elements.customBorder.value = display.customBorder;
-  form.elements.customBackdrop.value = display.customBackdrop;
-  form.elements.customBackdropOpacity.value = display.customBackdropOpacity;
+  customThemeDraft.customAccent = clean.customAccent;
+  customThemeDraft.customBackground = clean.customBackground;
+  customThemeDraft.customHeader = clean.customHeader;
+  customThemeDraft.customFrame = clean.customFrame;
+  customThemeDraft.customText = clean.customText;
+  customThemeDraft.customMuted = clean.customMuted;
+  customThemeDraft.customBorder = clean.customBorder;
+  customThemeDraft.customBackdrop = clean.customBackdrop;
+  customThemeDraft.customBackdropOpacity = clean.customBackdropOpacity;
   form.elements.animation.value = clean.animation;
   setRadioValue("animationSpeed", clean.animationSpeed);
   form.elements.frameStyle.value = clean.frameStyle;
@@ -191,26 +196,43 @@ function setFormSettings(settings) {
   form.elements.domainList.value = clean.domainList;
   form.elements.domainRules.value = clean.domainRules;
   form.elements.middleClick.checked = clean.middleClick;
-  form.elements.hoverPreviewDelay.value = String(clean.hoverPreviewDelay);
   form.elements.closeOutside.checked = clean.closeOutside;
   form.elements.closeWithEsc.checked = clean.closeWithEsc;
   form.elements.closeAfterOpen.checked = clean.closeAfterOpen;
   form.elements.autoCompactFallback.checked = clean.autoCompactFallback;
   form.elements.compactFallbackDomains.value = clean.compactFallbackDomains;
+  displayedTheme = null;
+  updateThemeColors();
   updateAdvancedGroups();
   updateColorSwatches();
 }
 
-function applyThemePresetToFields() {
-  const preset = PEEK_THEME_PRESETS[form.elements.theme.value];
-  if (!preset) {
-    return;
+function rememberCustomTheme() {
+  if (displayedTheme !== "custom") return;
+  for (const key of [...Object.keys(themeColorRoles), "customBackdropOpacity"]) {
+    customThemeDraft[key] = form.elements[key].value;
   }
-  for (const [key, value] of Object.entries(preset)) {
-    if (form.elements[key]) {
-      form.elements[key].value = value;
+}
+
+function updateThemeColors() {
+  const theme = form.elements.theme.value;
+  rememberCustomTheme();
+  if (theme === "custom") {
+    if (displayedTheme !== "custom") {
+      for (const [key, value] of Object.entries(customThemeDraft)) {
+        form.elements[key].value = value;
+      }
+    }
+  } else {
+    const palette = PEEK_THEME_PRESETS[theme];
+    if (palette) {
+      for (const [key, role] of Object.entries(themeColorRoles)) {
+        form.elements[key].value = palette[role];
+      }
+      form.elements.customBackdropOpacity.value = backdropDraft.dim;
     }
   }
+  displayedTheme = theme;
 }
 
 function updateAdvancedGroups() {

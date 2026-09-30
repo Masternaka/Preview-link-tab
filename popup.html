@@ -93,20 +93,20 @@
           <label>
             <span>Thème</span>
             <select name="theme">
-              <option value="system">Système</option>
-              <option value="light">Clair</option>
-              <option value="dark">Sombre</option>
-              <option value="graphite">Graphite</option>
-              <option value="mint">Menthe</option>
               <option value="catppuccin">Catppuccin</option>
+              <option value="nordic">Nordic</option>
+              <option value="nord">Nord</option>
               <option value="gruvbox">Gruvbox</option>
+              <option value="tokyoNight">Tokyo Night</option>
               <option value="dracula">Dracula</option>
+              <option value="everforest">Everforest</option>
               <option value="custom">Personnalisé</option>
             </select>
           </label>
 
           <fieldset class="advanced-group color-group" data-enabled-by="theme" data-enabled-value="custom">
-            <legend>Thème personnalisé</legend>
+            <legend>Couleurs du thème</legend>
+            <p class="hint wide-field">Couleurs du thème sélectionné. Choisissez « Personnalisé » pour les modifier.</p>
             <label>
               <span>Accent</span>
               <span class="color-input">
@@ -237,17 +237,6 @@
             <input type="checkbox" name="middleClick">
             <span class="switch" aria-hidden="true"></span>
             <span>Aperçu au clic molette sur un lien</span>
-          </label>
-
-          <label>
-            <span>Aperçu au survol</span>
-            <select name="hoverPreviewDelay">
-              <option value="0">Désactivé</option>
-              <option value="350">Après 0,35 seconde</option>
-              <option value="700">Après 0,7 seconde</option>
-              <option value="1200">Après 1,2 seconde</option>
-              <option value="2000">Après 2 secondes</option>
-            </select>
           </label>
 
           <label>

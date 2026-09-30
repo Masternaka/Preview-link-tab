@@ -11,8 +11,9 @@ function element() {
   const classes = new Set();
   return {
     value: '', checked: false, style: { setProperty() {}, removeProperty(name) { delete this[name]; } },
-    listeners, textContent: '',
+    listeners, textContent: '', dataset: {},
     addEventListener(name, handler) { listeners[name] = handler; },
+    removeEventListener(name, handler) { if (listeners[name] === handler) delete listeners[name]; },
     classList: {
       add(...names) { names.forEach(name => classes.add(name)); },
       remove(...names) { names.forEach(name => classes.delete(name)); },
@@ -36,20 +37,28 @@ function baseContext() {
   return { context, window, timers };
 }
 
-async function contentHarness() {
+async function contentHarness({ embedded = false } = {}) {
   const harness = baseContext();
   const { context } = harness;
-  class Element {}
+  class Element {
+    matches(selector) { return selector.split(', ').includes(this.tagName); }
+  }
   const document = element();
   const messages = [];
   Object.assign(context, {
     document, Element, HTMLElement: Element,
+    requestAnimationFrame() { return 1; }, cancelAnimationFrame() {},
     chrome: {
       storage: { local: { get(defaults, cb) { cb(defaults); } } },
       runtime: { sendMessage(message, cb) { messages.push(message); cb?.({ ok: true }); } }
     }
   });
-  const script = source('content.js').replace(/\}\)\(\);\s*$/, 'this.testApi = { STATE, startPreviewLoadTimer, doClose, openPreview }; })();');
+  if (embedded) {
+    harness.window.top = { postMessage(message) { messages.push(message); } };
+    vm.runInContext(source('content.js'), context);
+    return { ...harness, document, messages };
+  }
+  const script = source('content.js').replace(/\}\)\(\);\s*$/, 'this.testApi = { STATE, startPreviewLoadTimer, doClose, openPreview, panelGestureRect, initResizeListeners, applyOverlayLayout }; })();');
   vm.runInContext(script, context);
   await Promise.resolve();
   const { STATE } = context.testApi;
@@ -65,8 +74,66 @@ async function contentHarness() {
     });
     return { prevented, stopped };
   }
-  return { ...harness, STATE, click, messages };
+  return { ...harness, STATE, click, messages, document, Element };
 }
+
+test('les raccourcis préservent les champs, les éditeurs riches et les champs du Shadow DOM', async () => {
+  const { STATE, document, Element } = await contentHarness();
+  STATE.root = element();
+  STATE.root.classList.add('peek-visible');
+  const targets = ['input', 'textarea', 'select'].map(tagName => Object.assign(new Element(), { tagName }));
+  // isContentEditable includes children inheriting editability and plaintext-only editors.
+  targets.push(Object.assign(new Element(), { isContentEditable: true }));
+  for (const target of targets) {
+    for (const shadow of [false, true]) {
+      for (const key of ['r', 'o', 'c', 'p', 'ArrowLeft', 'ArrowRight']) {
+        document.listeners.keydown({ key, target: shadow ? new Element() : target,
+          composedPath: () => shadow ? [target, new Element()] : [target],
+          preventDefault() { assert.fail(`${key} a intercepté la saisie`); }
+        });
+      }
+    }
+  }
+  assert.equal(STATE.isPinned, false);
+});
+
+test('un raccourci reste actif hors saisie et respecte les événements réservés', async () => {
+  const { STATE, document, Element } = await contentHarness();
+  STATE.root = element();
+  STATE.root.classList.add('peek-visible');
+  for (const flags of [{ isComposing: true }, { keyCode: 229 }, { defaultPrevented: true },
+    { altKey: true }, { ctrlKey: true }, { metaKey: true }]) {
+    document.listeners.keydown({ key: 'p', target: new Element(), ...flags,
+      preventDefault() { assert.fail('Événement réservé intercepté'); }
+    });
+    assert.equal(STATE.isPinned, false);
+  }
+  let prevented = false;
+  document.listeners.keydown({ key: 'p', target: new Element(),
+    preventDefault() { prevented = true; }
+  });
+  assert.equal(prevented, true);
+  assert.equal(STATE.isPinned, true);
+});
+
+test('Échap préserve la composition dans la page source et dans une iframe', async () => {
+  for (const embedded of [false, true]) {
+    const { STATE, document, messages } = await contentHarness({ embedded });
+    if (STATE) {
+      STATE.root = element();
+      STATE.root.classList.add('peek-visible', 'peek-settings-open');
+    }
+    messages.length = 0;
+    for (const flags of [{ isComposing: true }, { keyCode: 229 }, { defaultPrevented: true }]) {
+      document.listeners.keydown({ key: 'Escape', ...flags });
+      if (STATE) assert.equal(STATE.root.classList.contains('peek-settings-open'), true);
+      assert.equal(messages.length, 0);
+    }
+    document.listeners.keydown({ key: 'Escape' });
+    if (STATE) assert.equal(STATE.root.classList.contains('peek-settings-open'), false);
+    else assert.equal(messages[0].type, 'CLOSE_PEEK_PREVIEW');
+  }
+});
 
 for (const type of ['click', 'auxclick']) {
   test(`${type} : un domaine exclu conserve le comportement natif`, async () => {
@@ -149,9 +216,10 @@ function popupHarness() {
   form.checkValidity = () => true;
   nodes['settings-form'] = form;
   const node = id => nodes[id] ||= element();
+  node('theme-colors').dataset = { enabledBy: 'theme', enabledValue: 'custom' };
   context.document = {
     querySelector: selector => node(selector.slice(1)),
-    querySelectorAll: () => [], getElementById: node
+    querySelectorAll: selector => selector === '.advanced-group' ? [node('theme-colors')] : [], getElementById: node
   };
   context.chrome = {
     runtime: {}, storage: { local: {
@@ -282,4 +350,188 @@ test('le mode split prime sur le repli compact automatique, mais respecte les r�
   STATE.settings.domainRules = 'github.com = blocked';
   assert.equal(click('https://github.com/').prevented, false);
   assert.equal(messages.length, 2);
+});
+
+
+test('déplacement : les quatre limites du viewport sont respectées', async () => {
+  const { context } = await contentHarness();
+  const rect = { left: 100, top: 80, width: 640, height: 360 };
+  const move = (dx, dy) => context.testApi.panelGestureRect(rect, '', dx, dy, 1000, 800);
+  assert.equal(move(-5000, -5000).left, 0);
+  assert.equal(move(-5000, -5000).top, 0);
+  assert.equal(move(5000, 5000).left, 360);
+  assert.equal(move(5000, 5000).top, 440);
+  assert.equal(move(30, 40).left, 130);
+  assert.equal(move(30, 40).top, 120);
+});
+
+test('redimensionnement : chaque bord et coin reste visible et conserve le bord opposé', async () => {
+  const { context } = await contentHarness();
+  for (const [vw, vh] of [[1400, 900], [700, 500], [280, 200]]) {
+    const start = { left: 30, top: 20, width: Math.min(500, vw - 40), height: Math.min(350, vh - 30) };
+    for (const direction of ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']) {
+      for (const dx of [-5000, 0, 5000]) for (const dy of [-5000, 0, 5000]) {
+        const rect = context.testApi.panelGestureRect(start, direction, dx, dy, vw, vh);
+        assert.ok(rect.left >= 0 && rect.top >= 0);
+        assert.ok(rect.width > 0 && rect.height > 0);
+        assert.ok(rect.left + rect.width <= vw && rect.top + rect.height <= vh);
+        if (direction.includes('w')) assert.equal(rect.left + rect.width, start.left + start.width);
+        else assert.equal(rect.left, start.left);
+        if (direction.includes('n')) assert.equal(rect.top + rect.height, start.top + start.height);
+        else assert.equal(rect.top, start.top);
+      }
+    }
+  }
+});
+
+async function gestureHarness() {
+  const harness = await contentHarness();
+  const { STATE, context, window } = harness;
+  window.innerWidth = 1400;
+  window.innerHeight = 900;
+  const handle = () => {
+    const node = element();
+    let captured = false;
+    node.setPointerCapture = () => { captured = true; };
+    node.hasPointerCapture = () => captured;
+    node.releasePointerCapture = () => { captured = false; };
+    return node;
+  };
+  const header = handle();
+  const west = handle();
+  west.dataset.direction = 'w';
+  const panel = element();
+  panel.getBoundingClientRect = () => ({
+    left: parseFloat(panel.style.left ?? '200'), top: parseFloat(panel.style.top ?? '100'),
+    width: parseFloat(panel.style.width ?? '640'), height: parseFloat(panel.style.height ?? '360')
+  });
+  panel.querySelector = () => header;
+  panel.querySelectorAll = () => [west];
+  STATE.panel = panel;
+  STATE.root = element();
+  STATE.root.querySelector = selector => selector === '.peek-panel' ? panel : null;
+  STATE.root.classList.add('peek-visible');
+  STATE.settings.openMode = 'overlay';
+  const writes = [];
+  context.chrome.storage.local.set = (settings, cb) => { writes.push({ ...settings }); cb?.(); };
+  context.testApi.initResizeListeners(STATE.root);
+  const down = (node, extra = {}) => node.listeners.pointerdown({ button: 0, pointerId: 1,
+    clientX: 200, clientY: 100, target: { closest: () => null },
+    preventDefault() {}, stopPropagation() {}, ...extra });
+  return { ...harness, header, west, down, writes };
+}
+
+test('glisser mémorise la position sans changer la taille et nettoie les événements', async () => {
+  const { header, down, writes, STATE, context, window } = await gestureHarness();
+  down(header);
+  header.listeners.pointermove({ pointerId: 1, clientX: 350, clientY: 180 });
+  assert.equal(STATE.panel.style.left, '350px');
+  context.testApi.applyOverlayLayout();
+  assert.equal(STATE.panel.style.left, '350px', 'un recalcul ne doit pas interrompre le geste');
+  header.listeners.pointerup({ pointerId: 1 });
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].position, 'custom');
+  assert.equal(writes[0].customLeft, 350);
+  assert.equal(writes[0].customTop, 180);
+  assert.equal(writes[0].size, 'medium');
+  assert.equal(header.hasPointerCapture(), false);
+  assert.equal(header.listeners.pointermove, undefined);
+  assert.equal(window.listeners.blur, undefined);
+  assert.equal(STATE.root.classList.contains('peek-resizing'), false);
+  context.testApi.applyOverlayLayout();
+  assert.equal(STATE.panel.style.left, '350px', 'la position doit survivre au recalcul');
+  assert.equal(STATE.panel.style.top, '180px');
+});
+
+test('un simple clic, un bouton secondaire et le plein écran ne déplacent rien', async () => {
+  const { header, down, writes, STATE } = await gestureHarness();
+  down(header, { button: 2 });
+  assert.equal(header.listeners.pointermove, undefined);
+  down(header);
+  header.listeners.pointerup({ pointerId: 1 });
+  assert.equal(writes.length, 0);
+  STATE.settings.size = 'full';
+  down(header);
+  assert.equal(header.listeners.pointermove, undefined);
+});
+
+test('redimensionner à gauche sauvegarde aussi la nouvelle position', async () => {
+  const { west, down, writes, STATE, context } = await gestureHarness();
+  down(west);
+  west.listeners.pointermove({ pointerId: 1, clientX: -800, clientY: 100 });
+  west.listeners.pointerup({ pointerId: 1 });
+  assert.equal(writes[0].customLeft, 0);
+  assert.equal(writes[0].customWidth, 840);
+  assert.equal(writes[0].position, 'custom');
+  assert.equal(writes[0].size, 'custom');
+  assert.equal(STATE.panel.style.left, '0px');
+  context.testApi.applyOverlayLayout();
+  assert.equal(STATE.panel.style.left, '0px');
+  assert.equal(STATE.panel.style.width, '840px');
+});
+
+for (const end of ['pointercancel', 'lostpointercapture', 'blur']) {
+  test(`le geste se termine lors de ${end}`, async () => {
+    const { header, down, window, STATE, writes } = await gestureHarness();
+    down(header);
+    header.listeners.pointermove({ pointerId: 1, clientX: 250, clientY: 150 });
+    if (end === 'blur') window.listeners.blur();
+    else header.listeners[end]({ pointerId: 1 });
+    assert.equal(header.listeners.pointermove, undefined);
+    assert.equal(STATE.root.classList.contains('peek-resizing'), false);
+    assert.equal(writes.length, 1);
+  });
+}
+
+
+test('les couleurs manuelles survivent à la sauvegarde avec un thème connu sélectionné', () => {
+  const { context, node, writes } = popupHarness();
+  const fields = node('settings-form').elements;
+  fields.theme.value = 'custom';
+  node('settings-form').listeners.change();
+  fields.customAccent.value = '#123456';
+  fields.customBackground.value = '#fafafa';
+  context.saveSettings();
+  assert.equal(writes.at(-1).theme, 'custom');
+  assert.equal(writes.at(-1).customAccent, '#123456');
+  fields.theme.value = 'nord';
+  node('settings-form').listeners.change();
+  context.saveSettings();
+  context.setFormSettings(writes.at(-1));
+  fields.theme.value = 'custom';
+  node('settings-form').listeners.change();
+  context.saveSettings();
+  assert.equal(writes.at(-1).customAccent, '#123456');
+  assert.equal(writes.at(-1).customBackground, '#fafafa');
+});
+
+
+test('les couleurs affichées suivent le thème sans écraser le brouillon personnalisé', () => {
+  const { context, node, writes } = popupHarness();
+  const form = node('settings-form');
+  const fields = form.elements;
+  assert.equal(node('theme-colors').disabled, true);
+  assert.equal(fields.customAccent.value, '#cba6f7');
+  assert.equal(fields.customBackground.value, '#1e1e2e');
+  fields.theme.value = 'custom';
+  form.listeners.change();
+  assert.equal(node('theme-colors').disabled, false);
+  fields.customAccent.value = '#abcdef';
+  fields.customBackground.value = '#123456';
+  fields.customBackdropOpacity.value = '42';
+  fields.theme.value = 'everforest';
+  form.listeners.change();
+  assert.equal(node('theme-colors').disabled, true);
+  assert.equal(fields.customAccent.value, '#a7c080');
+  assert.equal(fields.customBackground.value, '#2d353b');
+  context.saveSettings();
+  assert.equal(writes.at(-1).customAccent, '#abcdef');
+  assert.equal(writes.at(-1).customBackdropOpacity, 42);
+  context.setFormSettings(writes.at(-1));
+  assert.equal(fields.customBackground.value, '#2d353b');
+  fields.theme.value = 'custom';
+  form.listeners.change();
+  assert.equal(fields.customAccent.value, '#abcdef');
+  assert.equal(fields.customBackground.value, '#123456');
+  assert.equal(Number(fields.customBackdropOpacity.value), 42);
 });

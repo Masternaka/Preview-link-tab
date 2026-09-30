@@ -8,7 +8,7 @@ function loadSettings() {
   const source = fs.readFileSync(path.join(__dirname, "..", "settings.js"), "utf8");
   const context = { URL };
   vm.createContext(context);
-  vm.runInContext(`${source}\nthis.exportsForTest = { cleanPeekSettings, parseDomainList, parseDomainRules, getDomainRule, isPeekAllowedForHost, peekOverlayViewportPosition };`, context);
+  vm.runInContext(`${source}\nthis.exportsForTest = { PEEK_THEME_PRESETS, PEEK_SETTING_OPTIONS, applyPeekTheme, cleanPeekSettings, parseDomainList, parseDomainRules, getDomainRule, isPeekAllowedForHost, peekOverlayViewportPosition };`, context);
   return context.exportsForTest;
 }
 
@@ -22,7 +22,7 @@ test("normalise les réglages importés", () => {
   });
 
   assert.equal(clean.closeWithEsc, false);
-  assert.equal(clean.hoverPreviewDelay, 3000);
+  assert.equal(Object.hasOwn(clean, 'hoverPreviewDelay'), false);
   assert.equal(clean.customAccent, "#2563eb");
 });
 
@@ -53,4 +53,71 @@ test("positionne le panneau sans sortir du viewport", () => {
 
 test("le mode vue partagée est conservé dans les réglages", () => {
   assert.equal(settings.cleanPeekSettings({ openMode: "split" }).openMode, "split");
+});
+
+
+test("les sept thèmes officiels sont acceptés et les anciens choix sont migrés", () => {
+  const themes = ['catppuccin', 'nordic', 'nord', 'gruvbox', 'tokyoNight', 'dracula', 'everforest', 'custom'];
+  assert.deepEqual(Array.from(settings.PEEK_SETTING_OPTIONS.theme), themes);
+  for (const theme of themes) {
+    assert.equal(settings.cleanPeekSettings({ theme }).theme, theme);
+  }
+  for (const theme of ['system', 'light', 'dark', 'graphite', 'mint', 'unknown']) {
+    const clean = settings.cleanPeekSettings({ theme, backdropBlur: 73, position: 'bottomLeft' });
+    assert.equal(clean.theme, 'catppuccin');
+    assert.equal(clean.backdropBlur, 73);
+    assert.equal(clean.position, 'bottomLeft');
+  }
+});
+
+test("chaque thème remplace toute la palette sans couleurs résiduelles", () => {
+  const values = new Map();
+  const node = { style: { setProperty: (key, value) => values.set(key, value) } };
+  const expectedBackgrounds = {
+    catppuccin: '#1e1e2e', nordic: '#242933', nord: '#2e3440', gruvbox: '#282828',
+    tokyoNight: '#1a1b26', dracula: '#282a36', everforest: '#2d353b'
+  };
+  for (const [theme, bg] of Object.entries(expectedBackgrounds)) {
+    settings.applyPeekTheme(node, theme);
+    assert.equal(values.get('--peek-bg'), bg);
+    assert.equal(values.get('color-scheme'), 'dark');
+    assert.match(values.get('--peek-backdrop-color'), /^\d+, \d+, \d+$/);
+    for (const [role, color] of Object.entries(settings.PEEK_THEME_PRESETS[theme])) {
+      assert.match(color, /^#[0-9a-f]{6}$/);
+      if (role !== 'backdrop-color') assert.equal(values.get('--peek-' + role), color);
+    }
+  }
+});
+
+test("tous les sélecteurs proposent uniquement la même liste de thèmes", () => {
+  let count = 0;
+  for (const name of ['popup.html', 'content.js']) {
+    const source = fs.readFileSync(path.join(__dirname, '..', name), 'utf8');
+    for (const match of source.matchAll(/<select name="theme">([\s\S]*?)<\/select>/g)) {
+      const values = [...match[1].matchAll(/value="([^"]+)"/g)].map(item => item[1]);
+      assert.deepEqual(values, Array.from(settings.PEEK_SETTING_OPTIONS.theme));
+      count++;
+    }
+  }
+  assert.equal(count, 3);
+});
+
+
+test("un thème personnalisé conserve ses couleurs et remplace un thème connu", () => {
+  const clean = settings.cleanPeekSettings({ theme: 'custom', customAccent: '#123456',
+    customBackground: '#fafafa', customBackdrop: '#102030', customBackdropOpacity: 24 });
+  assert.equal(clean.theme, 'custom');
+  const values = new Map();
+  const node = { style: { setProperty: (key, value) => values.set(key, value) } };
+  settings.applyPeekTheme(node, 'dracula');
+  settings.applyPeekTheme(node, 'custom', clean);
+  assert.equal(values.get('--peek-accent'), '#123456');
+  assert.equal(values.get('--peek-bg'), '#fafafa');
+  assert.equal(values.get('color-scheme'), 'light');
+  assert.equal(values.get('--peek-backdrop-color'), '16, 32, 48');
+  assert.equal(values.get('--peek-backdrop-opacity'), '0.24');
+  settings.applyPeekTheme(node, 'nord', clean);
+  assert.equal(values.get('--peek-bg'), '#2e3440');
+  assert.equal(values.get('color-scheme'), 'dark');
+  assert.equal(values.get('--peek-backdrop-opacity'), '0.35');
 });

@@ -18,7 +18,7 @@ const PEEK_SVG_ICONS = {
   forward:
     '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>',
   pin:
-    '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 4 6 6-3 1-4 4-1 3-3-3 3-1 4-4z"/><path d="m8 16-4 4"/></svg>'
+    '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="rotate(35 12 12)"><path class="peek-pin-head" d="M8 3h8v3l-1 1v5l3 3v1H6v-1l3-3V7L8 6Z"/><path d="M12 16v6"/></g></svg>'
 };
 
 function peekIconButton(className, iconKey, title, ariaLabel) {

@@ -27,133 +27,6 @@
   --peek-speed: 180ms;
 }
 
-#peek-preview-extension-root[data-theme="dark"] {
-  --peek-accent: #38bdf8;
-  --peek-backdrop: rgba(3, 7, 18, 0.56);
-  --peek-backdrop-color: 3, 7, 18;
-  --peek-bg: #111827;
-  --peek-border: rgba(148, 163, 184, 0.26);
-  --peek-button-bg: #1f2937;
-  --peek-button-hover: #334155;
-  --peek-frame-bg: #0f172a;
-  --peek-header-bg: #111827;
-  --peek-muted: #94a3b8;
-  --peek-panel-shadow: 0 24px 90px rgba(0, 0, 0, 0.52);
-  --peek-settings-text: #cbd5e1;
-  --peek-text: #f8fafc;
-  --peek-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2394a3b8' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  color-scheme: dark;
-}
-
-#peek-preview-extension-root[data-theme="graphite"] {
-  --peek-accent: #f97316;
-  --peek-backdrop: rgba(15, 23, 42, 0.38);
-  --peek-backdrop-color: 15, 23, 42;
-  --peek-bg: #1f2937;
-  --peek-border: rgba(209, 213, 219, 0.28);
-  --peek-button-bg: #374151;
-  --peek-button-hover: #4b5563;
-  --peek-frame-bg: #111827;
-  --peek-header-bg: #242f3f;
-  --peek-muted: #cbd5e1;
-  --peek-panel-shadow: 0 24px 80px rgba(17, 24, 39, 0.48);
-  --peek-settings-text: #e5e7eb;
-  --peek-text: #f9fafb;
-  --peek-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2394a3b8' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  color-scheme: dark;
-}
-
-#peek-preview-extension-root[data-theme="mint"] {
-  --peek-accent: #0f766e;
-  --peek-backdrop: rgba(8, 47, 73, 0.28);
-  --peek-backdrop-color: 8, 47, 73;
-  --peek-bg: #f0fdfa;
-  --peek-border: rgba(15, 118, 110, 0.24);
-  --peek-button-bg: #ccfbf1;
-  --peek-button-hover: #99f6e4;
-  --peek-frame-bg: #ffffff;
-  --peek-header-bg: #f8fffd;
-  --peek-muted: #3f6f69;
-  --peek-panel-shadow: 0 24px 80px rgba(15, 118, 110, 0.28);
-  --peek-settings-text: #134e4a;
-  --peek-text: #042f2e;
-}
-
-#peek-preview-extension-root[data-theme="catppuccin"] {
-  --peek-accent: #cba6f7;
-  --peek-backdrop: rgba(17, 17, 27, 0.48);
-  --peek-backdrop-color: 17, 17, 27;
-  --peek-bg: #1e1e2e;
-  --peek-border: rgba(203, 166, 247, 0.3);
-  --peek-button-bg: #313244;
-  --peek-button-hover: #45475a;
-  --peek-frame-bg: #181825;
-  --peek-header-bg: #1e1e2e;
-  --peek-muted: #a6adc8;
-  --peek-panel-shadow: 0 24px 90px rgba(17, 17, 27, 0.58);
-  --peek-settings-text: #cdd6f4;
-  --peek-text: #cdd6f4;
-  color-scheme: dark;
-}
-
-#peek-preview-extension-root[data-theme="gruvbox"] {
-  --peek-accent: #fabd2f;
-  --peek-backdrop: rgba(40, 40, 40, 0.5);
-  --peek-backdrop-color: 40, 40, 40;
-  --peek-bg: #282828;
-  --peek-border: rgba(250, 189, 47, 0.32);
-  --peek-button-bg: #3c3836;
-  --peek-button-hover: #504945;
-  --peek-frame-bg: #1d2021;
-  --peek-header-bg: #282828;
-  --peek-muted: #bdae93;
-  --peek-panel-shadow: 0 24px 90px rgba(29, 32, 33, 0.55);
-  --peek-settings-text: #ebdbb2;
-  --peek-text: #fbf1c7;
-  color-scheme: dark;
-}
-
-#peek-preview-extension-root[data-theme="dracula"] {
-  --peek-accent: #bd93f9;
-  --peek-backdrop: rgba(40, 42, 54, 0.52);
-  --peek-backdrop-color: 40, 42, 54;
-  --peek-bg: #282a36;
-  --peek-border: rgba(189, 147, 249, 0.32);
-  --peek-button-bg: #44475a;
-  --peek-button-hover: #6272a4;
-  --peek-frame-bg: #21222c;
-  --peek-header-bg: #282a36;
-  --peek-muted: #bdc2d8;
-  --peek-panel-shadow: 0 24px 90px rgba(33, 34, 44, 0.58);
-  --peek-settings-text: #f8f8f2;
-  --peek-text: #f8f8f2;
-  color-scheme: dark;
-}
-
-#peek-preview-extension-root[data-theme="custom"] {
-  color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  #peek-preview-extension-root[data-theme="system"] {
-    --peek-accent: #38bdf8;
-    --peek-backdrop: rgba(3, 7, 18, 0.56);
-    --peek-backdrop-color: 3, 7, 18;
-    --peek-bg: #111827;
-    --peek-border: rgba(148, 163, 184, 0.26);
-    --peek-button-bg: #1f2937;
-    --peek-button-hover: #334155;
-    --peek-frame-bg: #0f172a;
-    --peek-header-bg: #111827;
-    --peek-muted: #94a3b8;
-    --peek-panel-shadow: 0 24px 90px rgba(0, 0, 0, 0.52);
-    --peek-settings-text: #cbd5e1;
-    --peek-text: #f8fafc;
-    --peek-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2394a3b8' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    color-scheme: dark;
-  }
-}
-
 #peek-preview-notice {
   position: fixed;
   bottom: 24px;
@@ -544,6 +417,9 @@
 }
 
 #peek-preview-extension-root .peek-header {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
   align-items: center;
   background: color-mix(in srgb, var(--peek-header-bg) 92%, transparent);
   backdrop-filter: blur(12px);
@@ -656,6 +532,10 @@
 #peek-preview-extension-root .peek-pin.peek-active {
   background: color-mix(in srgb, var(--peek-accent) 22%, var(--peek-button-bg));
   color: var(--peek-accent);
+}
+
+#peek-preview-extension-root .peek-pin.peek-active .peek-pin-head {
+  fill: currentColor;
 }
 
 #peek-preview-extension-root .peek-settings {
@@ -987,91 +867,6 @@
 #peek-compact-menu-root,
 #peek-compact-menu-root * {
   box-sizing: border-box;
-}
-
-#peek-compact-menu-root[data-theme="dark"] {
-  --peek-accent: #38bdf8;
-  --peek-bg: #111827;
-  --peek-border: rgba(148, 163, 184, 0.26);
-  --peek-button-bg: #1f2937;
-  --peek-button-hover: #334155;
-  --peek-header-bg: #111827;
-  --peek-muted: #94a3b8;
-  --peek-text: #f8fafc;
-  color-scheme: dark;
-}
-
-@media (prefers-color-scheme: dark) {
-  #peek-compact-menu-root[data-theme="system"] {
-    --peek-accent: #38bdf8;
-    --peek-bg: #111827;
-    --peek-border: rgba(148, 163, 184, 0.26);
-    --peek-button-bg: #1f2937;
-    --peek-button-hover: #334155;
-    --peek-header-bg: #111827;
-    --peek-muted: #94a3b8;
-    --peek-text: #f8fafc;
-    color-scheme: dark;
-  }
-}
-
-#peek-compact-menu-root[data-theme="graphite"] {
-  --peek-accent: #f97316;
-  --peek-bg: #1f2937;
-  --peek-border: rgba(209, 213, 219, 0.28);
-  --peek-button-bg: #374151;
-  --peek-button-hover: #4b5563;
-  --peek-header-bg: #242f3f;
-  --peek-muted: #cbd5e1;
-  --peek-text: #f9fafb;
-  color-scheme: dark;
-}
-
-#peek-compact-menu-root[data-theme="mint"] {
-  --peek-accent: #0f766e;
-  --peek-bg: #f0fdfa;
-  --peek-border: rgba(15, 118, 110, 0.24);
-  --peek-button-bg: #ccfbf1;
-  --peek-button-hover: #99f6e4;
-  --peek-header-bg: #f8fffd;
-  --peek-muted: #3f6f69;
-  --peek-text: #042f2e;
-}
-
-#peek-compact-menu-root[data-theme="catppuccin"] {
-  --peek-accent: #cba6f7;
-  --peek-bg: #1e1e2e;
-  --peek-border: rgba(203, 166, 247, 0.3);
-  --peek-button-bg: #313244;
-  --peek-button-hover: #45475a;
-  --peek-header-bg: #1e1e2e;
-  --peek-muted: #a6adc8;
-  --peek-text: #cdd6f4;
-  color-scheme: dark;
-}
-
-#peek-compact-menu-root[data-theme="gruvbox"] {
-  --peek-accent: #fabd2f;
-  --peek-bg: #282828;
-  --peek-border: rgba(250, 189, 47, 0.32);
-  --peek-button-bg: #3c3836;
-  --peek-button-hover: #504945;
-  --peek-header-bg: #282828;
-  --peek-muted: #bdae93;
-  --peek-text: #fbf1c7;
-  color-scheme: dark;
-}
-
-#peek-compact-menu-root[data-theme="dracula"] {
-  --peek-accent: #bd93f9;
-  --peek-bg: #282a36;
-  --peek-border: rgba(189, 147, 249, 0.32);
-  --peek-button-bg: #44475a;
-  --peek-button-hover: #6272a4;
-  --peek-header-bg: #282a36;
-  --peek-muted: #bdc2d8;
-  --peek-text: #f8f8f2;
-  color-scheme: dark;
 }
 
 #peek-compact-menu-root .peek-compact-actions {
@@ -1547,6 +1342,7 @@
 
 /* Poignées de redimensionnement */
 #peek-preview-extension-root .peek-resize-handle {
+  touch-action: none;
   position: absolute;
   z-index: 999999;
   user-select: none;
@@ -1622,4 +1418,16 @@
 
 #peek-preview-extension-root.peek-resizing .peek-frame {
   pointer-events: none !important;
+}
+
+#peek-preview-extension-root.peek-dragging .peek-header {
+  cursor: grabbing;
+}
+
+#peek-preview-extension-root[data-size="full"] .peek-header {
+  cursor: default;
+}
+
+#peek-preview-extension-root[data-size="full"] .peek-resize-handle {
+  display: none;
 }

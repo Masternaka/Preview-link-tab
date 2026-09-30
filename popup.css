@@ -212,6 +212,11 @@ fieldset[data-active="false"] {
   opacity: 0.55;
 }
 
+/* Keep palette colors accurate even when their controls are disabled. */
+fieldset.color-group[data-active="false"] {
+  opacity: 1;
+}
+
 legend {
   color: var(--popup-text);
   font-size: 12px;

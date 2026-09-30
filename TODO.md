@@ -9,7 +9,7 @@ Les cases cochées dans « Déjà implémenté » indiquent du code présent, pa
 ## Prochaines étapes conseillées
 
 1. **Valider l’ouverture et la fermeture dans les navigateurs utilisés au quotidien.** Confirmer que le scintillement a disparu avant d’ajouter d’autres animations ou modes.
-2. **Fiabiliser le clavier et la navigation.** L’extension doit rester prévisible quand on écrit, revient en arrière ou ferme un aperçu.
+2. **Fiabiliser la navigation.** Corriger l’historique avec URL répétées. La protection de la saisie et les limites de déplacement/redimensionnement sont implémentées ; leurs essais dans les navigateurs restent à faire.
 3. **Simplifier les règles par site.** Ajouter une action « Toujours ouvrir ce site en… » pour éviter de modifier une liste à la main.
 4. **Préparer une version stable à partager.** Documenter les limites réelles, automatiser les tests et préparer un paquet propre.
 
@@ -34,10 +34,10 @@ Pour chaque anomalie, noter : navigateur/version, URL si partageable, mode d’o
 
 Ces points sont issus de la lecture du code ; ajouter un scénario reproductible et un test ciblé avant chaque correction.
 
-- [ ] **P1 — Raccourcis et zones éditables.** Prendre en compte `contenteditable` dans `content.js` pour éviter que les touches R, O, C, P et les flèches interceptent la saisie.
-- [ ] **P1 — Raccourcis dans l’iframe.** Seul Échap est actuellement relayé. Définir les raccourcis utilisables quand la page prévisualisée a le focus, protéger la saisie et aligner l’aide sur le comportement réel.
+- [x] **P1 — Raccourcis et zones éditables.** Protéger les champs, les zones `contenteditable` (y compris leurs enfants), les champs dans un Shadow DOM ouvert et la composition IME. Trois tests de non-régression ajoutés ; validation dans les navigateurs à poursuivre.
+- [ ] **P2 — Raccourcis dans l’iframe.** Seul Échap est actuellement relayé, comme indiqué dans le README ; la composition IME est protégée. Décider s’il est utile de relayer d’autres actions, en préservant les raccourcis et la saisie du site intégré.
 - [ ] **P2 — Historique avec URL répétées.** Revoir `recordPreviewNavigation` : retrouver une ancienne URL ne signifie pas forcément que l’utilisateur est revenu en arrière. Vérifier le parcours A → B → A → précédent, qui doit revenir à B.
-- [ ] **P2 — Débordement pendant le redimensionnement.** Les limites actuelles utilisent surtout la taille du viewport. Tenir compte aussi de la position du panneau pour empêcher un bord de sortir de l’écran pendant le glissement.
+- [x] **P2 — Débordement pendant le redimensionnement.** Les limites tiennent compte de la position du panneau et conservent le bord opposé. Tests des huit directions, petits viewports et sauvegarde de la position ; validation visuelle à poursuivre.
 - [ ] **P2 — Réglages de secours.** Revoir le stockage dans le `localStorage` du site quand le contexte de l’extension est indisponible. Préférer un état temporaire en mémoire et une invitation à recharger la page pour garder les préférences dans l’extension.
 - [ ] **P2 — Import plus strict.** Refuser les valeurs JSON qui ne sont pas un objet de réglages, ignorer les clés inconnues et signaler les erreurs de lecture du fichier.
 - [ ] **P2 — Liste d’autorisation vide.** Décider explicitement du résultat attendu : actuellement, une liste vide autorise tous les domaines, même en mode liste d’autorisation. Clarifier l’interface et couvrir le choix par un test.
@@ -57,7 +57,7 @@ Ces points sont issus de la lecture du code ; ajouter un scénario reproductible
 ## Fonctionnalités à ajouter
 
 - [ ] **P2 — « Toujours ouvrir ce site en… ».** Depuis l’aperçu, choisir intégré, compact, vue partagée ou désactivé. Étendre les règles de domaine au mode Split View et permettre d’annuler facilement ce choix.
-- [ ] **P2 — Déplacer le panneau à la souris.** Faire glisser l’en-tête, garder le panneau dans la zone visible et mémoriser sa position. Le redimensionnement existe déjà.
+- [x] **P2 — Déplacer le panneau à la souris.** Glissement par l’en-tête, position bornée et mémorisée, barre d’actions repositionnée pendant le geste. Gestion du relâchement, de la perte de capture et de focus ; désactivé en plein écran. Validation visuelle à poursuivre.
 - [ ] **P2 — Prévisualisation des réglages.** Afficher un exemple local du panneau dans les paramètres pour voir immédiatement les changements de thème, taille et animation sans charger un site externe.
 - [ ] **P3 — Pause rapide.** Désactiver temporairement les déclencheurs sur le site courant et proposer une réactivation visible.
 - [ ] **P3 — Profils de réglages.** Enregistrer quelques configurations personnelles et passer facilement de l’une à l’autre.
@@ -73,6 +73,9 @@ Ces points sont issus de la lecture du code ; ajouter un scénario reproductible
 
 ## Déjà implémenté — validation terrain à poursuivre
 
+- [x] Proposer Catppuccin, Nordic, Nord, Gruvbox, Tokyo Night, Dracula et Everforest, ainsi que le thème Personnalisé avec réglage manuel des couleurs. Centraliser les palettes, documenter leurs sources et migrer les anciens thèmes génériques vers Catppuccin.
+- [x] Retirer l’ouverture automatique au survol et son réglage ; ignorer l’ancienne option lors de l’import. Conserver le raccourci explicite Alt + Shift + P.
+- [x] Redessiner l’icône d’épinglage en punaise, pleine et colorée lorsqu’elle est active, et actualiser son libellé accessible.
 - [x] Préserver les clics natifs sur les domaines exclus.
 - [x] Attendre une confirmation de l’iframe et proposer une alternative si elle n’arrive pas.
 - [x] Conserver séparément les valeurs de flou et d’assombrissement et signaler les erreurs de sauvegarde.
@@ -80,6 +83,8 @@ Ces points sont issus de la lecture du code ; ajouter un scénario reproductible
 - [x] Préparer le placement du panneau avant affichage pour réduire le scintillement.
 - [x] Ajouter le mode et le bouton de vue partagée native avec un message d’aide si l’API manque.
 - [x] Intégrer les nouvelles icônes aux bonnes dimensions et conserver leurs sources.
-- [x] Disposer de 24 tests automatisés réussis lors de la dernière exécution ; compléter par les vérifications dans les navigateurs ci-dessus.
+- [x] Disposer de 41 tests automatisés réussis lors de la dernière exécution ; compléter par les vérifications dans les navigateurs ci-dessus.
 
 **Conseil de suivi :** traiter un chantier à la fois, noter le résultat de ses vérifications et choisir ensuite la prochaine priorité. Garder les fonctionnalités P3 comme idées, sans les considérer comme des engagements.
+
+**Décisions produit :** conserver uniquement la vue partagée native du navigateur, selon l’API disponible ; ne pas ajouter de remplacement par deux fenêtres ou par des panneaux intégrés. Ne pas réintroduire l’ouverture automatique au survol.

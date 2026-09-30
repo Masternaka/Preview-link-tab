@@ -1,9 +1,22 @@
 (() => {
+  function isComposingKey(event) {
+    // Some browsers report the final IME key with only the legacy keyCode.
+    return event.isComposing || event.keyCode === 229;
+  }
+
+  function isEditableKeyTarget(event) {
+    // composedPath exposes the actual input inside an open shadow root.
+    const target = event.composedPath?.()[0] || event.target;
+    return target instanceof Element && (
+      target.matches("input, textarea, select") || target.isContentEditable
+    );
+  }
+
   // In embedded documents, only relay keyboard/navigation information to the
   // top-level preview. The full interface must never be rendered in a frame.
   if (window.top !== window.self) {
     document.addEventListener("keydown", event => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !event.defaultPrevented && !isComposingKey(event)) {
         window.top.postMessage({ source: "peek-preview", type: "CLOSE_PEEK_PREVIEW" }, "*");
       }
     }, true);
@@ -49,14 +62,13 @@
     isPinned: false
   };
 
+  let finishPanelGesture = null;
   let closeId = 0;
   let lastHoveredAnchor = null;
   let overlayPositionFrame = 0;
   let overlayResizeTimer = 0;
   let overlayPositionAttempts = 0;
   let overlayPanelObserver = null;
-  let hoverPreviewTimer = 0;
-  let hoveredAnchor = null;
   let previewLoadTimer = 0;
   let settingsSaveTimer = 0;
 
@@ -121,19 +133,8 @@
 
   document.addEventListener("pointerover", event => {
     const anchor = findLink(event.target);
-    if (!anchor || anchor === hoveredAnchor) {
-      return;
-    }
-    lastHoveredAnchor = anchor;
-    hoveredAnchor = anchor;
-    scheduleHoverPreview(anchor);
-  }, true);
-
-  document.addEventListener("pointerout", event => {
-    const anchor = findLink(event.target);
-    if (anchor && anchor === hoveredAnchor && !anchor.contains(event.relatedTarget)) {
-      hoveredAnchor = null;
-      window.clearTimeout(hoverPreviewTimer);
+    if (anchor) {
+      lastHoveredAnchor = anchor;
     }
   }, true);
 
@@ -202,16 +203,15 @@
             <label>
               <span>Thème</span>
               <select name="theme">
-                <option value="system">Système</option>
-                <option value="light">Clair</option>
-                <option value="dark">Sombre</option>
-                <option value="graphite">Graphite</option>
-                <option value="mint">Menthe</option>
-                <option value="catppuccin">Catppuccin</option>
-                <option value="gruvbox">Gruvbox</option>
-                <option value="dracula">Dracula</option>
-                <option value="custom">Personnalisé</option>
-              </select>
+              <option value="catppuccin">Catppuccin</option>
+              <option value="nordic">Nordic</option>
+              <option value="nord">Nord</option>
+              <option value="gruvbox">Gruvbox</option>
+              <option value="tokyoNight">Tokyo Night</option>
+              <option value="dracula">Dracula</option>
+              <option value="everforest">Everforest</option>
+              <option value="custom">Personnalisé</option>
+            </select>
             </label>
             <label>
               <span>Animation</span>
@@ -463,23 +463,6 @@
     }
   }
 
-  function scheduleHoverPreview(anchor) {
-    window.clearTimeout(hoverPreviewTimer);
-    const delay = STATE.settings.hoverPreviewDelay;
-    if (!delay || STATE.root?.classList.contains("peek-visible")) {
-      return;
-    }
-    hoverPreviewTimer = window.setTimeout(() => {
-      if (hoveredAnchor !== anchor) {
-        return;
-      }
-      const url = normalizeUrl(anchor);
-      if (url) {
-        openPreview(anchor, url);
-      }
-    }, delay);
-  }
-
   function previewUrl(href, labelFallback) {
     try {
       const url = new URL(href, window.location.href);
@@ -598,6 +581,7 @@
     if (STATE.pinButton) {
       STATE.pinButton.classList.toggle("peek-active", STATE.isPinned);
       STATE.pinButton.setAttribute("aria-pressed", String(STATE.isPinned));
+      STATE.pinButton.setAttribute("aria-label", STATE.isPinned ? "Désépingler l'aperçu" : "Épingler l'aperçu");
       STATE.pinButton.title = STATE.isPinned ? "Désépingler l'aperçu" : "Épingler : empêcher la fermeture par clic extérieur";
     }
   }
@@ -677,10 +661,10 @@
       window.innerWidth,
       window.innerHeight
     );
-    const maxHeight = Math.max(240, window.innerHeight - 48);
-    const maxWidth = Math.max(320, window.innerWidth - 64 - ACTIONS_BAR_GUTTER);
+    const maxHeight = Math.max(1, window.innerHeight - 48);
+    const maxWidth = Math.max(1, window.innerWidth - 64 - ACTIONS_BAR_GUTTER);
     const width = Math.min(dims.width, maxWidth);
-    const height = Math.min(dims.height, maxHeight);
+    const height = Math.min(dims.height, maxHeight, Math.max(1, window.innerHeight - 128));
     STATE.panel.style.width = `${width}px`;
     STATE.panel.style.height = `${height}px`;
     STATE.panel.style.minHeight = "";
@@ -783,6 +767,7 @@
   }
 
   function applyOverlayPositionOnly() {
+    if (finishPanelGesture) return true;
     if (!STATE.root || !STATE.panel || !STATE.root.classList.contains("peek-visible")) {
       return false;
     }
@@ -800,6 +785,8 @@
     if (!STATE.root || !STATE.panel || !STATE.root.classList.contains("peek-visible")) {
       return false;
     }
+
+    if (finishPanelGesture) return true;
 
     if (updateDimensions) {
       applyOverlayDimensions();
@@ -866,6 +853,7 @@
   }
 
   function doClose() {
+    finishPanelGesture?.();
     if (!STATE.root) {
       return;
     }
@@ -891,6 +879,7 @@
   }
 
   function closePreview() {
+    finishPanelGesture?.();
     if (!STATE.root || !STATE.root.classList.contains("peek-visible")) {
       return;
     }
@@ -1099,16 +1088,15 @@
         <label>
           <span>Thème</span>
           <select name="theme">
-            <option value="system">Système</option>
-            <option value="light">Clair</option>
-            <option value="dark">Sombre</option>
-            <option value="graphite">Graphite</option>
-            <option value="mint">Menthe</option>
-            <option value="catppuccin">Catppuccin</option>
-            <option value="gruvbox">Gruvbox</option>
-            <option value="dracula">Dracula</option>
-            <option value="custom">Personnalisé</option>
-          </select>
+              <option value="catppuccin">Catppuccin</option>
+              <option value="nordic">Nordic</option>
+              <option value="nord">Nord</option>
+              <option value="gruvbox">Gruvbox</option>
+              <option value="tokyoNight">Tokyo Night</option>
+              <option value="dracula">Dracula</option>
+              <option value="everforest">Everforest</option>
+              <option value="custom">Personnalisé</option>
+            </select>
         </label>
         <label class="peek-compact-check">
           <input type="checkbox" name="closeWithEsc">
@@ -1147,29 +1135,7 @@
       return;
     }
     STATE.compactMenu.dataset.theme = STATE.settings.theme;
-    if (STATE.settings.theme === "custom") {
-      const [r, g, b] = hexToRgbParts(STATE.settings.customBackdrop);
-      STATE.compactMenu.style.setProperty("--peek-accent", STATE.settings.customAccent);
-      STATE.compactMenu.style.setProperty("--peek-bg", STATE.settings.customBackground);
-      STATE.compactMenu.style.setProperty("--peek-header-bg", STATE.settings.customHeader);
-      STATE.compactMenu.style.setProperty("--peek-text", STATE.settings.customText);
-      STATE.compactMenu.style.setProperty("--peek-muted", STATE.settings.customMuted);
-      STATE.compactMenu.style.setProperty("--peek-border", STATE.settings.customBorder);
-      STATE.compactMenu.style.setProperty(
-        "--peek-backdrop",
-        `rgba(${r}, ${g}, ${b}, ${STATE.settings.customBackdropOpacity / 100})`
-      );
-    } else {
-      [
-        "--peek-accent",
-        "--peek-bg",
-        "--peek-header-bg",
-        "--peek-text",
-        "--peek-muted",
-        "--peek-border",
-        "--peek-backdrop"
-      ].forEach(name => STATE.compactMenu.style.removeProperty(name));
-    }
+    applyPeekTheme(STATE.compactMenu, STATE.settings.theme, STATE.settings);
   }
 
   function syncCompactControls() {
@@ -1235,39 +1201,7 @@
     STATE.root.style.setProperty("--peek-custom-left", `${STATE.settings.customLeft}px`);
     STATE.root.style.setProperty("--peek-custom-top", `${STATE.settings.customTop}px`);
 
-    if (STATE.settings.theme === "custom") {
-      const [r, g, b] = hexToRgbParts(STATE.settings.customBackdrop);
-      STATE.root.style.setProperty("--peek-accent", STATE.settings.customAccent);
-      STATE.root.style.setProperty("--peek-bg", STATE.settings.customBackground);
-      STATE.root.style.setProperty("--peek-header-bg", STATE.settings.customHeader);
-      STATE.root.style.setProperty("--peek-frame-bg", STATE.settings.customFrame);
-      STATE.root.style.setProperty("--peek-text", STATE.settings.customText);
-      STATE.root.style.setProperty("--peek-muted", STATE.settings.customMuted);
-      STATE.root.style.setProperty("--peek-settings-text", STATE.settings.customText);
-      STATE.root.style.setProperty("--peek-border", STATE.settings.customBorder);
-      STATE.root.style.setProperty("--peek-button-bg", STATE.settings.customHeader);
-      STATE.root.style.setProperty("--peek-button-hover", STATE.settings.customBackground);
-      STATE.root.style.setProperty(
-        "--peek-backdrop",
-        `rgba(${r}, ${g}, ${b}, ${STATE.settings.customBackdropOpacity / 100})`
-      );
-      STATE.root.style.setProperty("--peek-backdrop-color", `${r}, ${g}, ${b}`);
-    } else {
-      [
-        "--peek-accent",
-        "--peek-bg",
-        "--peek-header-bg",
-        "--peek-frame-bg",
-        "--peek-text",
-        "--peek-muted",
-        "--peek-settings-text",
-        "--peek-border",
-        "--peek-button-bg",
-        "--peek-button-hover",
-        "--peek-backdrop",
-        "--peek-backdrop-color"
-      ].forEach(name => STATE.root.style.removeProperty(name));
-    }
+    applyPeekTheme(STATE.root, STATE.settings.theme, STATE.settings);
 
     if (STATE.root.classList.contains("peek-visible")) {
       scheduleOverlayLayout();
@@ -1440,8 +1374,9 @@
   document.addEventListener(
     "keydown",
     event => {
+      if (event.defaultPrevented || isComposingKey(event)) return;
       const previewIsOpen = STATE.root?.classList.contains("peek-visible");
-      const editable = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement;
+      const editable = isEditableKeyTarget(event);
       if (previewIsOpen && !editable && !event.altKey && !event.ctrlKey && !event.metaKey) {
         if (event.key === "r") {
           event.preventDefault();
@@ -1553,112 +1488,107 @@
     });
   }
 
+  function panelGestureRect(start, direction, dx, dy, viewportWidth, viewportHeight) {
+    const limitX = Math.max(1, viewportWidth);
+    const limitY = Math.max(1, viewportHeight);
+    const width = Math.min(start.width, limitX);
+    const height = Math.min(start.height, limitY);
+    const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+    let left = clamp(start.left, 0, limitX - width);
+    let top = clamp(start.top, 0, limitY - height);
+    if (!direction) {
+      return { left: clamp(left + dx, 0, limitX - width),
+        top: clamp(top + dy, 0, limitY - height), width, height };
+    }
+    let right = left + width;
+    let bottom = top + height;
+    // Match the saved custom-size limits, including room for the toolbar.
+    const maxWidth = Math.min(1800, Math.max(1, limitX - 128));
+    const maxHeight = Math.min(1200, Math.max(1, limitY - 128));
+    if (direction.includes("w")) {
+      const max = Math.min(right, maxWidth);
+      left = right - clamp(width - dx, Math.min(320, max), max);
+    } else if (direction.includes("e")) {
+      const max = Math.min(limitX - left, maxWidth);
+      right = left + clamp(width + dx, Math.min(320, max), max);
+    }
+    if (direction.includes("n")) {
+      const max = Math.min(bottom, maxHeight);
+      top = bottom - clamp(height - dy, Math.min(240, max), max);
+    } else if (direction.includes("s")) {
+      const max = Math.min(limitY - top, maxHeight);
+      bottom = top + clamp(height + dy, Math.min(240, max), max);
+    }
+    return { left, top, width: right - left, height: bottom - top };
+  }
+
   function initResizeListeners(rootEl) {
     const panel = rootEl.querySelector(".peek-panel");
     if (!panel) return;
 
-    panel.querySelectorAll(".peek-resize-handle").forEach(handle => {
-      handle.addEventListener("mousedown", event => {
+    const bindGesture = (handle, direction = "") => {
+      handle.addEventListener("pointerdown", event => {
+        if (event.button !== 0 || event.isPrimary === false || STATE.settings.size === "full" || finishPanelGesture) return;
+        if (event.target.closest("button, a, input, select, textarea")) return;
         event.preventDefault();
         event.stopPropagation();
-
-        const direction = handle.dataset.direction;
-        const startX = event.clientX;
-        const startY = event.clientY;
-
-        const startRect = panel.getBoundingClientRect();
-        const startWidth = startRect.width;
-        const startHeight = startRect.height;
-        const startLeft = startRect.left;
-        const startTop = startRect.top;
-
+        const start = panel.getBoundingClientRect();
+        let current = start;
+        let moved = false;
+        handle.setPointerCapture(event.pointerId);
         rootEl.classList.add("peek-resizing");
+        if (!direction) rootEl.classList.add("peek-dragging");
 
-        let currentWidth = startWidth;
-        let currentHeight = startHeight;
-        let currentLeft = startLeft;
-        let currentTop = startTop;
-
-        const onMouseMove = moveEvent => {
-          const dx = moveEvent.clientX - startX;
-          const dy = moveEvent.clientY - startY;
-
-          // Horizontal resize
-          if (direction.includes("w")) {
-            const maxW = window.innerWidth - 32;
-            const targetWidth = startWidth - dx;
-            if (targetWidth < 320) {
-              currentWidth = 320;
-              currentLeft = startLeft + startWidth - 320;
-            } else if (targetWidth > maxW) {
-              currentWidth = maxW;
-              currentLeft = startLeft + startWidth - maxW;
-            } else {
-              currentWidth = targetWidth;
-              currentLeft = startLeft + dx;
-            }
-          } else if (direction.includes("e")) {
-            currentWidth = Math.max(320, Math.min(startWidth + dx, window.innerWidth - 32));
+        const move = moveEvent => {
+          if (moveEvent.pointerId !== event.pointerId) return;
+          const dx = moveEvent.clientX - event.clientX;
+          const dy = moveEvent.clientY - event.clientY;
+          if (!moved && Math.hypot(dx, dy) < 3) return;
+          moved = true;
+          current = panelGestureRect(start, direction, dx, dy, window.innerWidth, window.innerHeight);
+          if (direction) {
+            panel.style.width = `${current.width}px`;
+            panel.style.height = `${current.height}px`;
           }
-
-          // Vertical resize
-          if (direction.includes("n")) {
-            const maxH = window.innerHeight - 32;
-            const targetHeight = startHeight - dy;
-            if (targetHeight < 240) {
-              currentHeight = 240;
-              currentTop = startTop + startHeight - 240;
-            } else if (targetHeight > maxH) {
-              currentHeight = maxH;
-              currentTop = startTop + startHeight - maxH;
-            } else {
-              currentHeight = targetHeight;
-              currentTop = startTop + dy;
-            }
-          } else if (direction.includes("s")) {
-            currentHeight = Math.max(240, Math.min(startHeight + dy, window.innerHeight - 32));
-          }
-
-          panel.style.width = `${currentWidth}px`;
-          panel.style.height = `${currentHeight}px`;
-          panel.style.left = `${currentLeft}px`;
-          panel.style.top = `${currentTop}px`;
+          applyOverlayPanelPosition(current.left, current.top);
         };
-
-        const onMouseUp = () => {
-          window.removeEventListener("mousemove", onMouseMove);
-          window.removeEventListener("mouseup", onMouseUp);
-
-          rootEl.classList.remove("peek-resizing");
-
+        const finish = endEvent => {
+          if (endEvent?.pointerId != null && endEvent.pointerId !== event.pointerId) return;
+          handle.removeEventListener("pointermove", move);
+          handle.removeEventListener("pointerup", finish);
+          handle.removeEventListener("pointercancel", finish);
+          handle.removeEventListener("lostpointercapture", finish);
+          window.removeEventListener("blur", finish);
+          finishPanelGesture = null;
+          if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+          rootEl.classList.remove("peek-resizing", "peek-dragging");
+          if (!moved) return;
           const updates = {
-            size: "custom",
-            customWidth: Math.round(currentWidth),
-            customHeight: Math.round(currentHeight)
+            position: "custom",
+            customLeft: Math.round(current.left),
+            customTop: Math.round(current.top)
           };
-
-          if (STATE.settings.position === "custom") {
-            updates.customLeft = Math.round(currentLeft);
-            updates.customTop = Math.round(currentTop);
-          }
-
+          if (direction) Object.assign(updates, {
+            size: "custom", customWidth: Math.round(current.width), customHeight: Math.round(current.height)
+          });
           STATE.settings = cleanSettings({ ...STATE.settings, ...updates });
-          try {
-            chrome.storage.local.set(updates, () => {
-              if (chrome.runtime.lastError) {
-                console.warn("Resize storage error:", chrome.runtime.lastError.message);
-              }
-              scheduleOverlayLayout({ updateDimensions: true });
-            });
-          } catch (err) {
-            console.warn("Resize storage failed:", err.message);
-            scheduleOverlayLayout({ updateDimensions: true });
-          }
+          applySettings();
+          syncControls();
+          saveSettings(STATE.settings);
         };
-
-        window.addEventListener("mousemove", onMouseMove);
-        window.addEventListener("mouseup", onMouseUp);
+        finishPanelGesture = finish;
+        handle.addEventListener("pointermove", move);
+        handle.addEventListener("pointerup", finish);
+        handle.addEventListener("pointercancel", finish);
+        handle.addEventListener("lostpointercapture", finish);
+        window.addEventListener("blur", finish);
       });
-    });
+    };
+    const header = panel.querySelector(".peek-header");
+    if (header) {
+      header.title = "Faire glisser pour déplacer l’aperçu";
+      bindGesture(header);
+    }
+    panel.querySelectorAll(".peek-resize-handle").forEach(handle => bindGesture(handle, handle.dataset.direction));
   }
 })();

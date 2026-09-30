@@ -7,7 +7,7 @@ const PEEK_DEFAULT_SETTINGS = {
   customLeft: 80,
   customTop: 80,
   trigger: "alt",
-  theme: "system",
+  theme: "catppuccin",
   customAccent: "#2563eb",
   customBackground: "#f8fafc",
   customHeader: "#ffffff",
@@ -28,7 +28,6 @@ const PEEK_DEFAULT_SETTINGS = {
   domainListMode: "off",
   domainList: "",
   middleClick: false,
-  hoverPreviewDelay: 0,
   domainRules: "",
   autoCompactFallback: true,
   compactFallbackDomains: "",
@@ -42,7 +41,7 @@ const PEEK_SETTING_OPTIONS = {
   size: ["small", "medium", "large", "full", "custom"],
   position: ["topRight", "bottomRight", "topLeft", "bottomLeft", "center", "custom"],
   trigger: ["alt", "meta", "shift"],
-  theme: ["system", "light", "dark", "graphite", "mint", "catppuccin", "gruvbox", "dracula", "custom"],
+  theme: ["catppuccin", "nordic", "nord", "gruvbox", "tokyoNight", "dracula", "everforest", "custom"],
   animation: ["slide", "slideUp", "slideDown", "scale", "fade", "bounce", "blur", "none"],
   animationSpeed: ["instant", "quick", "normal", "relaxed", "slow", "leisurely"],
   frameStyle: ["rounded", "square", "glass", "outlined"],
@@ -67,88 +66,132 @@ function peekAnimationDurationMs(settings) {
   return PEEK_ANIMATION_SPEED_MS[settings.animationSpeed] ?? PEEK_ANIMATION_SPEED_MS.normal;
 }
 
+// Official palette sources and variants: THEMES.md. Shared by both preview interfaces.
 const PEEK_THEME_PRESETS = {
-  light: {
-    customAccent: "#2563eb",
-    customBackground: "#f8fafc",
-    customHeader: "#ffffff",
-    customFrame: "#ffffff",
-    customText: "#0f172a",
-    customMuted: "#64748b",
-    customBorder: "#cbd5e1",
-    customBackdrop: "#111827",
-    customBackdropOpacity: 32
+  "catppuccin": {
+    "accent": "#cba6f7",
+    "bg": "#1e1e2e",
+    "header-bg": "#1e1e2e",
+    "frame-bg": "#181825",
+    "text": "#cdd6f4",
+    "muted": "#a6adc8",
+    "border": "#45475a",
+    "button-bg": "#313244",
+    "button-hover": "#45475a",
+    "backdrop-color": "#11111b"
   },
-  dark: {
-    customAccent: "#38bdf8",
-    customBackground: "#111827",
-    customHeader: "#111827",
-    customFrame: "#0f172a",
-    customText: "#f8fafc",
-    customMuted: "#94a3b8",
-    customBorder: "#475569",
-    customBackdrop: "#030712",
-    customBackdropOpacity: 56
+  "nordic": {
+    "accent": "#88c0d0",
+    "bg": "#242933",
+    "header-bg": "#1e222a",
+    "frame-bg": "#191d24",
+    "text": "#bbc3d4",
+    "muted": "#bbc3d4",
+    "border": "#434c5e",
+    "button-bg": "#2e3440",
+    "button-hover": "#3b4252",
+    "backdrop-color": "#191d24"
   },
-  graphite: {
-    customAccent: "#f97316",
-    customBackground: "#1f2937",
-    customHeader: "#242f3f",
-    customFrame: "#111827",
-    customText: "#f9fafb",
-    customMuted: "#cbd5e1",
-    customBorder: "#6b7280",
-    customBackdrop: "#0f172a",
-    customBackdropOpacity: 38
+  "nord": {
+    "accent": "#88c0d0",
+    "bg": "#2e3440",
+    "header-bg": "#3b4252",
+    "frame-bg": "#2e3440",
+    "text": "#eceff4",
+    "muted": "#d8dee9",
+    "border": "#4c566a",
+    "button-bg": "#3b4252",
+    "button-hover": "#434c5e",
+    "backdrop-color": "#2e3440"
   },
-  mint: {
-    customAccent: "#0f766e",
-    customBackground: "#f0fdfa",
-    customHeader: "#f8fffd",
-    customFrame: "#ffffff",
-    customText: "#042f2e",
-    customMuted: "#3f6f69",
-    customBorder: "#5eead4",
-    customBackdrop: "#082f49",
-    customBackdropOpacity: 28
+  "gruvbox": {
+    "accent": "#fabd2f",
+    "bg": "#282828",
+    "header-bg": "#282828",
+    "frame-bg": "#1d2021",
+    "text": "#ebdbb2",
+    "muted": "#bdae93",
+    "border": "#665c54",
+    "button-bg": "#3c3836",
+    "button-hover": "#504945",
+    "backdrop-color": "#1d2021"
   },
-  catppuccin: {
-    customAccent: "#cba6f7",
-    customBackground: "#1e1e2e",
-    customHeader: "#1e1e2e",
-    customFrame: "#181825",
-    customText: "#cdd6f4",
-    customMuted: "#a6adc8",
-    customBorder: "#cba6f7",
-    customBackdrop: "#11111b",
-    customBackdropOpacity: 48
+  "tokyoNight": {
+    "accent": "#7aa2f7",
+    "bg": "#1a1b26",
+    "header-bg": "#1a1b26",
+    "frame-bg": "#16161e",
+    "text": "#c0caf5",
+    "muted": "#a9b1d6",
+    "border": "#3b4261",
+    "button-bg": "#24283b",
+    "button-hover": "#292e42",
+    "backdrop-color": "#16161e"
   },
-  gruvbox: {
-    customAccent: "#fabd2f",
-    customBackground: "#282828",
-    customHeader: "#282828",
-    customFrame: "#1d2021",
-    customText: "#fbf1c7",
-    customMuted: "#bdae93",
-    customBorder: "#d79921",
-    customBackdrop: "#282828",
-    customBackdropOpacity: 50
+  "dracula": {
+    "accent": "#bd93f9",
+    "bg": "#282a36",
+    "header-bg": "#282a36",
+    "frame-bg": "#282a36",
+    "text": "#f8f8f2",
+    "muted": "#f8f8f2",
+    "border": "#6272a4",
+    "button-bg": "#44475a",
+    "button-hover": "#6272a4",
+    "backdrop-color": "#282a36"
   },
-  dracula: {
-    customAccent: "#bd93f9",
-    customBackground: "#282a36",
-    customHeader: "#282a36",
-    customFrame: "#21222c",
-    customText: "#f8f8f2",
-    customMuted: "#bdc2d8",
-    customBorder: "#bd93f9",
-    customBackdrop: "#282a36",
-    customBackdropOpacity: 52
+  "everforest": {
+    "accent": "#a7c080",
+    "bg": "#2d353b",
+    "header-bg": "#343f44",
+    "frame-bg": "#232a2e",
+    "text": "#d3c6aa",
+    "muted": "#9da9a0",
+    "border": "#56635f",
+    "button-bg": "#343f44",
+    "button-hover": "#3d484d",
+    "backdrop-color": "#232a2e"
   }
 };
 
+function applyPeekTheme(element, theme, settings = PEEK_DEFAULT_SETTINGS) {
+  const custom = theme === "custom" ? cleanPeekSettings(settings) : null;
+  const palette = custom ? {
+    accent: custom.customAccent,
+    bg: custom.customBackground,
+    "header-bg": custom.customHeader,
+    "frame-bg": custom.customFrame,
+    text: custom.customText,
+    muted: custom.customMuted,
+    border: custom.customBorder,
+    "button-bg": custom.customHeader,
+    "button-hover": custom.customBackground,
+    "backdrop-color": custom.customBackdrop
+  } : PEEK_THEME_PRESETS[theme] || PEEK_THEME_PRESETS.catppuccin;
+  const opacity = (custom ? custom.customBackdropOpacity : 50) / 100;
+  for (const [role, color] of Object.entries(palette)) {
+    if (role === "backdrop-color") {
+      const rgb = [1, 3, 5].map(offset => parseInt(color.slice(offset, offset + 2), 16));
+      element.style.setProperty("--peek-backdrop-color", rgb.join(", "));
+      element.style.setProperty("--peek-backdrop", `rgba(${rgb.join(", ")}, ${opacity})`);
+    } else {
+      element.style.setProperty(`--peek-${role}`, color);
+    }
+  }
+  element.style.setProperty("--peek-settings-text", palette.text);
+  element.style.setProperty("--peek-panel-shadow", "0 24px 90px rgba(0, 0, 0, 0.55)");
+  element.style.setProperty("--peek-select-arrow", `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='${palette.muted.replace('#', '%23')}' stroke-width='1.5' fill='none'/%3E%3C/svg%3E")`);
+  const [r, g, b] = [1, 3, 5].map(offset => parseInt(palette.bg.slice(offset, offset + 2), 16));
+  element.style.setProperty("color-scheme", (0.2126 * r + 0.7152 * g + 0.0722 * b) > 150 ? "light" : "dark");
+  if (settings.backdropMode !== "blur") {
+    element.style.setProperty("--peek-backdrop-opacity", String(custom ? opacity : settings.backdropOpacity / 100));
+  }
+}
+
 function cleanPeekSettings(settings) {
   const next = { ...PEEK_DEFAULT_SETTINGS, ...settings };
+  // Drop the removed hover option when importing older settings.
+  delete next.hoverPreviewDelay;
 
   if (next.position === "right") {
     next.position = "topRight";
@@ -181,7 +224,6 @@ function cleanPeekSettings(settings) {
   next.domainList = typeof next.domainList === "string" ? next.domainList : PEEK_DEFAULT_SETTINGS.domainList;
   next.domainRules = typeof next.domainRules === "string" ? next.domainRules : PEEK_DEFAULT_SETTINGS.domainRules;
   next.compactFallbackDomains = typeof next.compactFallbackDomains === "string" ? next.compactFallbackDomains : PEEK_DEFAULT_SETTINGS.compactFallbackDomains;
-  next.hoverPreviewDelay = clampNumber(next.hoverPreviewDelay, 0, 3000, PEEK_DEFAULT_SETTINGS.hoverPreviewDelay);
   next.backdropOpacity = clampNumber(next.backdropOpacity, 0, 100, PEEK_DEFAULT_SETTINGS.backdropOpacity);
   next.backdropBlur = clampNumber(next.backdropBlur, 0, 100, PEEK_DEFAULT_SETTINGS.backdropBlur);
   if (!PEEK_SETTING_OPTIONS.backdropMode.includes(next.backdropMode)) {

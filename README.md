@@ -27,6 +27,11 @@ Extension Chrome Manifest V3 inspirée du Peek Preview d'Arc.
   contextuel de l'onglet pour créer une vue partagée native, si disponible.
 - Boutons de la barre d'outils : paramètres, précédent/suivant, actualiser,
   copier l'URL, épingler, fenêtre compacte, vue partagée, nouvel onglet, fermer.
+- Faire glisser l’en-tête pour déplacer l’aperçu ; sa position est mémorisée.
+  Les bords et les coins permettent de le redimensionner en restant dans la
+  zone visible. Ces gestes passent la position en mode personnalisé ; choisir
+  une position prédéfinie dans les réglages pour retrouver un placement automatique.
+  Le mode plein écran conserve sa taille et sa position fixes.
 - **Alt + Shift + P** prévisualise le dernier lien survolé.
 - Clic droit sur un lien → **Preview with Preview link tab**.
 
@@ -34,12 +39,21 @@ Le raccourci global se modifie dans `chrome://extensions/shortcuts`. Tant qu'un
 aperçu est ouvert, les touches `R`, `O`, `C`, `P` et les flèches gauche/droite
 respectivement actualisent, ouvrent dans un onglet, copient, épinglent et
 parcourent l'historique de l'aperçu.
+Ces raccourcis d'action sont ignorés dans les champs de saisie et les éditeurs
+de texte enrichi. Pendant une composition de texte (IME), Échap est également
+ignoré pour permettre d'annuler la composition sans fermer l'aperçu.
+Lorsque la page intégrée a le focus, seul Échap est relayé vers l'aperçu.
 
 Chaque réglage d'ouverture est disponible dans **Comportement** et **Apparence** :
 mode d'ouverture (intégré, fenêtre compacte, vue partagée), taille, position,
-thème, animation, cadre, ombre, déclencheur au clic, aperçu au survol, clic
+thème, animation, cadre, ombre, déclencheur au clic, clic
 molette, fermeture au clic extérieur ou avec Échap, arrière-plan (assombrissement
 ou flou, intensité réglable) et fermeture après ouverture externe.
+
+Les thèmes disponibles sont **Catppuccin, Nordic, Nord, Gruvbox, Tokyo Night,
+Dracula et Everforest**, avec Catppuccin Mocha par défaut. Le choix
+**Personnalisé** permet aussi de définir ses couleurs manuellement. Les variantes et les
+sources des palettes sont détaillées dans [THEMES.md](THEMES.md).
 
 ## Règles par domaine
 
