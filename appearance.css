@@ -1,0 +1,109 @@
+/* Shared decorations: the miniature uses the same materials at a smaller scale. */
+:where(#peek-preview-extension-root, .theme-preview) {
+  --peek-decoration-scale: 1;
+  --peek-radius: calc(16px * var(--peek-decoration-scale));
+  --peek-frame-padding: 0px;
+  --peek-frame-border-width: 1px;
+  --peek-frame-border-style: solid;
+  --peek-frame-border-color: color-mix(in srgb, var(--peek-border) 85%, var(--peek-text) 15%);
+  --peek-frame-background: var(--peek-bg);
+  --peek-frame-header-background: var(--peek-header-bg);
+  --peek-frame-divider: var(--peek-border);
+  --peek-shadow-rgb: 0, 0, 0;
+  --peek-theme-shadow-opacity: .38;
+  --peek-panel-shadow:
+    0 calc(8px * var(--peek-decoration-scale)) calc(24px * var(--peek-decoration-scale)) rgba(var(--peek-shadow-rgb), .16),
+    0 calc(28px * var(--peek-decoration-scale)) calc(72px * var(--peek-decoration-scale)) rgba(var(--peek-shadow-rgb), var(--peek-theme-shadow-opacity));
+}
+
+.theme-preview { --peek-decoration-scale: .42; }
+
+:where(#peek-preview-extension-root, .theme-preview)[data-frame-style="square"] {
+  --peek-radius: 0px;
+  --peek-frame-border-color: color-mix(in srgb, var(--peek-border) 65%, var(--peek-text) 35%);
+}
+
+:where(#peek-preview-extension-root, .theme-preview)[data-frame-style="roundedLarge"] {
+  --peek-radius: calc(28px * var(--peek-decoration-scale));
+  --peek-frame-padding: calc(8px * var(--peek-decoration-scale));
+  --peek-frame-background: color-mix(in srgb, var(--peek-accent) 12%, var(--peek-bg));
+  --peek-frame-border-color: color-mix(in srgb, var(--peek-accent) 28%, var(--peek-border));
+}
+
+:where(#peek-preview-extension-root, .theme-preview)[data-frame-style="glass"] {
+  --peek-radius: calc(22px * var(--peek-decoration-scale));
+  --peek-frame-padding: calc(6px * var(--peek-decoration-scale));
+  --peek-frame-border-color: color-mix(in srgb, var(--peek-text) 25%, transparent);
+  --peek-frame-background:
+    linear-gradient(135deg, color-mix(in srgb, var(--peek-text) 12%, transparent), transparent 55%),
+    color-mix(in srgb, var(--peek-bg) 72%, transparent);
+  --peek-frame-header-background: color-mix(in srgb, var(--peek-header-bg) 72%, transparent);
+}
+
+:where(#peek-preview-extension-root, .theme-preview)[data-frame-style="outlined"] {
+  --peek-radius: calc(14px * var(--peek-decoration-scale));
+  --peek-frame-border-width: 2px;
+  --peek-frame-border-color: var(--peek-accent);
+  --peek-frame-header-background: color-mix(in srgb, var(--peek-accent) 9%, var(--peek-header-bg));
+  --peek-frame-divider: color-mix(in srgb, var(--peek-accent) 35%, var(--peek-border));
+}
+
+:where(#peek-preview-extension-root, .theme-preview)[data-frame-style="borderless"] {
+  --peek-radius: calc(12px * var(--peek-decoration-scale));
+  --peek-frame-border-width: 0px;
+  --peek-frame-divider: transparent;
+}
+
+:where(#peek-preview-extension-root, .theme-preview)[data-frame-style="double"] {
+  --peek-radius: calc(18px * var(--peek-decoration-scale));
+  --peek-frame-border-width: max(3px, calc(4px * var(--peek-decoration-scale)));
+  --peek-frame-border-style: double;
+  --peek-frame-border-color: color-mix(in srgb, var(--peek-accent) 75%, var(--peek-border));
+}
+
+:where(#peek-preview-extension-root, .theme-preview)[data-panel-shadow="none"] {
+  --peek-panel-shadow: none;
+}
+
+:where(#peek-preview-extension-root, .theme-preview)[data-panel-shadow="subtle"] {
+  --peek-panel-shadow:
+    0 calc(2px * var(--peek-decoration-scale)) calc(6px * var(--peek-decoration-scale)) rgba(var(--peek-shadow-rgb), .12),
+    0 calc(6px * var(--peek-decoration-scale)) calc(16px * var(--peek-decoration-scale)) rgba(var(--peek-shadow-rgb), .10);
+}
+
+:where(#peek-preview-extension-root, .theme-preview)[data-panel-shadow="medium"] {
+  --peek-panel-shadow:
+    0 calc(4px * var(--peek-decoration-scale)) calc(10px * var(--peek-decoration-scale)) rgba(var(--peek-shadow-rgb), .18),
+    0 calc(14px * var(--peek-decoration-scale)) calc(36px * var(--peek-decoration-scale)) rgba(var(--peek-shadow-rgb), .24);
+}
+
+:where(#peek-preview-extension-root, .theme-preview)[data-panel-shadow="strong"] {
+  --peek-panel-shadow:
+    0 calc(8px * var(--peek-decoration-scale)) calc(18px * var(--peek-decoration-scale)) rgba(var(--peek-shadow-rgb), .26),
+    0 calc(28px * var(--peek-decoration-scale)) calc(56px * var(--peek-decoration-scale)) rgba(var(--peek-shadow-rgb), .38);
+}
+
+:where(#peek-preview-extension-root, .theme-preview)[data-panel-shadow="dramatic"] {
+  --peek-panel-shadow:
+    0 calc(16px * var(--peek-decoration-scale)) calc(28px * var(--peek-decoration-scale)) calc(-8px * var(--peek-decoration-scale)) rgba(var(--peek-shadow-rgb), .36),
+    0 calc(48px * var(--peek-decoration-scale)) calc(88px * var(--peek-decoration-scale)) calc(-12px * var(--peek-decoration-scale)) rgba(var(--peek-shadow-rgb), .52);
+}
+
+:where(#peek-preview-extension-root, .theme-preview)[data-panel-shadow="ambient"] {
+  --peek-panel-shadow: 0 0 calc(64px * var(--peek-decoration-scale)) calc(12px * var(--peek-decoration-scale)) rgba(var(--peek-shadow-rgb), .28);
+}
+
+:where(#peek-preview-extension-root, .theme-preview)[data-panel-shadow="crisp"] {
+  --peek-panel-shadow: calc(8px * var(--peek-decoration-scale)) calc(8px * var(--peek-decoration-scale)) 0 color-mix(in srgb, var(--peek-accent) 40%, var(--peek-bg));
+}
+
+:where(#peek-preview-extension-root, .theme-preview)[data-panel-shadow="glow"] {
+  --peek-panel-shadow:
+    0 0 calc(18px * var(--peek-decoration-scale)) color-mix(in srgb, var(--peek-accent) 45%, transparent),
+    0 0 calc(48px * var(--peek-decoration-scale)) calc(6px * var(--peek-decoration-scale)) color-mix(in srgb, var(--peek-accent) 22%, transparent);
+}
+
+:where(#peek-preview-extension-root, .theme-preview)[data-size="full"] {
+  --peek-radius: 0px;
+  --peek-frame-padding: 0px;
+}

@@ -29,13 +29,14 @@ function storageHarness(initial = {}) {
   };
 }
 
-function loadWorker(storage) {
+function loadWorker(storage, { firefox = false } = {}) {
   const event = () => ({ addListener(listener) { this.listener = listener; } });
   let nextWindow = 10;
   const sent = [];
   const chrome = {
     storage: { session: storage.session },
-    runtime: { onInstalled: event(), onMessage: event() },
+    runtime: { onInstalled: event(), onMessage: event(), getURL: name => `chrome-extension://test/${name}` },
+    action: { onClicked: event() },
     contextMenus: { onClicked: event() },
     commands: { onCommand: event() },
     windows: {
@@ -54,15 +55,80 @@ function loadWorker(storage) {
       async sendMessage(id, message) { sent.push({ id, ...message }); }
     }
   };
-  const context = vm.createContext({ chrome, URL });
-  context.importScripts = name => vm.runInContext(
+  const context = vm.createContext(firefox ? { browser: chrome, URL } : { chrome, URL });
+  const loadScript = name => vm.runInContext(
     fs.readFileSync(path.join(__dirname, '..', name), 'utf8'), context
   );
+  if (firefox) loadScript('settings.js');
+  else context.importScripts = loadScript;
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'background.js'), 'utf8'), context);
   return { api: context, chrome, sent };
 }
 
 const request = { url: 'https://example.com/', settings: { size: 'medium', position: 'center' } };
+
+function settingsWindowHarness(source, workArea, options) {
+  const worker = loadWorker(storageHarness(), options);
+  const windows = [];
+  const creations = [];
+  const updates = [];
+  worker.chrome.windows.get = async () => source;
+  worker.chrome.windows.getAll = async () => windows;
+  worker.chrome.windows.create = async options => {
+    creations.push(options);
+    const window = { ...options, id: 20 + windows.length, tabs: [{ url: options.url }] };
+    windows.push(window);
+    return window;
+  };
+  worker.chrome.windows.update = async (id, options) => {
+    updates.push({ id, ...options });
+    return Object.assign(windows.find(window => window.id === id), options);
+  };
+  if (workArea) worker.chrome.system = { display: { getInfo: async () => [{ workArea }] } };
+  return { ...worker, windows, creations, updates };
+}
+
+test('les paramètres s’ouvrent centrés sur le navigateur avec le contexte de l’onglet', async () => {
+  const worker = settingsWindowHarness({ left: 100, top: 50, width: 1400, height: 900 });
+  await worker.api.openSettingsWindow({ id: 12, windowId: 7 });
+  const options = worker.creations[0];
+  assert.equal(options.width, 1040);
+  assert.equal(options.height, 760);
+  assert.equal(options.left, 280);
+  assert.equal(options.top, 120);
+  assert.equal(options.url, 'chrome-extension://test/popup.html?sourceTabId=12');
+  assert.equal(options.type, 'popup');
+});
+
+test('les paramètres restent dans la zone utilisable d’un petit écran secondaire', async () => {
+  const workArea = { left: -640, top: 0, width: 640, height: 480 };
+  const worker = settingsWindowHarness({ left: -620, top: 10, width: 620, height: 450 }, workArea);
+  await worker.api.openSettingsWindow({ id: 12, windowId: 7 });
+  const options = worker.creations[0];
+  assert.equal(options.width, 592);
+  assert.equal(options.height, 432);
+  assert.ok(options.left >= workArea.left);
+  assert.ok(options.top >= workArea.top);
+  assert.ok(options.left + options.width <= 0);
+  assert.ok(options.top + options.height <= 480);
+});
+
+test('des clics répétés réutilisent les paramètres sans recharger les changements en cours', async () => {
+  const worker = settingsWindowHarness({ left: 0, top: 0, width: 1400, height: 900 });
+  const tab = { id: 12, windowId: 7 };
+  await Promise.all([worker.api.openSettingsWindow(tab), worker.api.openSettingsWindow(tab)]);
+  assert.equal(worker.creations.length, 1);
+  assert.equal(worker.updates.length, 1);
+  worker.windows[0].tabs[0] = { pendingUrl: worker.creations[0].url };
+  await worker.api.openSettingsWindow(tab);
+  assert.equal(worker.creations.length, 1, 'une page encore en chargement est réutilisée');
+  worker.windows[0].state = 'minimized';
+  const restarted = loadWorker(storageHarness());
+  Object.assign(restarted.chrome.windows, worker.chrome.windows);
+  await restarted.api.openSettingsWindow(tab);
+  assert.equal(worker.creations.length, 1);
+  assert.equal(worker.updates.at(-1).state, 'normal');
+});
 
 test('deux ouvertures simultanées restent reconnues après redémarrage du worker', async () => {
   const storage = storageHarness();
@@ -180,8 +246,8 @@ test('un échec de création split est transmis au script sans ouverture de seco
   assert.equal(creations, 1);
 });
 
-function siteHarness() {
-  const worker = loadWorker(storageHarness());
+function siteHarness(options) {
+  const worker = loadWorker(storageHarness(), options);
   const session = {};
   const local = { domainRules: 'other.example = overlay' };
   const tabs = [
@@ -261,4 +327,59 @@ test('un échec de stockage de pause ou de règle est signalé et ne bloque pas 
   assert.equal((await message({ type: 'SET_DOMAIN_RULE', url: 'https://example.com/', mode: 'compact' })).ok, false);
   configure(chrome);
   assert.equal((await message({ type: 'SET_DOMAIN_RULE', url: 'https://example.com/', mode: 'compact' })).ok, true);
+});
+
+test('Firefox : scripts sans importScripts, paramètres et fenêtres compactes sur l’écran source', async () => {
+  const source = { left: -1600, top: 100, width: 1400, height: 900 };
+  const worker = settingsWindowHarness(source, null, { firefox: true });
+  assert.equal(worker.api.importScripts, undefined);
+  assert.equal(worker.api.chrome, undefined);
+  worker.chrome.runtime.getURL = name => `moz-extension://test/${name}`;
+  await worker.api.openSettingsWindow({ id: 12, windowId: 7 });
+  assert.equal(worker.creations[0].url, 'moz-extension://test/popup.html?sourceTabId=12');
+  assert.equal(worker.creations[0].left, -1420);
+  for (const position of ['topLeft', 'topRight', 'bottomLeft', 'bottomRight', 'center']) {
+    await worker.api.openCompactWindow({
+      ...request, settings: { size: 'full', position }
+    }, { tab: { windowId: 7 } });
+    const created = worker.creations.at(-1);
+    assert.equal(created.width, 1352);
+    assert.equal(created.height, 828);
+    assert.ok(created.left >= source.left);
+    assert.ok(created.top >= source.top);
+    assert.ok(created.left + created.width <= source.left + source.width);
+    assert.ok(created.top + created.height <= source.top + source.height);
+  }
+});
+
+test('Firefox : le menu contextuel et la commande utilisent les API à promesses', async () => {
+  const { chrome: api, sent } = loadWorker(storageHarness(), { firefox: true });
+  const menus = [];
+  api.contextMenus.removeAll = async () => {};
+  api.contextMenus.create = options => { menus.push(options); return options.id; };
+  api.tabs.query = async () => [{ id: 42 }];
+  api.runtime.onInstalled.listener();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(menus[0].id, 'peek-preview-link');
+  api.contextMenus.onClicked.listener({ menuItemId: menus[0].id, linkUrl: request.url }, { id: 42 });
+  api.commands.onCommand.listener('preview-link');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(sent.map(item => item.type), ['PREVIEW_URL', 'PREVIEW_HOVERED_LINK']);
+  const response = await new Promise(resolve => {
+    api.runtime.onMessage.listener({ type: 'OPEN_URL_IN_SPLIT_VIEW', url: request.url }, { tab: { id: 42 } }, resolve);
+  });
+  assert.equal(response.ok, false);
+  assert.match(response.error, /vue partagée native/);
+});
+
+test('Firefox : pause de site, règles et stockage de session après redémarrage', async () => {
+  const worker = siteHarness({ firefox: true });
+  assert.equal((await worker.message({ type: 'SET_SITE_PAUSE', tabId: 1, paused: true })).ok, true);
+  assert.deepEqual(worker.sent.map(item => item.id), [1, 2]);
+  const restarted = loadWorker(storageHarness(), { firefox: true });
+  worker.configure(restarted.chrome);
+  assert.equal((await restarted.api.handleSiteSettings({ type: 'GET_SITE_PAUSE', tabId: 2 }, {})).paused, true);
+  assert.equal((await restarted.api.handleSiteSettings({ type: 'GET_SITE_PAUSE', tabId: 4 }, {})).paused, false);
+  await worker.message({ type: 'SET_DOMAIN_RULE', url: request.url, mode: 'compact' });
+  assert.match(worker.local.domainRules, /example.com = compact/);
 });

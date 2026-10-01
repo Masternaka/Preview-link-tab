@@ -1,14 +1,56 @@
 # Preview link tab
 
-Extension Chrome Manifest V3 inspirée du Peek Preview d'Arc.
+Extension Manifest V3 pour Chrome/Chromium et Firefox sur ordinateur, inspirée du Peek Preview d'Arc.
 
 ## Installation
+
+### Chrome / Chromium
 
 1. Ouvrir `chrome://extensions`.
 2. Activer le **Mode développeur**.
 3. Cliquer sur **Charger l'extension non empaquetée**.
 4. Sélectionner ce dossier.
 5. Sur une page web, **Alt + clic** sur un lien pour le prévisualiser (le raccourci est configurable).
+
+### Firefox
+
+La version Firefox utilise les mêmes scripts et styles, avec un manifeste adapté.
+Firefox **140 ou ultérieur** est ciblé sur ordinateur.
+
+1. Avec Node.js installé, lancer `npm run build:firefox` dans ce dossier.
+2. Ouvrir `about:debugging#/runtime/this-firefox` dans Firefox.
+3. Cliquer sur **Charger un module complémentaire temporaire**.
+4. Sélectionner `dist/firefox/manifest.json`.
+5. Sur une page web HTTP ou HTTPS, essayer **Alt + clic** sur un lien.
+
+Le chargement temporaire dure jusqu'au redémarrage de Firefox. Après chaque
+modification des sources, relancer la génération puis cliquer sur **Recharger**
+dans `about:debugging`. Recharger aussi les pages web déjà ouvertes.
+Une installation permanente nécessitera une version signée par Mozilla.
+
+La version Firefox conserve les aperçus intégrés, les fenêtres compactes,
+les paramètres, les thèmes et les règles par site. Le script d'arrière-plan utilise
+`background.scripts` et les API à promesses de Firefox. Sans API d'affichage,
+le placement et la taille des fenêtres compactes se basent sur la fenêtre du
+navigateur, y compris sur un écran secondaire. Le mode plein écran compact
+remplit cette fenêtre avec des marges ; il ne passe pas le navigateur en plein écran.
+La vue partagée conserve le contrôle de disponibilité de l'API native et affiche
+le message explicatif si celle-ci est absente.
+
+Les permissions d'accès aux sites peuvent être ajustées dans `about:addons`.
+Les pages internes du navigateur et certains sites protégés par Firefox ne
+permettent pas l'exécution des scripts de l'extension.
+
+### Générer les deux versions
+
+```bash
+npm run build
+```
+
+Cette commande copie les fichiers nécessaires dans `dist/chrome` et
+`dist/firefox`. `manifest.json` reste la source du manifeste Chrome ;
+`manifests/firefox.json` remplace les clés propres à Firefox. Les dossiers
+générés ne sont pas versionnés. Les archives et la publication restent à préparer.
 
 ## Utilisation
 
@@ -35,7 +77,9 @@ Extension Chrome Manifest V3 inspirée du Peek Preview d'Arc.
 - **Alt + Shift + P** prévisualise le dernier lien survolé.
 - Clic droit sur un lien → **Preview with Preview link tab**.
 
-Le raccourci global se modifie dans `chrome://extensions/shortcuts`. Tant qu'un
+Le raccourci global se modifie dans `chrome://extensions/shortcuts` sur Chromium,
+ou dans `about:addons` → menu engrenage → **Gérer les raccourcis des extensions**
+sur Firefox. Tant qu'un
 aperçu est ouvert, les touches `R`, `O`, `C`, `P` et les flèches gauche/droite
 respectivement actualisent, ouvrent dans un onglet, copient, épinglent et
 parcourent l'historique de l'aperçu.
@@ -44,7 +88,13 @@ de texte enrichi. Pendant une composition de texte (IME), Échap est également
 ignoré pour permettre d'annuler la composition sans fermer l'aperçu.
 Lorsque la page intégrée a le focus, seul Échap est relayé vers l'aperçu.
 
-La popup regroupe les réglages dans quatre rubriques : **Utilisation**, **Apparence**,
+Cliquer sur l’icône de l’extension ouvre une fenêtre de paramètres centrée sur
+la fenêtre du navigateur. Sa taille cible est de 1040 × 760 pixels, adaptée à
+l’espace disponible. Elle est redimensionnable et reste ouverte quand on revient
+à une page web. Un nouveau clic depuis le même onglet ramène la fenêtre existante
+au premier plan sans perdre les modifications en cours.
+
+Les paramètres sont regroupés dans quatre rubriques : **Utilisation**, **Apparence**,
 **Sites** et **Données**. Le bouton de sauvegarde reste toujours visible ; les
 options détaillées se déplient au besoin. Les réglages disponibles comprennent :
 mode d'ouverture (intégré, fenêtre compacte, vue partagée), taille, position,
@@ -59,7 +109,7 @@ sources des palettes sont détaillées dans [THEMES.md](THEMES.md).
 
 ## Règles par domaine
 
-Dans la popup, ouvrir **Sites → Règles par domaine** et ajouter une règle par ligne sous la forme
+Dans les paramètres, ouvrir **Sites → Règles par domaine** et ajouter une règle par ligne sous la forme
 `domaine = overlay`, `domaine = compact`, `domaine = split` ou `domaine = blocked`. Une règle de
 sous-domaine plus spécifique est prioritaire. Les listes de domaines acceptent
 aussi des URL et la forme `*.domaine`.
@@ -68,19 +118,19 @@ Une **liste noire** désactive l'aperçu sur les domaines listés, une **liste
 blanche** ne l'autorise que sur ceux-ci. L'option **Ouverture compacte
 automatique pour les sites bloqués** bascule vers une fenêtre compacte pour les
 sites connus comme incompatibles, complétés par une liste de domaines.
-Cliquer sur l'icône de l'extension ouvre tous les réglages, avec export et import
+La fenêtre donne accès à tous les réglages, avec export et import
 au format JSON.
 
 ## Règles rapides et pause
 
 Dans l’aperçu, ouvrir **Paramètres → Comportement → Toujours ouvrir ce site en…**
-pour mémoriser un mode pour le domaine du lien affiché. Dans la popup, la commande
+pour mémoriser un mode pour le domaine du lien affiché. Dans les paramètres, la commande
 **Ouverture des liens vers ce site** vise le domaine de l’onglet courant. Choisir
 **Réglage général / règle héritée** et mémoriser supprime la règle exacte ; une
 règle de domaine parent peut encore s’appliquer. La vue partagée reste native et
 nécessite l’API du navigateur.
 
-**Mettre en pause sur ce site**, dans la rubrique **Sites** de la popup, suspend les déclencheurs
+**Mettre en pause sur ce site**, dans la rubrique **Sites** des paramètres, suspend les déclencheurs
 sur les pages du même nom d’hôte. Les clics gardent leur comportement normal.
 Le bouton devient **Réactiver sur ce site** et l’icône affiche le badge **II**.
 La pause ne ferme pas les aperçus déjà ouverts. Elle s’applique aux onglets du
@@ -89,9 +139,27 @@ au redémarrage du navigateur ou au rechargement de l’extension.
 
 ## Apparence et thèmes personnels
 
-La miniature d’**Apparence** montre immédiatement les couleurs, dimensions,
-position, cadre, ombre et arrière-plan. **Rejouer l’animation** permet d’essayer
+Dans **Apparence**, les réglages défilent à gauche et la miniature reste visible
+à droite, avec le bouton Sauvegarder toujours accessible en bas. La miniature
+reste au-dessus des réglages si la fenêtre est étroite, sans défiler avec eux. Elle
+montre immédiatement les couleurs, dimensions, position, cadre, ombre et
+arrière-plan. Changer l’animation ou sa vitesse rejoue
+automatiquement la miniature. **Rejouer l’animation** permet aussi d’essayer
 la transition choisie ; aucune page externe n’est chargée par cet exemple.
+Les glissements déplacent le panneau horizontalement ou verticalement, le zoom
+agrandit le panneau, le rebond dépasse brièvement sa taille finale, le fondu agit
+sur l’opacité et le flou fait progressivement apparaître une image nette.
+La préférence système de réduction des animations désactive ces effets.
+
+Les cadres proposent **Arrondi, Carré, Verre dépoli, Contour accent, Arrondi
+généreux, Sans bordure et Double contour**. Le verre et l’arrondi généreux ajoutent
+une marge visible autour du contenu ; les contours suivent la couleur d’accent.
+
+Les ombres proposent **Selon le thème, Aucune, Légère, Moyenne, Forte, Flottante,
+Halo diffus, Décalage net et Lueur accent**. Le halo entoure le panneau, le
+décalage net dessine une ombre sans flou et la lueur reprend la couleur d’accent.
+Le choix d’ombre reste prioritaire lors d’un changement de thème. La miniature
+et l’aperçu partagent les mêmes styles de cadre et d’ombre.
 
 **Copier vers Personnalisé** reprend les couleurs du thème sélectionné. Modifier
 les champs, saisir un nom puis cliquer **Enregistrer ce thème** ajoute une entrée
@@ -140,6 +208,13 @@ npm test
 Le workflow [Tests](.github/workflows/tests.yml) lance cette commande sur Node.js
 22 et 24 à chaque push et pull request. Aucune installation de dépendances n’est
 nécessaire pour la suite actuelle.
+
+Les tests couvrent aussi la génération des deux versions et les API Firefox
+simulées. Le paquet Firefox a été validé avec `web-ext lint` : aucune erreur,
+trois avertissements (deux insertions de HTML construit par le code et une
+compatibilité minimale Android ; seule la version ordinateur est ciblée).
+Les essais visuels dans Firefox restent à faire : aperçu et Échap, paramètres,
+fenêtre compacte, copie d'URL, pause par site et raccourci global.
 
 Après avoir commité et poussé les changements sur GitHub, ouvrir l’onglet
 **Actions → Tests** pour consulter le résultat. Une coche verte indique que les

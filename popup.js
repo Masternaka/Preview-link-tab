@@ -62,7 +62,7 @@ function initSiteControls() {
     button.textContent = activeSitePaused ? "Réactiver sur ce site" : "Mettre en pause sur ce site";
     button.setAttribute("aria-pressed", String(activeSitePaused));
   };
-  chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+  const loadSite = tabs => {
     if (chrome.runtime.lastError) { status.textContent = "Impossible de lire le site courant."; return; }
     const tab = tabs[0];
     try {
@@ -80,7 +80,14 @@ function initSiteControls() {
       button.disabled = false;
       displayPause();
     });
-  });
+  };
+  const sourceTab = new URL(window.location.href).searchParams.get("sourceTabId");
+  if (sourceTab !== null && /^\d+$/.test(sourceTab)) {
+    // The active tab in this window is the settings page itself.
+    chrome.tabs.get(Number(sourceTab), tab => loadSite(tab ? [tab] : []));
+  } else {
+    chrome.tabs.query({ active: true, currentWindow: true }, loadSite);
+  }
   button.addEventListener("click", () => {
     if (!activeSite) return;
     button.disabled = true;
@@ -136,6 +143,10 @@ function switchSection(sectionId) {
     section.classList.toggle("form-section-active", active);
     section.hidden = !active;
   });
+  const workspace = document.getElementById("settings-workspace");
+  if (workspace) workspace.dataset.section = sectionId;
+  const preview = document.getElementById("appearance-preview");
+  if (preview) preview.hidden = sectionId !== "appearance";
   const scrollArea = document.querySelector(".settings-scroll");
   if (scrollArea) scrollArea.scrollTop = 0;
 }
@@ -432,8 +443,8 @@ function updateAppearancePreview() {
   const settings = getFormSettings();
   applyPeekTheme(preview, settings.theme, settings);
   preview.dataset.size = settings.size;
-  preview.dataset.frame = settings.frameStyle;
-  preview.dataset.shadow = settings.panelShadow;
+  preview.dataset.frameStyle = settings.frameStyle;
+  preview.dataset.panelShadow = settings.panelShadow;
   preview.dataset.animation = settings.animation;
   preview.dataset.position = settings.position;
   preview.dataset.backdrop = settings.backdropMode;

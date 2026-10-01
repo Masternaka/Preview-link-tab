@@ -89,6 +89,30 @@ test("chaque thème remplace toute la palette sans couleurs résiduelles", () =>
   }
 });
 
+test('changer de thème préserve le choix d’ombre au lieu de le remplacer', () => {
+  const values = new Map([['--peek-panel-shadow', 'none']]);
+  const node = { style: { setProperty: (key, value) => values.set(key, value) } };
+  settings.applyPeekTheme(node, 'nord');
+  assert.equal(values.get('--peek-panel-shadow'), 'none');
+  assert.equal(values.get('--peek-theme-shadow-opacity'), '.42');
+  const light = settings.cleanPeekSettings({ theme: 'custom', customBackground: '#fafafa' });
+  settings.applyPeekTheme(node, 'custom', light);
+  assert.equal(values.get('--peek-panel-shadow'), 'none');
+  assert.equal(values.get('--peek-theme-shadow-opacity'), '.24');
+});
+
+test('les nouveaux cadres et ombres survivent à la sauvegarde et à l’import', () => {
+  for (const frameStyle of ['roundedLarge', 'borderless', 'double']) {
+    for (const panelShadow of ['ambient', 'crisp']) {
+      const saved = settings.cleanPeekSettings({ frameStyle, panelShadow });
+      const imported = settings.parsePeekSettingsImport(JSON.stringify(saved));
+      assert.equal(imported.frameStyle, frameStyle);
+      assert.equal(imported.panelShadow, panelShadow);
+    }
+  }
+  assert.equal(settings.cleanPeekSettings({ frameStyle: 'soft' }).frameStyle, 'rounded');
+});
+
 test("tous les sélecteurs proposent uniquement la même liste de thèmes", () => {
   let count = 0;
   for (const name of ['popup.html', 'content.js']) {

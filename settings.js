@@ -45,8 +45,8 @@ const PEEK_SETTING_OPTIONS = {
   theme: ["catppuccin", "nordic", "nord", "gruvbox", "tokyoNight", "dracula", "everforest", "custom"],
   animation: ["slide", "slideUp", "slideDown", "scale", "fade", "bounce", "blur", "none"],
   animationSpeed: ["instant", "quick", "normal", "relaxed", "slow", "leisurely"],
-  frameStyle: ["rounded", "square", "glass", "outlined"],
-  panelShadow: ["default", "none", "subtle", "medium", "strong", "dramatic", "glow"],
+  frameStyle: ["rounded", "square", "glass", "outlined", "roundedLarge", "borderless", "double"],
+  panelShadow: ["default", "none", "subtle", "medium", "strong", "dramatic", "ambient", "crisp", "glow"],
   domainListMode: ["off", "blacklist", "whitelist"],
   backdropMode: ["dim", "blur"]
 };
@@ -217,10 +217,13 @@ function applyPeekTheme(element, theme, settings = PEEK_DEFAULT_SETTINGS) {
     }
   }
   element.style.setProperty("--peek-settings-text", palette.text);
-  element.style.setProperty("--peek-panel-shadow", "0 24px 90px rgba(0, 0, 0, 0.55)");
   element.style.setProperty("--peek-select-arrow", `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='${palette.muted.replace('#', '%23')}' stroke-width='1.5' fill='none'/%3E%3C/svg%3E")`);
   const [r, g, b] = [1, 3, 5].map(offset => parseInt(palette.bg.slice(offset, offset + 2), 16));
-  element.style.setProperty("color-scheme", (0.2126 * r + 0.7152 * g + 0.0722 * b) > 150 ? "light" : "dark");
+  const isLight = (0.2126 * r + 0.7152 * g + 0.0722 * b) > 150;
+  element.style.setProperty("color-scheme", isLight ? "light" : "dark");
+  element.style.setProperty("--peek-shadow-rgb", isLight ? "15, 23, 42" : "0, 0, 0");
+  // Theme defaults may tint a shadow, but must never override the selected style.
+  element.style.setProperty("--peek-theme-shadow-opacity", isLight ? ".24" : ".42");
   if (settings.backdropMode !== "blur") {
     element.style.setProperty("--peek-backdrop-opacity", String(colors ? opacity : settings.backdropOpacity / 100));
   }

@@ -318,9 +318,9 @@ test('le panneau est positionné avant affichage, sans navigation intermédiaire
   STATE.settings.autoCompactFallback = false;
   STATE.root = element();
   STATE.panel = element();
-  STATE.panel.getBoundingClientRect = () => ({
-    width: parseFloat(STATE.panel.style.width) || 960,
-    height: parseFloat(STATE.panel.style.height) || 540
+  Object.defineProperties(STATE.panel, {
+    offsetWidth: { get: () => parseFloat(STATE.panel.style.width) || 960 },
+    offsetHeight: { get: () => parseFloat(STATE.panel.style.height) || 540 }
   });
   STATE.panel.focus = () => {
     assert.equal(STATE.root.classList.contains('peek-preparing'), false);
@@ -350,6 +350,41 @@ test('le panneau est positionné avant affichage, sans navigation intermédiaire
   context.testApi.doClose();
   assert.equal(cleared, 1);
   assert.equal(STATE.root.classList.contains('peek-visible'), false);
+});
+
+test('zoom et rebond ne déplacent pas le panneau ni ses actions pendant un recalcul', async () => {
+  const { context, STATE, window } = await contentHarness();
+  window.innerWidth = 1400;
+  window.innerHeight = 900;
+  STATE.root = element();
+  STATE.root.classList.add('peek-visible');
+  STATE.panel = element();
+  Object.defineProperties(STATE.panel, {
+    offsetWidth: { get: () => 640 },
+    offsetHeight: { get: () => 360 },
+    offsetLeft: { get: () => parseFloat(STATE.panel.style.left) },
+    offsetTop: { get: () => parseFloat(STATE.panel.style.top) }
+  });
+  const actions = element();
+  actions.getBoundingClientRect = () => ({ width: 40, height: 300 });
+  STATE.root.querySelector = selector => selector === '.peek-actions' ? actions : null;
+  for (const [position, left, top, actionsLeft, actionsTop] of [
+    ['center', 380, 270, 1028, 300],
+    ['bottomRight', 728, 516, 680, 546]
+  ]) {
+    STATE.settings.position = position;
+    for (const scale of [.65, 1.045, 1]) {
+      STATE.panel.getBoundingClientRect = () => ({
+        left: left + 112, top: top + 56, right: left + 112 + 640 * scale,
+        width: 640 * scale, height: 360 * scale
+      });
+      context.testApi.applyOverlayLayout({ updateDimensions: false });
+      assert.equal(STATE.panel.style.left, `${left}px`);
+      assert.equal(STATE.panel.style.top, `${top}px`);
+      assert.equal(actions.style.left, `${actionsLeft}px`);
+      assert.equal(actions.style.top, `${actionsTop}px`);
+    }
+  }
 });
 
 test('le mode split prime sur le repli compact automatique, mais respecte les règles de domaine', async () => {
@@ -414,6 +449,10 @@ async function gestureHarness() {
   const west = handle();
   west.dataset.direction = 'w';
   const panel = element();
+  Object.defineProperties(panel, {
+    offsetWidth: { get: () => parseFloat(panel.style.width ?? '640') },
+    offsetHeight: { get: () => parseFloat(panel.style.height ?? '360') }
+  });
   panel.getBoundingClientRect = () => ({
     left: parseFloat(panel.style.left ?? '200'), top: parseFloat(panel.style.top ?? '100'),
     width: parseFloat(panel.style.width ?? '640'), height: parseFloat(panel.style.height ?? '360')
@@ -651,11 +690,33 @@ test('la miniature suit le thème, le cadre, l’ombre et l’animation', () => 
   form.elements.animation.value = 'bounce';
   form.listeners.change();
   assert.equal(styles.get('--peek-bg'), '#2d353b');
-  assert.equal(preview.dataset.frame, 'square');
-  assert.equal(preview.dataset.shadow, 'glow');
+  assert.equal(preview.dataset.frameStyle, 'square');
+  assert.equal(preview.dataset.panelShadow, 'glow');
   assert.equal(preview.dataset.animation, 'bounce');
   node('replay-preview').listeners.click();
   assert.equal(node('sample-panel').classList.contains('sample-animate'), true);
+});
+
+test('changer l’animation ou sa vitesse rejoue la miniature avec la durée choisie', () => {
+  const { context, node } = popupHarness();
+  const form = node('settings-form');
+  const panel = node('sample-panel');
+  const styles = new Map();
+  node('theme-preview').style.setProperty = (name, value) => styles.set(name, value);
+  form.elements.animation.name = 'animation';
+  form.elements.animation.value = 'scale';
+  form.listeners.change({ target: form.elements.animation });
+  assert.equal(panel.classList.contains('sample-animate'), true);
+  panel.classList.remove('sample-animate');
+  // The simulated radios do not automatically uncheck their siblings.
+  form.querySelector('input[name="animationSpeed"]:checked').checked = false;
+  context.setRadioValue('animationSpeed', 'slow');
+  form.listeners.change({ target: { name: 'animationSpeed' } });
+  assert.equal(panel.classList.contains('sample-animate'), true);
+  assert.equal(styles.get('--sample-duration'), '560ms');
+  form.elements.animation.value = 'none';
+  form.listeners.change({ target: form.elements.animation });
+  assert.equal(styles.get('--sample-duration'), '0ms');
 });
 
 test('la pause conserve les clics natifs même si une règle autorise le lien', async () => {
@@ -713,6 +774,33 @@ test('une erreur de pause dans la popup conserve le bouton dans son état initia
   assert.match(node('site-status').textContent, /Impossible/);
 });
 
+test('les paramètres en fenêtre utilisent le site de l’onglet d’origine', () => {
+  const { context, node, window } = popupHarness();
+  window.location.href = 'chrome-extension://test/popup.html?sourceTabId=12';
+  context.chrome.tabs = {
+    query() { assert.fail('le site ne doit pas venir de la fenêtre de paramètres'); },
+    get(id, cb) { assert.equal(id, 12); cb({ id, url: 'https://source.example/page' }); }
+  };
+  context.chrome.runtime.sendMessage = (message, cb) => cb({ ok: true, paused: false });
+  context.initSiteControls();
+  assert.equal(node('current-site').textContent, 'source.example');
+  assert.equal(node('pause-site').disabled, false);
+});
+
+test('un onglet d’origine fermé laisse les actions de site indisponibles', () => {
+  const { context, node, window } = popupHarness();
+  window.location.href = 'chrome-extension://test/popup.html?sourceTabId=12';
+  node('pause-site').disabled = true;
+  context.chrome.tabs = {
+    query() { assert.fail('aucun autre site ne doit être choisi'); },
+    get(id, cb) { context.chrome.runtime.lastError = { message: 'No tab with id: 12' }; cb(); }
+  };
+  context.chrome.runtime.sendMessage = () => assert.fail('aucune action de site');
+  context.initSiteControls();
+  assert.match(node('site-status').textContent, /Impossible de lire/);
+  assert.equal(node('pause-site').disabled, true);
+});
+
 function popupNavigation(harness) {
   const keys = ['general', 'appearance', 'sites', 'data'];
   const buttons = keys.map(section => Object.assign(element(), {
@@ -738,6 +826,8 @@ test('les rubriques se parcourent au clavier avec sélection et focus synchronis
   assert.equal(buttons[0].tabIndex, -1);
   assert.equal(sections[3].hidden, false);
   assert.equal(sections[0].hidden, true);
+  assert.equal(harness.node('appearance-preview').hidden, true);
+  assert.equal(harness.node('settings-workspace').dataset.section, 'data');
   buttons[3].listeners.keydown({ key: 'Home', preventDefault() {} });
   assert.equal(sections[0].hidden, false);
   buttons[0].listeners.keydown({ key: 'End', preventDefault() {} });
@@ -745,6 +835,11 @@ test('les rubriques se parcourent au clavier avec sélection et focus synchronis
   buttons[1].listeners.click();
   assert.equal(sections[1].hidden, false);
   assert.equal(sections[3].hidden, true);
+  assert.equal(harness.node('appearance-preview').hidden, false);
+  assert.equal(harness.node('settings-workspace').dataset.section, 'appearance');
+  buttons[0].listeners.click();
+  assert.equal(harness.node('appearance-preview').hidden, true);
+  assert.equal(harness.node('settings-workspace').dataset.section, 'general');
 });
 
 test('une valeur invalide révèle sa rubrique et ses sections repliées', () => {
@@ -758,6 +853,7 @@ test('une valeur invalide révèle sa rubrique et ses sections repliées', () =>
   } });
   assert.equal(sections[1].hidden, false);
   assert.equal(sections[0].hidden, true);
+  assert.equal(harness.node('appearance-preview').hidden, false);
   assert.equal(inner.open, true);
   assert.equal(outer.open, true);
   assert.equal(focused, true);

@@ -19,6 +19,7 @@ desktop.ini
 
 # Temporary test artefacts
 tmp/
+dist/
 
 # Claude Code documentation
 CLAUDE.md

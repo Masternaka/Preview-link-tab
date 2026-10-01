@@ -1,4 +1,8 @@
-importScripts("settings.js");
+// Chromium loads settings in its worker; Firefox lists it before this script.
+if (typeof importScripts === "function") importScripts("settings.js");
+
+// Firefox's browser namespace returns promises; its chrome namespace uses callbacks.
+const extensionApi = typeof browser !== "undefined" ? browser : chrome;
 
 const SIZE_MAP = {
   small: { width: 640, height: 360 },
@@ -13,22 +17,62 @@ const COMPACT_WINDOWS_STORAGE_KEY = "peekCompactWindows";
 let compactWindowsQueue = Promise.resolve();
 let siteSettingsQueue = Promise.resolve();
 const PAUSED_SITES_KEY = "peekPausedSites";
+let settingsWindowQueue = Promise.resolve();
 
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.removeAll(() => {
-    chrome.contextMenus.create({
+extensionApi.action.onClicked.addListener(tab => {
+  openSettingsWindow(tab).catch(error => console.warn("Impossible d’ouvrir les paramètres", error));
+});
+
+function openSettingsWindow(tab) {
+  const operation = settingsWindowQueue.then(() => createOrFocusSettingsWindow(tab));
+  settingsWindowQueue = operation.catch(() => {});
+  return operation;
+}
+
+async function createOrFocusSettingsWindow(tab) {
+  const url = new URL(extensionApi.runtime.getURL("popup.html"));
+  if (tab?.id != null) url.searchParams.set("sourceTabId", String(tab.id));
+  const windows = await extensionApi.windows.getAll({ populate: true, windowTypes: ["popup"] });
+  // Reuse this tab's settings without reloading its unsaved changes. Searching
+  // real windows also works after the background service worker restarts.
+  const existing = windows.find(item => item.incognito === Boolean(tab?.incognito)
+    && item.tabs?.some(candidate => candidate.url === url.href || candidate.pendingUrl === url.href));
+  if (existing) {
+    return extensionApi.windows.update(existing.id, { focused: true, ...(existing.state === "minimized" ? { state: "normal" } : {}) });
+  }
+
+  const source = tab?.windowId != null
+    ? await extensionApi.windows.get(tab.windowId)
+    : await extensionApi.windows.getLastFocused();
+  const display = await getDisplayForWindow(source).catch(() => null);
+  const available = display || source;
+  const width = Math.max(320, Math.min(1040, available.width - 48));
+  const height = Math.max(300, Math.min(760, available.height - 48));
+  const left = Math.min(available.left + available.width - width,
+    Math.max(available.left, source.left + Math.round((source.width - width) / 2)));
+  const top = Math.min(available.top + available.height - height,
+    Math.max(available.top, source.top + Math.round((source.height - height) / 2)));
+  return extensionApi.windows.create({
+    url: url.href, type: "popup", focused: true,
+    incognito: Boolean(tab?.incognito), width, height, left, top
+  });
+}
+
+extensionApi.runtime.onInstalled.addListener(() => {
+  extensionApi.contextMenus.removeAll().then(() => {
+    extensionApi.contextMenus.create({
       id: CONTEXT_MENU_ID,
       title: "Preview with Preview link tab",
       contexts: ["link"]
     });
-  });
+  }).catch(error => console.warn("Impossible de créer le menu contextuel", error));
 });
 
-chrome.contextMenus.onClicked.addListener((info, tab) => {
+extensionApi.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId !== CONTEXT_MENU_ID || !info.linkUrl || !tab?.id) {
     return;
   }
-  chrome.tabs
+  extensionApi.tabs
     .sendMessage(tab.id, {
       type: "PREVIEW_URL",
       url: info.linkUrl
@@ -36,20 +80,20 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     .catch(() => {});
 });
 
-chrome.commands.onCommand.addListener(command => {
+extensionApi.commands.onCommand.addListener(command => {
   if (command !== "preview-link") {
     return;
   }
-  chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+  extensionApi.tabs.query({ active: true, currentWindow: true }).then(tabs => {
     const tabId = tabs[0]?.id;
     if (!tabId) {
       return;
     }
-    chrome.tabs.sendMessage(tabId, { type: "PREVIEW_HOVERED_LINK" }).catch(() => {});
-  });
+    return extensionApi.tabs.sendMessage(tabId, { type: "PREVIEW_HOVERED_LINK" });
+  }).catch(() => {});
 });
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+extensionApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (["GET_SITE_PAUSE", "SET_SITE_PAUSE", "SET_DOMAIN_RULE"].includes(message?.type)) {
     const operation = siteSettingsQueue.then(() => handleSiteSettings(message, sender));
     siteSettingsQueue = operation.catch(() => {});
@@ -82,7 +126,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === "OPEN_URL_IN_TAB" && isHttpUrl(message.url)) {
-    chrome.tabs.create({ url: message.url, active: true })
+    extensionApi.tabs.create({ url: message.url, active: true })
       .then(() => sendResponse({ ok: true }))
       .catch(() => sendResponse({ ok: false }));
     return true;
@@ -95,18 +139,18 @@ async function openUrlInSplitView(url, sender) {
   if (!isHttpUrl(url)) {
     throw new Error("Ce lien ne peut pas être ouvert en vue partagée.");
   }
-  if (typeof chrome.tabs.createSplit !== "function") {
+  if (typeof extensionApi.tabs.createSplit !== "function") {
     throw new Error("Ce navigateur ne permet pas encore aux extensions d’ouvrir une vue partagée native. Ouvrez le lien dans un nouvel onglet, puis utilisez la commande « Vue partagée / Split View » du menu contextuel des onglets, si elle est disponible.");
   }
   if (sender.tab?.id == null) {
     throw new Error("Ouvrez la vue partagée depuis un onglet.");
   }
-  const source = await chrome.tabs.get(sender.tab.id);
+  const source = await extensionApi.tabs.get(sender.tab.id);
   if (source.splitViewId != null && source.splitViewId !== -1) {
     throw new Error("Cet onglet est déjà en vue partagée. Séparez les onglets avant de réessayer.");
   }
   try {
-    return await chrome.tabs.create({ url, splitWithTabId: source.id, windowId: source.windowId, active: true });
+    return await extensionApi.tabs.create({ url, splitWithTabId: source.id, windowId: source.windowId, active: true });
   } catch {
     throw new Error("Impossible d’ouvrir la vue partagée dans cette fenêtre. Réessayez depuis un onglet d’une fenêtre normale.");
   }
@@ -114,13 +158,13 @@ async function openUrlInSplitView(url, sender) {
 
 async function openCompactWindow(message, sender) {
   const sourceWindow = sender.tab?.windowId
-    ? await chrome.windows.get(sender.tab.windowId)
+    ? await extensionApi.windows.get(sender.tab.windowId)
     : null;
-  const display = await getDisplayForWindow(sourceWindow);
+  const display = await getDisplayForWindow(sourceWindow).catch(() => null);
   const size = clampSize(message.settings, sourceWindow, display);
   const position = getPosition(message.settings, size, sourceWindow, display);
 
-  const createdWindow = await chrome.windows.create({
+  const createdWindow = await extensionApi.windows.create({
     url: message.url,
     type: "popup",
     focused: true,
@@ -147,18 +191,18 @@ async function closeCompactWindow(message, sender) {
   if (!windowId || !(await isCompactWindow(windowId))) {
     return false;
   }
-  await chrome.windows.remove(windowId);
+  await extensionApi.windows.remove(windowId);
   compactWindowIds.delete(windowId);
   await forgetCompactWindow(windowId);
   return true;
 }
 
-chrome.windows.onRemoved.addListener(windowId => {
+extensionApi.windows.onRemoved.addListener(windowId => {
   compactWindowIds.delete(windowId);
   forgetCompactWindow(windowId).catch(() => {});
 });
 
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+extensionApi.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.url || changeInfo.status === "complete") {
     updatePauseBadge(tab).catch(() => {});
   }
@@ -172,28 +216,28 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   }).catch(() => {});
 });
 
-chrome.tabs.onRemoved.addListener(tabId => {
+extensionApi.tabs.onRemoved.addListener(tabId => {
   compactTabIds.delete(tabId);
   forgetCompactTab(tabId).catch(() => {});
 });
 
 async function getCompactWindows() {
-  if (!chrome.storage?.session) {
+  if (!extensionApi.storage?.session) {
     return {};
   }
-  const stored = await chrome.storage.session.get(COMPACT_WINDOWS_STORAGE_KEY);
+  const stored = await extensionApi.storage.session.get(COMPACT_WINDOWS_STORAGE_KEY);
   return stored[COMPACT_WINDOWS_STORAGE_KEY] || {};
 }
 
 async function setCompactWindows(windows) {
-  if (chrome.storage?.session) {
-    await chrome.storage.session.set({ [COMPACT_WINDOWS_STORAGE_KEY]: windows });
+  if (extensionApi.storage?.session) {
+    await extensionApi.storage.session.set({ [COMPACT_WINDOWS_STORAGE_KEY]: windows });
   }
 }
 
 function queueCompactWindowsUpdate(update) {
   // Keep the entire read/modify/write operation ordered, including removals
-  // from Chrome events. A failed operation must not block later updates.
+  // from browser events. A failed operation must not block later updates.
   const operation = compactWindowsQueue.then(update);
   compactWindowsQueue = operation.catch(() => {});
   return operation;
@@ -256,7 +300,7 @@ async function forgetCompactTab(tabId) {
 }
 
 function enableCompactMenu(tabId, windowId) {
-  chrome.tabs
+  extensionApi.tabs
     .sendMessage(tabId, {
       type: "ENABLE_COMPACT_MENU",
       windowId: windowId ?? null
@@ -285,6 +329,9 @@ function clampSize(settings, sourceWindow, display) {
       height: Math.min(display.height - 48, availableHeight)
     };
   }
+  if (sizeName === "full" && sourceWindow) {
+    return { width: availableWidth, height: availableHeight };
+  }
 
   const size = SIZE_MAP[sizeName] || fallback;
   if (sizeName === "custom") {
@@ -300,7 +347,7 @@ function clampSize(settings, sourceWindow, display) {
 }
 
 function getPosition(settings, size, sourceWindow, display) {
-  const screenBase = display || {
+  const screenBase = display || sourceWindow || {
     left: 0,
     top: 0,
     width: 1280,
@@ -311,11 +358,11 @@ function getPosition(settings, size, sourceWindow, display) {
 }
 
 async function getDisplayForWindow(sourceWindow) {
-  if (!chrome.system?.display?.getInfo) {
+  if (!extensionApi.system?.display?.getInfo) {
     return null;
   }
 
-  const displays = await chrome.system.display.getInfo();
+  const displays = await extensionApi.system.display.getInfo();
   if (!displays.length) {
     return null;
   }
@@ -338,38 +385,38 @@ function pausedSiteKey(tab) {
 }
 
 async function updatePauseBadge(tab, paused) {
-  if (!chrome.action?.setBadgeText || tab?.id == null) return;
+  if (!extensionApi.action?.setBadgeText || tab?.id == null) return;
   if (paused == null) {
-    const stored = await chrome.storage.session.get(PAUSED_SITES_KEY);
+    const stored = await extensionApi.storage.session.get(PAUSED_SITES_KEY);
     paused = isHttpUrl(tab.url) && (stored[PAUSED_SITES_KEY] || []).includes(pausedSiteKey(tab));
   }
-  await chrome.action.setBadgeText({ tabId: tab.id, text: paused ? "II" : "" });
-  await chrome.action.setTitle({ tabId: tab.id, title: paused ? "Aperçu en pause sur ce site — cliquer pour réactiver" : "Preview link tab settings" });
+  await extensionApi.action.setBadgeText({ tabId: tab.id, text: paused ? "II" : "" });
+  await extensionApi.action.setTitle({ tabId: tab.id, title: paused ? "Aperçu en pause sur ce site — cliquer pour réactiver" : "Preview link tab settings" });
 }
 
 async function handleSiteSettings(message, sender) {
   if (message.type === "SET_DOMAIN_RULE") {
     if (!isHttpUrl(message.url)) throw new Error("Adresse de site invalide.");
     const hostname = new URL(message.url).hostname;
-    const stored = await chrome.storage.local.get({ domainRules: "" });
+    const stored = await extensionApi.storage.local.get({ domainRules: "" });
     const domainRules = setPeekDomainRule(stored.domainRules, hostname, message.mode);
-    await chrome.storage.local.set({ domainRules });
+    await extensionApi.storage.local.set({ domainRules });
     return { domainRules, hostname };
   }
   const tabId = sender.tab?.id ?? message.tabId;
   if (!Number.isInteger(tabId)) throw new Error("Ouvrez cette action depuis un onglet.");
-  const tab = await chrome.tabs.get(tabId);
+  const tab = await extensionApi.tabs.get(tabId);
   const key = pausedSiteKey(tab);
-  const stored = await chrome.storage.session.get(PAUSED_SITES_KEY);
+  const stored = await extensionApi.storage.session.get(PAUSED_SITES_KEY);
   const pausedSites = new Set(Array.isArray(stored[PAUSED_SITES_KEY]) ? stored[PAUSED_SITES_KEY] : []);
   if (message.type === "SET_SITE_PAUSE") {
     if (typeof message.paused !== "boolean") throw new Error("État de pause invalide.");
     message.paused ? pausedSites.add(key) : pausedSites.delete(key);
-    await chrome.storage.session.set({ [PAUSED_SITES_KEY]: [...pausedSites] });
-    const tabs = await chrome.tabs.query({});
+    await extensionApi.storage.session.set({ [PAUSED_SITES_KEY]: [...pausedSites] });
+    const tabs = await extensionApi.tabs.query({});
     await Promise.allSettled(tabs.filter(item => isHttpUrl(item.url) && pausedSiteKey(item) === key).map(async item => {
       await updatePauseBadge(item, message.paused).catch(() => {});
-      await chrome.tabs.sendMessage(item.id, {
+      await extensionApi.tabs.sendMessage(item.id, {
         type: "SITE_PAUSE_CHANGED", hostname: new URL(tab.url).hostname, paused: message.paused
       });
     }));

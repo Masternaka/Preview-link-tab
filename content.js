@@ -255,8 +255,11 @@
               <select name="frameStyle">
                 <option value="rounded">Arrondi</option>
                 <option value="square">Carré</option>
-                <option value="glass">Verre</option>
+                <option value="glass">Verre dépoli</option>
                 <option value="outlined">Contour accent</option>
+                <option value="roundedLarge">Arrondi généreux</option>
+                <option value="borderless">Sans bordure</option>
+                <option value="double">Double contour</option>
               </select>
             </label>
             <label>
@@ -267,7 +270,9 @@
                 <option value="subtle">Légère</option>
                 <option value="medium">Moyenne</option>
                 <option value="strong">Forte</option>
-                <option value="dramatic">Dramatique</option>
+                <option value="dramatic">Flottante</option>
+                <option value="ambient">Halo diffus</option>
+                <option value="crisp">Décalage net</option>
                 <option value="glow">Lueur accent</option>
               </select>
             </label>
@@ -674,15 +679,19 @@
         window.innerHeight
       );
     }
-    const rect = STATE.panel.getBoundingClientRect();
+    // Layout dimensions exclude the scale/translation of opening animations.
+    // Measuring the animated rectangle can move a centered/bottom panel midway
+    // through a zoom or bounce, and misalign its actions after it settles.
+    const width = STATE.panel.offsetWidth;
+    const height = STATE.panel.offsetHeight;
     const estimated = peekEstimateOverlayPanelSize(
       STATE.settings,
       window.innerWidth,
       window.innerHeight
     );
     return {
-      width: rect.width > 1 ? rect.width : estimated.width,
-      height: rect.height > 1 ? rect.height : estimated.height
+      width: width > 1 ? width : estimated.width,
+      height: height > 1 ? height : estimated.height
     };
   }
 
@@ -774,18 +783,20 @@
       actionsEl.style.removeProperty("bottom");
       return;
     }
-    const rect = STATE.panel.getBoundingClientRect();
+    const { width, height } = measureOverlayPanelSize();
+    const panelLeft = STATE.panel.offsetLeft;
+    const panelTop = STATE.panel.offsetTop;
     const actionsRect = actionsEl.getBoundingClientRect();
     const margin = 8;
     const gap = 8;
-    const rightSideLeft = rect.right + gap;
-    const leftSideLeft = rect.left - actionsRect.width - gap;
+    const rightSideLeft = panelLeft + width + gap;
+    const leftSideLeft = panelLeft - actionsRect.width - gap;
     const fitsRight = rightSideLeft + actionsRect.width <= window.innerWidth - margin;
     const fitsLeft = leftSideLeft >= margin;
     const preferredLeft = fitsRight || !fitsLeft ? rightSideLeft : leftSideLeft;
     const maxLeft = Math.max(margin, window.innerWidth - actionsRect.width - margin);
     const maxTop = Math.max(margin, window.innerHeight - actionsRect.height - margin);
-    const top = rect.top + rect.height / 2 - actionsRect.height / 2;
+    const top = panelTop + height / 2 - actionsRect.height / 2;
     const left = Math.min(maxLeft, Math.max(margin, preferredLeft));
     actionsEl.style.left = `${left}px`;
     actionsEl.style.top = `${Math.min(maxTop, Math.max(margin, top))}px`;
@@ -810,7 +821,7 @@
       if (!STATE.root?.classList.contains("peek-visible")) {
         return;
       }
-      const height = STATE.panel.getBoundingClientRect().height;
+      const height = STATE.panel.offsetHeight;
       if (Math.abs(height - lastObservedHeight) < 8) {
         return;
       }

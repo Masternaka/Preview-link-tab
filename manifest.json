@@ -13,14 +13,13 @@
     {
       "matches": ["http://*/*", "https://*/*"],
       "js": ["settings.js", "peek-icons.js", "content.js"],
-      "css": ["styles.css"],
+      "css": ["appearance.css", "styles.css"],
       "run_at": "document_idle",
       "all_frames": true
     }
   ],
   "action": {
     "default_title": "Preview link tab settings",
-    "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",

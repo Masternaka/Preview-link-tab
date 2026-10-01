@@ -6,6 +6,7 @@
     <title>
       Paramètres — Preview link tab
     </title>
+    <link rel="stylesheet" href="appearance.css">
     <link rel="stylesheet" href="popup.css">
   </head>
   <body>
@@ -58,6 +59,7 @@
           Données
         </button>
       </nav>
+      <div id="settings-workspace" class="settings-workspace" data-section="general">
       <div class="settings-scroll">
         <form id="settings-form" class="settings-form">
           <section id="section-general" class="form-section form-section-active" data-section="general" role="tabpanel" aria-labelledby="tab-general" tabindex="0">
@@ -195,53 +197,6 @@
               </h2>
               <p>
                 Visualisez vos changements avant de les sauvegarder.
-              </p>
-            </div>
-            <div class="appearance-example wide-field">
-              <div class="example-heading">
-                <strong>
-                  Aperçu des réglages
-                </strong>
-                <button type="button" id="replay-preview">
-                  Rejouer l’animation
-                </button>
-              </div>
-              <div id="theme-preview" class="theme-preview" role="img" aria-label="Exemple local de l’aperçu avec vos réglages">
-                <div class="example-page" aria-hidden="true">
-                  Votre page reste ici
-                  <div>
-                  </div>
-                  <div>
-                  </div>
-                  <div>
-                  </div>
-                </div>
-                <div class="example-backdrop">
-                </div>
-                <div id="sample-panel" class="sample-panel" aria-hidden="true">
-                  <div class="sample-header">
-                    <strong>
-                      Aperçu du lien
-                    </strong>
-                    <span>
-                      ×
-                    </span>
-                  </div>
-                  <div class="sample-content">
-                    <strong>
-                      Une page à découvrir
-                    </strong>
-                    <p>
-                      Un exemple de contenu pour visualiser vos réglages.
-                    </p>
-                    <span class="sample-link">
-                      Consulter la page →
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <p class="hint">
-                Exemple miniature, sans charger de site. Les couleurs des pages réelles restent propres aux sites.
               </p>
             </div>
             <div class="settings-card">
@@ -572,6 +527,9 @@
                     <option value="outlined">
                       Contour accent
                     </option>
+                    <option value="roundedLarge">Arrondi généreux</option>
+                    <option value="borderless">Sans bordure</option>
+                    <option value="double">Double contour</option>
                   </select>
                 </label>
                 <label>
@@ -595,8 +553,10 @@
                       Forte
                     </option>
                     <option value="dramatic">
-                      Dramatique
+                      Flottante
                     </option>
+                    <option value="ambient">Halo diffus</option>
+                    <option value="crisp">Décalage net</option>
                     <option value="glow">
                       Lueur (couleur accent)
                     </option>
@@ -941,6 +901,54 @@
             </div>
           </section>
         </form>
+      </div>
+        <aside id="appearance-preview" class="appearance-example" aria-label="Aperçu des réglages d’apparence" hidden>
+          <div class="example-heading">
+            <strong>
+              Aperçu en direct
+            </strong>
+            <button type="button" id="replay-preview">
+              Rejouer l’animation
+            </button>
+          </div>
+          <div id="theme-preview" class="theme-preview" role="img" aria-label="Exemple local de l’aperçu avec vos réglages">
+            <div class="example-page" aria-hidden="true">
+              Votre page reste ici
+              <div>
+              </div>
+              <div>
+              </div>
+              <div>
+              </div>
+            </div>
+            <div class="example-backdrop">
+            </div>
+            <div id="sample-panel" class="sample-panel" aria-hidden="true">
+              <div class="sample-header">
+                <strong>
+                  Aperçu du lien
+                </strong>
+                <span>
+                  ×
+                </span>
+              </div>
+              <div class="sample-content">
+                <strong>
+                  Une page à découvrir
+                </strong>
+                <p>
+                  Vos couleurs, votre cadre et votre ombre.
+                </p>
+                <span class="sample-link">
+                  Consulter la page →
+                </span>
+              </div>
+            </div>
+          </div>
+          <p class="hint">
+            Vos changements apparaissent ici. Sauvegardez pour les conserver.
+          </p>
+        </aside>
       </div>
       <footer class="save-bar">
         <div class="save-feedback">
