@@ -14,8 +14,8 @@ Le bouton d’annulation et l’interface visuelle des règles par site sont en 
 Les suppressions de règles et thèmes peuvent être annulées pendant 10 secondes.
 La reprise de lecture en session et le bouton Réessayer sont disponibles ;
 Nouvel onglet ferme immédiatement l’aperçu au clic, avant la demande d’ouverture.
-Les workflows génèrent les ZIP après validation et préparent une release en
-brouillon à chaque tag de version. Les essais avec les extensions chargées et
+Les workflows génèrent les ZIP après validation et publient une release après
+un push sur main lorsque les numéros de version sont augmentés. Les essais avec les extensions chargées et
 la signature Firefox restent à effectuer.
 Les profils ne font pas partie du chantier retenu ; leur utilité reste à réévaluer.
 

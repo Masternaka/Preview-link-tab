@@ -1,71 +1,89 @@
-name: Préparer une release
+name: Publication automatique
 
 on:
   push:
+    branches: [main]
     tags: ['v*']
+    paths:
+      - package.json
+      - manifest.json
+      - .github/workflows/release.yml
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: publication-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   version:
-    name: Vérifier le numéro de version
+    name: Déterminer la version à publier
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      publish: ${{ steps.version.outputs.publish }}
     steps:
       - uses: actions/checkout@v6
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@v6
         with:
           node-version: 24
           package-manager-cache: false
-      - name: Vérifier le tag et les manifestes
-        run: |
-          node - <<'JS'
-          const version = require('./package.json').version;
-          if (process.env.RELEASE_TAG !== `v${version}` || require('./manifest.json').version !== version) {
-            throw new Error('Le tag doit correspondre à la version de package.json et manifest.json.');
-          }
-          JS
+      - name: Vérifier le changement de version et la release existante
+        id: version
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_REF: ${{ github.ref }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: node scripts/release-plan.js
 
   validation:
     needs: version
+    if: needs.version.outputs.publish == 'true'
     uses: ./.github/workflows/tests.yml
     permissions:
       contents: read
 
   release:
-    name: Créer la release en brouillon
-    needs: validation
+    name: Publier les extensions validées
+    needs: [version, validation]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - name: Récupérer les archives validées
         uses: actions/download-artifact@v8
         with:
           name: preview-link-tab-packages
           path: packages
-      - name: Créer ou actualiser le brouillon
+      - name: Vérifier les archives puis publier
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
+          RELEASE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
+          (cd packages && sha256sum --check SHA256SUMS)
           if gh release view "$RELEASE_TAG" --json isDraft > release-state.json 2> release-error.log; then
-            node -e 'if (!JSON.parse(require("fs").readFileSync("release-state.json")).isDraft) throw new Error("Cette release est déjà publiée ; aucun fichier ne sera remplacé.")'
-            gh release upload "$RELEASE_TAG" packages/*.zip packages/SHA256SUMS --clobber
+            if node -e 'process.exit(JSON.parse(require("fs").readFileSync("release-state.json")).isDraft ? 0 : 1)'; then
+              gh release upload "$RELEASE_TAG" packages/*.zip packages/SHA256SUMS --clobber
+              gh release edit "$RELEASE_TAG" --draft=false
+            else
+              echo "Release déjà publiée : aucun fichier remplacé."
+            fi
           else
-            # Authentication/network errors also fail creation; never hide them.
-            gh release create "$RELEASE_TAG" packages/*.zip packages/SHA256SUMS --draft --verify-tag --generate-notes --title "$RELEASE_TAG"
+            gh release create "$RELEASE_TAG" packages/*.zip packages/SHA256SUMS --target "$RELEASE_SHA" --generate-notes --title "$RELEASE_TAG"
           fi
