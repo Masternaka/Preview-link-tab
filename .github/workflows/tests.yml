@@ -63,7 +63,7 @@ jobs:
           QA_SCREENSHOT_DIR: ${{ github.workspace }}/reports/screenshots
       - name: Conserver les rapports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rapports-validation
           path: reports/
@@ -86,7 +86,7 @@ jobs:
       - name: Préparer les ZIP et leurs empreintes
         run: npm run package
       - name: Conserver les extensions téléchargeables
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: preview-link-tab-packages
           path: |
