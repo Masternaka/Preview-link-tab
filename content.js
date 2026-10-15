@@ -20,11 +20,95 @@
         window.top.postMessage({ source: "peek-preview", type: "CLOSE_PEEK_PREVIEW" }, "*");
       }
     }, true);
-    window.top.postMessage({
-      source: "peek-preview",
-      type: "PEEK_FRAME_NAVIGATION",
-      url: window.location.href
+    // Only the direct preview frame is activated by its parent. Ordinary site
+    // frames never save reading positions or run the navigation watcher.
+    let active = false;
+    let currentUrl = window.location.href;
+    let navigationTimer = 0;
+    let saveTimer = 0;
+    let restoreTimer = 0;
+    let restoring = false;
+    let generation = 0;
+    let lastPosition = { x: 0, y: 0 };
+    const send = (type, extra = {}, callback) => {
+      try {
+        if (typeof chrome === "undefined" || !chrome.runtime?.sendMessage) return;
+        chrome.runtime.sendMessage({ type, url: currentUrl, ...extra }, response => {
+          if (!chrome.runtime.lastError) callback?.(response);
+        });
+      } catch { /* An extension reload must not break the embedded page. */ }
+    };
+    const announce = () => window.top.postMessage({
+      source: "peek-preview", type: "PEEK_FRAME_NAVIGATION", url: window.location.href
     }, "*");
+    const save = () => {
+      window.clearTimeout(saveTimer);
+      if (active && !restoring) send("SAVE_READING_POSITION", lastPosition);
+    };
+    const stopRestore = () => {
+      window.clearInterval(restoreTimer);
+      restoreTimer = 0;
+      restoring = false;
+      generation++;
+    };
+    const restore = () => {
+      stopRestore();
+      const version = generation;
+      const href = currentUrl;
+      send("GET_READING_POSITION", {}, response => {
+        if (!active || version !== generation || href !== currentUrl || !response?.position) return;
+        const { x, y } = response.position;
+        restoring = true;
+        let attempts = 0;
+        const apply = () => {
+          window.scrollTo(x, y);
+          if (++attempts >= 20 || (Math.abs(window.scrollY - y) < 2 && Math.abs(window.scrollX - x) < 2)) {
+            stopRestore();
+            lastPosition = { x: window.scrollX, y: window.scrollY };
+          }
+        };
+        restoreTimer = window.setInterval(apply, 100);
+        apply();
+      });
+    };
+    const navigation = () => {
+      if (!active || currentUrl === window.location.href) return;
+      save();
+      stopRestore();
+      currentUrl = window.location.href;
+      lastPosition = { x: window.scrollX, y: window.scrollY };
+      announce();
+      restore();
+    };
+    window.addEventListener("message", event => {
+      if (event.source !== window.parent || window.parent !== window.top || event.data?.source !== "peek-preview-host") return;
+      if (event.data.type === "ACTIVATE_READING_POSITION" && !active) {
+        active = true;
+        lastPosition = { x: window.scrollX, y: window.scrollY };
+        restore();
+        navigationTimer = window.setInterval(navigation, 500);
+      }
+    });
+    window.addEventListener("scroll", () => {
+      if (!active || restoring) return;
+      navigation();
+      lastPosition = { x: window.scrollX, y: window.scrollY };
+      window.clearTimeout(saveTimer);
+      saveTimer = window.setTimeout(save, 250);
+    }, { passive: true });
+    for (const type of ["wheel", "touchstart", "pointerdown", "keydown"]) {
+      window.addEventListener(type, stopRestore, { passive: true });
+    }
+    window.addEventListener("popstate", navigation);
+    window.addEventListener("hashchange", navigation);
+    window.addEventListener("pagehide", () => {
+      save();
+      stopRestore();
+      window.clearInterval(navigationTimer);
+      active = false;
+    });
+    window.addEventListener("pageshow", announce);
+    announce();
     return;
   }
 
@@ -324,17 +408,18 @@
             </div>
             <label class="peek-check">
               <input type="checkbox" name="closeAfterOpen">
-              <span>Fermer après ouverture externe</span>
+              <span>Fermer après passage en fenêtre compacte</span>
             </label>
           </div>
         </form>
         <div class="peek-frame-wrap">
           <iframe class="peek-frame" title="Page prévisualisée" referrerpolicy="strict-origin-when-cross-origin"></iframe>
           <div class="peek-loading-skeleton" aria-hidden="true"></div>
-          <div class="peek-help">
+          <div class="peek-help" role="status">
             <strong>Aperçu non confirmé</strong>
             <span>Le chargement n’a pas pu être confirmé. Ouvrez le lien dans une fenêtre compacte ou un nouvel onglet.</span>
             <div class="peek-help-actions">
+              <button class="peek-help-retry" type="button">Réessayer</button>
               <button class="peek-help-popup" type="button">Fenêtre compacte</button>
               <button class="peek-help-open" type="button">Nouvel onglet</button>
             </div>
@@ -393,6 +478,7 @@
     STATE.openButton.addEventListener("click", openCurrentInTab);
     root.querySelector(".peek-split").addEventListener("click", () => openUrlInSplitView(STATE.currentUrl, true));
     STATE.helpOpenButton.addEventListener("click", openCurrentInTab);
+    root.querySelector(".peek-help-retry").addEventListener("click", refreshPreview);
     STATE.popupButton.addEventListener("click", () => openCurrentInPopup(true));
     STATE.helpPopupButton.addEventListener("click", () => openCurrentInPopup(true));
     STATE.copyButton.addEventListener("click", copyCurrentUrl);
@@ -1029,9 +1115,26 @@
     if (!STATE.currentUrl) {
       return;
     }
-    window.open(STATE.currentUrl, "_blank", "noopener,noreferrer");
-    if (STATE.settings.closeAfterOpen) {
-      closePreview();
+    const url = STATE.currentUrl;
+    const opening = closeId;
+    const closeOpenedPreview = () => {
+      if (STATE.currentUrl === url && closeId === opening) closePreview();
+    };
+    try {
+      if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
+        chrome.runtime.sendMessage({ type: "OPEN_URL_IN_TAB", url }, response => {
+          if (chrome.runtime.lastError || !response?.ok) {
+            showPreviewNotice("Impossible d’ouvrir l’onglet. Réessayez ; l’aperçu reste disponible.");
+            return;
+          }
+          closeOpenedPreview();
+        });
+      } else {
+        window.open(url, "_blank", "noopener,noreferrer");
+        closeOpenedPreview();
+      }
+    } catch {
+      showPreviewNotice("Impossible d’ouvrir l’onglet. Rechargez l’extension et réessayez.");
     }
   }
 
@@ -1519,6 +1622,7 @@
       clearPreviewLoadTimer();
       STATE.root.classList.remove("peek-loading", "peek-blocked");
       recordPreviewNavigation(event.data.url);
+      STATE.iframe.contentWindow.postMessage?.({ source: "peek-preview-host", type: "ACTIVATE_READING_POSITION" }, event.origin);
     }
   });
 

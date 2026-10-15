@@ -16,6 +16,9 @@ const CONTEXT_MENU_ID = "peek-preview-link";
 const COMPACT_WINDOWS_STORAGE_KEY = "peekCompactWindows";
 let compactWindowsQueue = Promise.resolve();
 let siteSettingsQueue = Promise.resolve();
+let readingPositionsQueue = Promise.resolve();
+const READING_POSITIONS_KEY = "peekReadingPositions";
+const readingPositionsMemory = { normal: [], private: [] };
 const PAUSED_SITES_KEY = "peekPausedSites";
 let settingsWindowQueue = Promise.resolve();
 
@@ -94,6 +97,13 @@ extensionApi.commands.onCommand.addListener(command => {
 });
 
 extensionApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (["GET_READING_POSITION", "SAVE_READING_POSITION"].includes(message?.type)) {
+    const operation = readingPositionsQueue.then(() => handleReadingPosition(message, sender));
+    readingPositionsQueue = operation.catch(() => {});
+    operation.then(position => sendResponse({ ok: true, position }))
+      .catch(() => sendResponse({ ok: false }));
+    return true;
+  }
   if (["GET_SITE_PAUSE", "SET_SITE_PAUSE", "SET_DOMAIN_RULE"].includes(message?.type)) {
     const operation = siteSettingsQueue.then(() => handleSiteSettings(message, sender));
     siteSettingsQueue = operation.catch(() => {});
@@ -424,4 +434,30 @@ async function handleSiteSettings(message, sender) {
   const paused = pausedSites.has(key);
   await updatePauseBadge(tab, paused).catch(() => {});
   return { paused, hostname: new URL(tab.url).hostname };
+}
+
+// Session-only, bounded storage. Never use a website's localStorage, and keep
+// private-window positions separate from the normal browsing session.
+async function handleReadingPosition(message, sender) {
+  if (!(sender?.frameId > 0) || !isHttpUrl(message.url) || message.url.length > 8192) throw new Error("Page invalide");
+  const url = new URL(message.url);
+  if (!sender.url || new URL(sender.url).origin !== url.origin) throw new Error("Origine invalide");
+  const partition = sender.tab?.incognito ? "private" : "normal";
+  const key = `${READING_POSITIONS_KEY}:${partition}`;
+  const storage = extensionApi.storage.session;
+  const stored = storage ? (await storage.get(key))[key] : readingPositionsMemory[partition];
+  const now = Date.now();
+  let entries = (Array.isArray(stored) ? stored : []).filter(item => item && typeof item.url === "string"
+    && Number.isFinite(item.x) && Number.isFinite(item.y) && item.time > now - 86400000);
+  if (message.type === "GET_READING_POSITION") {
+    const entry = entries.find(item => item.url === url.href);
+    return entry ? { x: entry.x, y: entry.y } : null;
+  }
+  if (![message.x, message.y].every(value => Number.isFinite(value) && value >= 0 && value <= 10000000)) throw new Error("Position invalide");
+  entries = entries.filter(item => item.url !== url.href);
+  entries.push({ url: url.href, x: message.x, y: message.y, time: now });
+  entries = entries.slice(-100);
+  if (storage) await storage.set({ [key]: entries });
+  else readingPositionsMemory[partition] = entries;
+  return null;
 }
