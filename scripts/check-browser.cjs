@@ -1,6 +1,6 @@
 // Optional integration checks: provide Playwright externally, without changing
 // the extension's dependency-free build/test workflow.
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || '../tools/ci/node_modules/playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -32,7 +32,7 @@ const server = http.createServer((req, res) => {
   const base = `http://127.0.0.1:${server.address().port}`;
   let browser;
   try {
-    browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
+    browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, headless: true, args: ['--no-sandbox'] });
     const context = await browser.newContext({ viewport: { width: 1040, height: 760 } });
     const positions = new Map(); const saved = { animation: 'none', autoCompactFallback: false, closeAfterOpen: false };
     const errors = []; const requests = [];

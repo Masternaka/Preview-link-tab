@@ -215,8 +215,8 @@ npm test
 ```
 
 Le workflow [Tests](.github/workflows/tests.yml) lance cette commande sur Node.js
-22 et 24 à chaque push et pull request. Aucune installation de dépendances n’est
-nécessaire pour la suite actuelle.
+22 et 24 à chaque push et pull request. Aucune dépendance npm n’est nécessaire pour la suite ; les tests des archives
+utilisent aussi les commandes système `zip` et `unzip`.
 
 Les tests couvrent aussi la génération des deux versions et les API Firefox
 simulées. Le paquet Firefox a été validé avec `web-ext lint` : aucune erreur,
@@ -275,9 +275,10 @@ l’extension est disponible :
 PLAYWRIGHT_MODULE=/chemin/vers/playwright node scripts/check-browser.cjs
 ```
 
-Playwright doit être fourni séparément (ou disponible dans la résolution des
-modules Node.js). `CHROMIUM_PATH` permet de choisir l’exécutable, par défaut
-`/usr/bin/chromium`. `QA_SCREENSHOT_DIR` permet d’enregistrer des captures hors du
+Playwright est installé séparément avec `npm ci --prefix tools/ci`.
+Sans `PLAYWRIGHT_MODULE`, le script utilise cette installation verrouillée.
+`CHROMIUM_PATH` permet de choisir un exécutable existant ; sinon, le Chromium
+installé par Playwright est utilisé. `QA_SCREENSHOT_DIR` permet d’enregistrer des captures hors du
 dépôt. Aucun paquet supplémentaire n’est requis pour `npm test` ou la génération.
 
 Ce contrôle vérifie la reprise de lecture dans une iframe d’une autre origine,
@@ -296,3 +297,86 @@ vérifier **0.2.1** dans la page des extensions de Chrome, Helium ou Firefox,
 recharger l’extension et actualiser les pages déjà ouvertes pour remplacer
 leurs anciens scripts. Les fichiers générés doivent être reconstruits avec
 `npm run build` avant de recharger une installation pointant sur `dist/`.
+
+## GitHub Actions : tests, téléchargements et releases
+
+Le workflow **Tests et extensions** s’exécute sur chaque push de branche, sur
+chaque pull request et manuellement depuis **Actions → Tests et extensions →
+Run workflow**. Il effectue :
+
+1. Les tests sur Node.js 22 et 24, y compris la vérification des ZIP.
+2. La génération Chrome/Firefox et `web-ext lint` pour Firefox.
+3. Les tests d’intégration dans Chromium avec les API d’extension simulées.
+4. Si toutes les vérifications réussissent, la préparation des deux ZIP et du
+   fichier d’empreintes `SHA256SUMS`.
+
+### Télécharger une version à essayer
+
+Sur GitHub, ouvrir **Actions → Tests et extensions**, choisir une exécution
+réussie correspondant au commit voulu, puis télécharger l’artefact
+**preview-link-tab-packages** en bas de sa page. Une connexion à GitHub peut être
+nécessaire. Extraire cette première archive pour obtenir :
+
+- `preview-link-tab-<version>-chrome.zip` ;
+- `preview-link-tab-<version>-firefox.zip` ;
+- `SHA256SUMS`.
+
+Les artefacts sont conservés 30 jours. Les rapports Firefox et les captures
+Chromium, sous **rapports-validation**, restent disponibles 14 jours.
+
+Pour Chrome et Helium, extraire aussi le ZIP Chrome, puis charger le dossier
+contenant `manifest.json` comme extension non empaquetée. Pour Firefox,
+extraire le ZIP Firefox et charger temporairement son `manifest.json` depuis
+`about:debugging`. Recharger l’extension et les pages existantes après chaque
+mise à jour. Ces archives ne sont pas signées pour une installation permanente
+dans Firefox et ne sont pas publiées sur les boutiques.
+
+### Préparer une release
+
+Quand une version est prête, mettre à jour ensemble `package.json` et
+`manifest.json`, intégrer les changements dans `main`, puis créer un tag
+correspondant exactement à cette version. Par exemple, uniquement pour publier
+les sources portant la version 0.2.2 :
+
+```bash
+git switch main
+git pull --ff-only
+git tag -a v0.2.2 -m "Version 0.2.2"
+git push origin v0.2.2
+```
+
+Le workflow **Préparer une release** vérifie le numéro de version, relance les
+validations et crée une **release en brouillon**, avec les deux ZIP, leurs
+empreintes et des notes de publication générées à partir de l’historique GitHub.
+Ouvrir **Releases**, vérifier le brouillon, compléter les notes et cliquer sur
+**Publish release** pour le rendre public. Aucun secret personnel n’est requis :
+le workflow utilise le jeton temporaire fourni par GitHub.
+
+Relancer une exécution peut actualiser les fichiers d’un brouillon existant.
+Une release déjà publiée n’est pas modifiée automatiquement. Si la politique du
+dépôt interdit l’écriture avec `GITHUB_TOKEN`, le propriétaire doit autoriser
+cette opération dans les paramètres GitHub Actions du dépôt.
+
+### Exécuter les mêmes contrôles localement
+
+Les tests d’archives et `npm run package` nécessitent les commandes `zip` et
+`unzip`, présentes sur les runners Ubuntu de GitHub. Les commandes de génération
+`npm run build` restent sans dépendances npm. Les outils optionnels ont leur
+propre manifeste et lockfile sous `tools/ci` :
+
+```bash
+npm ci --prefix tools/ci
+npm test
+npm run build
+tools/ci/node_modules/.bin/web-ext lint --source-dir dist/firefox
+tools/ci/node_modules/.bin/playwright install chromium
+npm run test:browser
+npm run package
+```
+
+Sur Linux, `playwright install --with-deps chromium` peut être nécessaire pour
+installer aussi les bibliothèques système. Pour réutiliser un Chromium déjà
+installé, utiliser `CHROMIUM_PATH=/chemin/vers/chromium npm run test:browser`.
+Les paquets sont écrits dans `dist/packages/`. Ne pas versionner `dist/` ni les
+outils installés. Les vérifications avec les API simulées complètent les essais
+réels dans Chrome, Firefox et Helium.

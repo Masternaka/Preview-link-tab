@@ -1,20 +1,22 @@
-name: Tests
+name: Tests et extensions
 
 on:
   push:
+    branches: ['**']
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: tests-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: validation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   test:
-    name: Node.js ${{ matrix.node }}
+    name: Tests Node.js ${{ matrix.node }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     strategy:
@@ -22,17 +24,73 @@ jobs:
       matrix:
         node: [22, 24]
     steps:
-      - name: Récupérer le code
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
-
-      - name: Installer Node.js
-        uses: actions/setup-node@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
           package-manager-cache: false
-
-      # La suite utilise uniquement les modules intégrés de Node.js.
       - name: Exécuter les tests
         run: npm test
+
+  browser:
+    name: Chromium et validation Firefox
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: tools/ci/package-lock.json
+      - name: Installer les outils verrouillés
+        run: npm ci --prefix tools/ci --no-audit --no-fund
+      - name: Installer Chromium et ses bibliothèques
+        run: tools/ci/node_modules/.bin/playwright install --with-deps chromium
+      - name: Générer les extensions
+        run: npm run build
+      - name: Vérifier le paquet Firefox
+        run: |
+          mkdir -p reports
+          tools/ci/node_modules/.bin/web-ext lint --source-dir dist/firefox --output json > reports/firefox-lint.json
+      - name: Tester les interactions dans Chromium
+        run: npm run test:browser
+        env:
+          QA_SCREENSHOT_DIR: ${{ github.workspace }}/reports/screenshots
+      - name: Conserver les rapports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapports-validation
+          path: reports/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  packages:
+    name: Archives Chrome et Firefox
+    needs: [test, browser]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Préparer les ZIP et leurs empreintes
+        run: npm run package
+      - name: Conserver les extensions téléchargeables
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-link-tab-packages
+          path: |
+            dist/packages/*.zip
+            dist/packages/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30

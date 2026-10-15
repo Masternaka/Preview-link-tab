@@ -23,3 +23,6 @@ dist/
 
 # Claude Code documentation
 CLAUDE.md
+
+# Outils optionnels des workflows GitHub
+/tools/ci/node_modules/

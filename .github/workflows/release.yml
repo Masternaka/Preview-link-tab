@@ -1,0 +1,71 @@
+name: Préparer une release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Vérifier le numéro de version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Vérifier le tag et les manifestes
+        run: |
+          node - <<'JS'
+          const version = require('./package.json').version;
+          if (process.env.RELEASE_TAG !== `v${version}` || require('./manifest.json').version !== version) {
+            throw new Error('Le tag doit correspondre à la version de package.json et manifest.json.');
+          }
+          JS
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+
+  validation:
+    needs: version
+    uses: ./.github/workflows/tests.yml
+    permissions:
+      contents: read
+
+  release:
+    name: Créer la release en brouillon
+    needs: validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Récupérer les archives validées
+        uses: actions/download-artifact@v4
+        with:
+          name: preview-link-tab-packages
+          path: packages
+      - name: Créer ou actualiser le brouillon
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --json isDraft > release-state.json 2> release-error.log; then
+            node -e 'if (!JSON.parse(require("fs").readFileSync("release-state.json")).isDraft) throw new Error("Cette release est déjà publiée ; aucun fichier ne sera remplacé.")'
+            gh release upload "$RELEASE_TAG" packages/*.zip packages/SHA256SUMS --clobber
+          else
+            # Authentication/network errors also fail creation; never hide them.
+            gh release create "$RELEASE_TAG" packages/*.zip packages/SHA256SUMS --draft --verify-tag --generate-notes --title "$RELEASE_TAG"
+          fi

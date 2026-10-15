@@ -7,13 +7,16 @@ Les tâches terminées ont été retirées. Le fonctionnement courant des améli
 
 ## Prochaines étapes conseillées
 
-1. Valider la version Firefox dans le navigateur, puis préparer les archives de distribution.
+1. Valider la version Firefox dans le navigateur, puis vérifier les archives générées par GitHub Actions.
 2. Corriger les réglages de secours et clarifier la liste d’autorisation vide.
 
 Le bouton d’annulation et l’interface visuelle des règles par site sont en place.
 Les suppressions de règles et thèmes peuvent être annulées pendant 10 secondes.
 La reprise de lecture en session et le bouton Réessayer sont disponibles ;
 Nouvel onglet ferme immédiatement l’aperçu au clic, avant la demande d’ouverture.
+Les workflows génèrent les ZIP après validation et préparent une release en
+brouillon à chaque tag de version. Les essais avec les extensions chargées et
+la signature Firefox restent à effectuer.
 Les profils ne font pas partie du chantier retenu ; leur utilité reste à réévaluer.
 
 ## Fonctionnalités à ajouter
@@ -53,7 +56,6 @@ Pour chaque anomalie, noter : navigateur/version, URL si partageable, réglages 
 
 ## Préparer les versions à distribuer
 
-- [ ] **P2 — Archives et versions GitHub automatisées.** Générer une archive contenant les fichiers utiles à l’exécution pour chaque navigateur, puis préparer une release GitHub avec ces archives et la liste des changements.
 - [ ] **P2 — Version et notes de publication.** Mettre à jour ensemble la version du manifeste et celle de `package.json`, puis rédiger les changements de chaque version.
 - [ ] **P2 — Licence et stockage.** Ajouter une licence et une description claire du stockage des préférences et des connexions réalisées lors d’un aperçu.
 - [ ] **P2 — Préparation finale.** Terminer les vérifications prioritaires, documenter les limites restantes dans le README et vérifier que les permissions du manifeste correspondent aux fonctions conservées.
