@@ -251,3 +251,21 @@ code { font-size: 10px; overflow-wrap: anywhere; }
 
 .theme-preview[data-position="topLeft"] .sample-animate,
 .theme-preview[data-position="bottomLeft"] .sample-animate { --sample-slide-x: -45px; }
+
+.save-actions, .rule-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.save-bar { flex-wrap: wrap; }
+.save-feedback { flex: 1; }
+.domain-rules-list, .rule-editor { display: grid; gap: 10px; min-width: 0; }
+.domain-rule-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px; border: 1px solid var(--popup-border); border-radius: 8px; }
+.domain-rule-row > span { flex: 1 1 180px; overflow-wrap: anywhere; font-size: 12px; }
+.rule-editor { padding-top: 12px; border-top: 1px solid var(--popup-border); }
+.domain-rules-details > .details-content { grid-template-columns: minmax(0, 1fr); }
+#rule-error { color: var(--popup-danger); }
+#rule-error:empty { display: none; }
+[aria-invalid="true"] { border-color: var(--popup-danger); }
+@media (max-width: 600px) {
+  .save-feedback { flex-basis: 100%; }
+  .save-actions { width: 100%; }
+  .save-actions > button { flex: 1 1 auto; }
+  .domain-rule-row > span { flex-basis: 100%; }
+}

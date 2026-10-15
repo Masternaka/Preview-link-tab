@@ -7,16 +7,16 @@ Les tâches terminées ont été retirées. Le fonctionnement courant des améli
 
 ## Prochaines étapes conseillées
 
-1. Ajouter les profils de réglages et la possibilité d’annuler les modifications.
-2. Simplifier la gestion des règles par site.
-3. Valider la version Firefox dans le navigateur, puis préparer les archives de distribution.
+1. Valider la version Firefox dans le navigateur, puis préparer les archives de distribution.
+2. Corriger les réglages de secours et clarifier la liste d’autorisation vide.
+
+Le bouton d’annulation et l’interface visuelle des règles par site sont en place.
+Les profils ne font pas partie du chantier retenu ; leur utilité reste à réévaluer.
 
 ## Fonctionnalités à ajouter
 
-- [ ] **P1 — Profils de réglages.** Enregistrer, nommer, modifier et supprimer des configurations complètes : thème, taille, position, animations, cadres, ombres et comportements. Permettre de passer d’un profil à l’autre en un clic et de les inclure dans l’export/import. Exemples : Lecture, Travail, Minimaliste.
-- [ ] **P1 — Annuler les modifications.** Ajouter un bouton pour revenir aux derniers réglages sauvegardés et remettre la miniature à jour. Définir aussi le comportement des modifications non sauvegardées quand on change de profil.
+- [ ] **P3 — Profils de réglages (à réévaluer).** Enregistrer, nommer, modifier et supprimer des configurations complètes : thème, taille, position, animations, cadres, ombres et comportements. Permettre de passer d’un profil à l’autre en un clic et de les inclure dans l’export/import. Exemples : Lecture, Travail, Minimaliste.
 - [ ] **P2 — Réinitialiser une rubrique.** Rétablir uniquement les réglages d’Utilisation, d’Apparence ou de Sites, sans effacer les autres préférences ni la bibliothèque de thèmes personnels.
-- [ ] **P2 — Règles par site avec une interface visuelle.** Remplacer la saisie textuelle par une liste avec domaine, mode d’ouverture et boutons Ajouter/Modifier/Supprimer. Signaler les domaines invalides et afficher la règle réellement appliquée au site courant, y compris les règles héritées d’un domaine parent.
 - [ ] **P2 — Raccourcis des actions personnalisables.** Permettre de modifier ou désactiver les touches pour actualiser, épingler, copier l’URL et ouvrir dans un onglet, en signalant les conflits. Étudier le relais des actions dans l’iframe en préservant la saisie et les raccourcis du site intégré. Le raccourci global est déjà configurable dans le navigateur.
 - [ ] **P2 — Validation Firefox.** La base commune, le manifeste Firefox, les API d'arrière-plan et la génération des deux versions sont en place (`npm run build`). Les tests avec API simulées couvrent Firefox. Confirmer dans Firefox les aperçus, les fenêtres, le stockage, la pause par site, le presse-papiers et les raccourcis, puis tester les fonctions natives selon les API disponibles.
 
