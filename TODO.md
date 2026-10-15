@@ -13,7 +13,7 @@ Les tâches terminées ont été retirées. Le fonctionnement courant des améli
 Le bouton d’annulation et l’interface visuelle des règles par site sont en place.
 Les suppressions de règles et thèmes peuvent être annulées pendant 10 secondes.
 La reprise de lecture en session et le bouton Réessayer sont disponibles ;
-Nouvel onglet ferme l’aperçu après confirmation de l’ouverture.
+Nouvel onglet ferme immédiatement l’aperçu au clic, avant la demande d’ouverture.
 Les profils ne font pas partie du chantier retenu ; leur utilité reste à réévaluer.
 
 ## Fonctionnalités à ajouter

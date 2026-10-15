@@ -969,21 +969,29 @@ test('ouvrir dans un onglet ferme toujours l’aperçu après succès, même ép
   assert.equal(STATE.root.classList.contains('peek-visible'), false);
 });
 
-test('une ouverture d’onglet échouée ou ancienne conserve l’aperçu actuel', async () => {
+test('une réponse ancienne ne ferme pas un nouvel aperçu, et un échec est signalé', async () => {
   const { context, STATE } = await contentHarness();
   STATE.root = element(); STATE.root.classList.add('peek-visible');
-  STATE.settings.animation = 'none';
+  STATE.iframe = { removeAttribute() {} };
+  STATE.settings.animation = 'slide';
   STATE.currentUrl = 'https://example.com/one';
-  context.document.getElementById = () => element();
+  const notice = element();
+  context.document.getElementById = () => notice;
   context.chrome.runtime.sendMessage = (m, cb) => cb({ ok: false });
   context.testApi.openCurrentInTab();
-  assert.equal(STATE.root.classList.contains('peek-visible'), true);
+  assert.equal(STATE.root.classList.contains('peek-visible'), false);
+  assert.match(notice.textContent, /Impossible d’ouvrir/);
   let complete;
+  STATE.currentUrl = 'https://example.com/two';
+  STATE.root.classList.add('peek-visible');
   context.chrome.runtime.sendMessage = (m, cb) => { complete = cb; };
   context.testApi.openCurrentInTab();
-  STATE.currentUrl = 'https://example.com/two';
+  assert.equal(STATE.root.classList.contains('peek-visible'), false);
+  STATE.currentUrl = 'https://example.com/three';
+  STATE.root.classList.add('peek-visible');
   complete({ ok: true });
   assert.equal(STATE.root.classList.contains('peek-visible'), true);
+  assert.equal(STATE.currentUrl, 'https://example.com/three');
 });
 
 test('annuler une suppression de règle conserve les autres ajouts', () => {
@@ -1102,4 +1110,26 @@ test('ouvrir dans un onglet retire immédiatement l’aperçu animé, sans atten
   assert.equal(unloaded, true);
   assert.equal(STATE.currentUrl, '');
   assert.equal(timers.size, 0);
+});
+
+test('le clic ferme l’aperçu avant de demander l’onglet, même sans réponse de l’arrière-plan', async () => {
+  const { context, STATE } = await contentHarness();
+  STATE.root = element(); STATE.root.classList.add('peek-visible');
+  let unloaded = false;
+  STATE.iframe = { removeAttribute() { unloaded = true; } };
+  STATE.currentUrl = 'https://example.com/article';
+  STATE.isPinned = true;
+  STATE.settings.animation = 'slide';
+  context.document.getElementById = () => element();
+  let requested;
+  context.chrome.runtime.sendMessage = message => {
+    assert.equal(STATE.root.classList.contains('peek-visible'), false);
+    assert.equal(unloaded, true);
+    requested = message;
+    // Deliberately never acknowledge the request, as can happen when the
+    // Chromium derivative switches focus away from the originating page.
+  };
+  context.testApi.openCurrentInTab();
+  assert.equal(STATE.root.classList.contains('peek-visible'), false);
+  assert.equal(requested.url, 'https://example.com/article');
 });

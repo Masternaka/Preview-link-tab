@@ -253,8 +253,11 @@ reste disponible pendant 10 secondes. Pour une règle, la restauration reste un
 brouillon à sauvegarder ; pour un thème, elle est enregistrée immédiatement.
 Une nouvelle règle ou un nouveau thème de même identité n’est jamais écrasé.
 
-**Nouvel onglet** ferme toujours l’aperçu après confirmation de l’ouverture,
-même s’il est épinglé. En cas d’échec, l’aperçu reste accessible. L’ancien
+**Nouvel onglet** ferme immédiatement l’aperçu au clic, même s’il est épinglé,
+avant de demander l’ouverture de l’onglet. La fermeture ne dépend ni d’une
+animation ni d’une réponse du navigateur ; cela évite de laisser l’aperçu
+ouvert dans l’onglet source lors d’un changement de focus, notamment sur Helium.
+En cas d’échec d’ouverture signalé, un message invite à réouvrir le lien. L’ancien
 réglage de fermeture après ouverture externe ne concerne désormais que le
 passage en fenêtre compacte.
 
@@ -283,3 +286,13 @@ les refus `X-Frame-Options`, le bouton Réessayer, la fermeture à l’ouverture
 onglet et l’annulation des suppressions. Les API d’extension sont simulées ; ce
 contrôle complète les essais avec l’extension réellement chargée dans Chrome
 et Firefox, sans les remplacer.
+
+
+### Mise à jour 0.2.1
+
+La version 0.2.1 retire l’aperçu dès le clic sur **Nouvel onglet**, avant toute
+communication avec le script d’arrière-plan. Après une mise à jour locale,
+vérifier **0.2.1** dans la page des extensions de Chrome, Helium ou Firefox,
+recharger l’extension et actualiser les pages déjà ouvertes pour remplacer
+leurs anciens scripts. Les fichiers générés doivent être reconstruits avec
+`npm run build` avant de recharger une installation pointant sur `dist/`.

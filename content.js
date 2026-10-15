@@ -1116,26 +1116,19 @@
       return;
     }
     const url = STATE.currentUrl;
-    const opening = closeId;
-    const closeOpenedPreview = () => {
-      if (STATE.currentUrl !== url || closeId !== opening) return;
-      // The new tab takes focus: animations/timers in the source page can be
-      // throttled. Remove the preview and unload its frame synchronously.
-      closeId++;
-      doClose();
-    };
+    // Close while the source page still has focus. Delivery of the background
+    // reply, animations and timers must never control this user action.
+    closeId++;
+    doClose();
     try {
       if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
         chrome.runtime.sendMessage({ type: "OPEN_URL_IN_TAB", url }, response => {
           if (chrome.runtime.lastError || !response?.ok) {
-            showPreviewNotice("Impossible d’ouvrir l’onglet. Réessayez ; l’aperçu reste disponible.");
-            return;
+            showPreviewNotice("Impossible d’ouvrir l’onglet. Réouvrez le lien et réessayez.");
           }
-          closeOpenedPreview();
         });
       } else {
         window.open(url, "_blank", "noopener,noreferrer");
-        closeOpenedPreview();
       }
     } catch {
       showPreviewNotice("Impossible d’ouvrir l’onglet. Rechargez l’extension et réessayez.");

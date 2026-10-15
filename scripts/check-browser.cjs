@@ -50,7 +50,12 @@ const server = http.createServer((req, res) => {
     // restrictions, timers and scroll restoration run in the real browser.
     await context.addInitScript(({ scripts, styles }) => {
       window.chrome = {
-        runtime: { sendMessage(message, cb) { window.previewTestApi(message).then(response => cb?.(response)); } },
+        runtime: { sendMessage(message, cb) {
+          const operation = window.previewTestApi(message);
+          // Fault injection: opening succeeds, but the source page receives no
+          // reply. Closing must happen before this background request.
+          if (message.type !== 'OPEN_URL_IN_TAB') operation.then(response => cb?.(response));
+        } },
         tabs: { query(o, cb) { cb([{ id: 1, url: location.origin + '/article' }]); } },
         storage: { local: {
           get(defaults, cb) { window.previewTestApi({ type: 'READ_SETTINGS' }).then(values => cb({ ...defaults, ...values })); },
@@ -95,10 +100,15 @@ const server = http.createServer((req, res) => {
     await open('article'); await ready();
     await frame().evaluate(() => history.pushState({}, '', '/article?spa'));
     await page.waitForFunction(() => document.querySelector('.peek-url').title.includes('?spa'));
+    const openedTab = context.waitForEvent('page');
     await page.locator('.peek-open').click();
     await page.locator('#peek-preview-extension-root.peek-visible').waitFor({ state: 'detached' });
+    const externalTab = await openedTab;
+    await externalTab.waitForURL(`${base}/article?spa`);
+    assert.equal(await page.locator('.peek-frame').getAttribute('src'), null);
     assert.equal(requests.filter(r => r.type === 'OPEN_URL_IN_TAB').at(-1).url, `${base}/article?spa`);
-    console.log('PASS: SPA URL changes reach the toolbar; opening a tab closes the preview with closeAfterOpen=false.');
+    console.log('PASS: animated preview closes on click even when the new-tab request is never acknowledged.');
+    if (process.env.QA_FLOW === 'tab') { assert.deepEqual(errors, []); return; }
     await open('redirect'); await ready();
     assert.equal(frame().url(), `${base}/article?redirected`);
     await page.locator('.peek-close').click();
