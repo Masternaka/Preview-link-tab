@@ -12,6 +12,9 @@ function element() {
   const children = [];
   return {
     children,
+    focus() {},
+    closest() { return null; },
+    replaceChildren() { children.length = 0; },
     appendChild(child) { children.push(child); child.remove = () => children.splice(children.indexOf(child), 1); },
     querySelector(selector) { return selector === '[data-saved-themes]' ? children.find(item => item.dataset.savedThemes) : null; },
     value: '', checked: false, style: { setProperty() {}, removeProperty(name) { delete this[name]; } },
@@ -858,4 +861,96 @@ test('une valeur invalide révèle sa rubrique et ses sections repliées', () =>
   assert.equal(outer.open, true);
   assert.equal(focused, true);
   assert.equal(harness.writes.length, 0);
+});
+
+test('annuler restaure les réglages sauvegardés et la miniature sans écriture', () => {
+  const { context, node, writes } = popupHarness();
+  const form = node('settings-form');
+  form.elements.openMode.value = 'compact';
+  node('backdropIntensitySlider').value = '82';
+  node('backdropIntensitySlider').listeners.input();
+  context.saveSettings();
+  form.elements.openMode.value = 'split';
+  form.elements.domainRules.value = 'example.com = blocked';
+  node('backdropIntensitySlider').value = '20';
+  node('backdropIntensitySlider').listeners.input();
+  node('discard-changes').listeners.click();
+  assert.equal(form.elements.openMode.value, 'compact');
+  assert.equal(form.elements.domainRules.value, '');
+  assert.equal(Number(node('backdropIntensitySlider').value), 82);
+  assert.equal(writes.length, 1);
+});
+
+test('une sauvegarde échouée ne change pas les réglages restaurés par Annuler', () => {
+  const harness = popupHarness();
+  const { context, node } = harness;
+  const original = node('settings-form').elements.openMode.value;
+  node('settings-form').elements.openMode.value = 'compact';
+  harness.fail();
+  context.saveSettings();
+  node('discard-changes').listeners.click();
+  assert.equal(node('settings-form').elements.openMode.value, original);
+});
+
+test('éditeur de règles : validation, doublon, modification, suppression et annulation', () => {
+  const { context, node, writes } = popupHarness();
+  node('rule-domain').value = 'https://Docs.Example.com/page';
+  node('rule-mode').value = 'compact';
+  assert.equal(context.applyDomainRuleEdit(), true);
+  assert.equal(node('settings-form').elements.domainRules.value, 'docs.example.com = compact');
+  node('rule-domain').value = '*.docs.example.com';
+  assert.equal(context.applyDomainRuleEdit(), false);
+  assert.match(node('rule-error').textContent, /existe déjà/);
+  node('rule-domain').value = '-invalid.example';
+  assert.equal(context.applyDomainRuleEdit(), false);
+  const list = node('domain-rules-list');
+  list.children[0].children[1].listeners.click();
+  node('rule-domain').value = 'example.com';
+  node('rule-mode').value = 'blocked';
+  assert.equal(context.applyDomainRuleEdit(), true);
+  assert.equal(node('settings-form').elements.domainRules.value, 'example.com = blocked');
+  context.saveSettings();
+  list.children[0].children[2].listeners.click();
+  assert.equal(node('settings-form').elements.domainRules.value, '');
+  node('discard-changes').listeners.click();
+  assert.equal(node('settings-form').elements.domainRules.value, 'example.com = blocked');
+  assert.equal(writes.length, 1);
+});
+
+test('sauvegarder valide aussi une règle encore saisie dans l’éditeur', () => {
+  const { context, node, writes } = popupHarness();
+  node('rule-domain').value = 'invalid domain';
+  context.saveSettings();
+  assert.equal(writes.length, 0);
+  node('rule-domain').value = 'example.com';
+  node('rule-mode').value = 'overlay';
+  context.saveSettings();
+  assert.equal(writes[0].domainRules, 'example.com = overlay');
+});
+
+test('le site courant affiche la règle héritée, puis sa règle spécifique', () => {
+  const { context, node } = popupHarness();
+  context.chrome.tabs = { query(options, cb) { cb([{ id: 12, url: 'https://docs.example.com/page' }]); } };
+  context.chrome.runtime.sendMessage = (message, cb) => cb({ ok: true, paused: false });
+  node('settings-form').elements.domainRules.value = 'example.com = compact';
+  context.initSiteControls();
+  assert.match(node('effective-site-rule').textContent, /héritée du domaine parent/);
+  node('rule-domain').value = 'docs.example.com';
+  node('rule-mode').value = 'blocked';
+  context.applyDomainRuleEdit();
+  assert.match(node('effective-site-rule').textContent, /Désactivé/);
+  assert.doesNotMatch(node('effective-site-rule').textContent, /héritée/);
+});
+
+test('une règle rapide sauvegardée préserve les autres règles encore en brouillon', () => {
+  const { context, node } = popupHarness();
+  context.chrome.tabs = { query(options, cb) { cb([{ id: 12, url: 'https://site.example/page' }]); } };
+  context.chrome.runtime.sendMessage = (message, cb) => cb({ ok: true, paused: false, domainRules: 'site.example = compact' });
+  context.initSiteControls();
+  node('settings-form').elements.domainRules.value = 'draft.example = blocked';
+  node('current-site-mode').value = 'compact';
+  node('save-site-rule').listeners.click();
+  assert.match(node('settings-form').elements.domainRules.value, /draft.example = blocked/);
+  node('discard-changes').listeners.click();
+  assert.equal(node('settings-form').elements.domainRules.value, 'site.example = compact');
 });

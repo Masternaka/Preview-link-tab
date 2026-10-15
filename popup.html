@@ -736,6 +736,7 @@
                   Mémoriser la règle
                 </button>
               </div>
+              <p id="effective-site-rule" class="hint" role="status"></p>
               <p id="site-status" class="hint" role="status">
               </p>
             </div>
@@ -777,10 +778,10 @@
                 </label>
               </div>
             </details>
-            <details class="settings-details">
+            <details class="settings-details domain-rules-details">
               <summary>
                 <span>
-                  Règles avancées
+                  Règles par site
                   <small>
                     Attribuer un mode d’ouverture à chaque domaine
                   </small>
@@ -790,32 +791,27 @@
                 </span>
               </summary>
               <div class="details-content">
-                <label class="wide-field">
-                  <span>
-                    Règles par domaine
-                  </span>
-                  <textarea name="domainRules" rows="3" placeholder="github.com = compact&#10;docs.exemple.com = overlay&#10;banque.fr = blocked">
-                  </textarea>
-                </label>
-                <p class="hint">
-                  Une règle par ligne. Valeurs :
-                  <code>
-                    overlay
-                  </code>
-                  ,
-                  <code>
-                    compact
-                  </code>
-                  ,
-                  <code>
-                    split
-                  </code>
-                  ou
-                  <code>
-                    blocked
-                  </code>
-                  . La règle la plus spécifique est prioritaire.
-                </p>
+                <input type="hidden" name="domainRules">
+                <p class="hint">La règle du domaine le plus précis est prioritaire. Les changements de cette liste prennent effet après Sauvegarder.</p>
+                <div id="domain-rules-list" class="domain-rules-list" aria-label="Règles par site"></div>
+                <div class="rule-editor">
+                  <label for="rule-domain">Domaine ou URL
+                    <input id="rule-domain" type="text" placeholder="exemple.com" aria-describedby="rule-error">
+                  </label>
+                  <label for="rule-mode">Mode d’ouverture
+                    <select id="rule-mode">
+                      <option value="overlay">Aperçu intégré</option>
+                      <option value="compact">Fenêtre compacte</option>
+                      <option value="split">Vue partagée native</option>
+                      <option value="blocked">Désactivé</option>
+                    </select>
+                  </label>
+                  <div class="rule-actions">
+                    <button type="button" id="add-domain-rule">Ajouter la règle</button>
+                    <button type="button" id="cancel-rule-edit" hidden>Annuler l’édition</button>
+                  </div>
+                  <p id="rule-error" class="hint" role="alert"></p>
+                </div>
               </div>
             </details>
             <details class="settings-details">
@@ -959,9 +955,12 @@
             Prêt à personnaliser
           </p>
         </div>
+        <div class="save-actions">
+        <button id="discard-changes" type="button" disabled>Annuler les modifications</button>
         <button id="save" class="primary-button" type="submit" form="settings-form">
           Sauvegarder
         </button>
+        </div>
       </footer>
       <div id="save-toast" class="save-toast" role="status" aria-live="polite">
         Paramètres sauvegardés

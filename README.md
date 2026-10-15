@@ -109,10 +109,19 @@ sources des palettes sont détaillées dans [THEMES.md](THEMES.md).
 
 ## Règles par domaine
 
-Dans les paramètres, ouvrir **Sites → Règles par domaine** et ajouter une règle par ligne sous la forme
-`domaine = overlay`, `domaine = compact`, `domaine = split` ou `domaine = blocked`. Une règle de
-sous-domaine plus spécifique est prioritaire. Les listes de domaines acceptent
-aussi des URL et la forme `*.domaine`.
+Dans les paramètres, ouvrir **Sites → Règles par site**, saisir un domaine ou une URL,
+choisir le mode d’ouverture puis cliquer sur **Ajouter la règle**. Chaque entrée
+propose **Modifier** et **Supprimer**. Cliquer sur **Sauvegarder** pour appliquer
+la liste. Les domaines invalides et les doublons sont signalés. Une règle de
+sous-domaine plus spécifique est prioritaire ; la carte du site courant indique
+aussi la règle héritée d’un domaine parent. Les domaines acceptent des URL et
+la forme `*.domaine`. Le format texte des exports existants reste compatible.
+
+Le bouton **Annuler les modifications**, toujours accessible en bas de la fenêtre,
+rétablit les derniers réglages sauvegardés et actualise la miniature. Il annule
+aussi les changements non sauvegardés de la liste de règles. Les actions déjà
+enregistrées (thèmes personnels, import, réinitialisation et règle rapide
+« Mémoriser la règle ») restent conservées.
 
 Une **liste noire** désactive l'aperçu sur les domaines listés, une **liste
 blanche** ne l'autorise que sur ceux-ci. L'option **Ouverture compacte

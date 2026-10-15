@@ -9,17 +9,28 @@ const backdropDraft = {
 let backdropDraftMode = "dim";
 const themeColorRoles = PEEK_THEME_COLOR_ROLES;
 let savedThemesDraft = [];
+let persistedSettings = null;
+let editingRuleDomain = null;
 let activeSite = null;
 let activeSitePaused = false;
 const customThemeDraft = {};
 let displayedTheme = null;
 
 
+const RULE_MODE_LABELS = { overlay: "Aperçu intégré", compact: "Fenêtre compacte", split: "Vue partagée native", blocked: "Désactivé" };
+
 loadSettings();
 initSectionNav();
 initColorPickers();
 initThemeLibrary();
 initSiteControls();
+initDomainRuleEditor();
+document.getElementById("discard-changes")?.addEventListener("click", () => {
+  if (!persistedSettings) return;
+  setFormSettings(persistedSettings);
+  saveToast.classList.remove("save-toast-visible");
+  showStatus("Modifications annulées. Derniers réglages sauvegardés rétablis.");
+});
 
 form.addEventListener("submit", event => {
   event.preventDefault();
@@ -51,6 +62,11 @@ function syncCurrentSiteRule() {
   if (!activeSite) return;
   const select = document.getElementById("current-site-mode");
   select.value = parseDomainRules(form.elements.domainRules.value).find(rule => rule.domain === activeSite.hostname)?.mode || "default";
+  const rule = getDomainRule(activeSite.hostname, { domainRules: form.elements.domainRules.value });
+  const effective = document.getElementById("effective-site-rule");
+  if (effective) effective.textContent = rule
+    ? `Règle appliquée à la sauvegarde : ${RULE_MODE_LABELS[rule.mode]} (${rule.domain}${rule.domain !== activeSite.hostname ? ", héritée du domaine parent" : ""}).`
+    : "Aucune règle par domaine : les réglages généraux et les listes de sites s’appliquent.";
 }
 
 function initSiteControls() {
@@ -106,7 +122,10 @@ function initSiteControls() {
       mode: document.getElementById("current-site-mode").value }, response => {
       ruleButton.disabled = false;
       if (chrome.runtime.lastError || !response?.ok) { status.textContent = "Impossible de sauvegarder la règle."; return; }
-      form.elements.domainRules.value = response.domainRules;
+      const savedRule = parseDomainRules(response.domainRules).find(rule => rule.domain === activeSite.hostname);
+      form.elements.domainRules.value = setPeekDomainRule(form.elements.domainRules.value, activeSite.hostname, savedRule?.mode || "default");
+      if (persistedSettings) persistedSettings.domainRules = response.domainRules;
+      renderDomainRules();
       syncCurrentSiteRule();
       status.textContent = "Règle du site enregistrée.";
     });
@@ -163,6 +182,7 @@ function revealInvalidField(invalid) {
 }
 
 function saveSettings() {
+  if (document.getElementById("rule-domain")?.value.trim() && !applyDomainRuleEdit()) return;
   if (!form.checkValidity()) {
     revealInvalidField(form.querySelector("input:invalid, select:invalid, textarea:invalid"));
     showStatus("Valeur invalide");
@@ -183,6 +203,7 @@ function storeSettings(settings, onSuccess) {
         showStatus("Échec de la sauvegarde. Réessayez.");
         return;
       }
+      persistedSettings = cleanPeekSettings({ ...(persistedSettings || PEEK_DEFAULT_SETTINGS), ...settings });
       onSuccess();
     });
   } catch {
@@ -199,7 +220,11 @@ resetButton.addEventListener("click", () => {
 
 function loadSettings() {
   chrome.storage.local.get(PEEK_DEFAULT_SETTINGS, stored => {
-    setFormSettings(cleanPeekSettings(stored));
+    if (chrome.runtime.lastError) { showStatus("Impossible de charger les réglages. Rouvrez les paramètres."); return; }
+    persistedSettings = cleanPeekSettings(stored);
+    setFormSettings(persistedSettings);
+    const discard = document.getElementById("discard-changes");
+    if (discard) discard.disabled = false;
   });
 }
 
@@ -317,6 +342,8 @@ function setFormSettings(settings) {
   updateColorSwatches();
   updateThemeLibraryControls();
   updateAppearancePreview();
+  renderDomainRules();
+  resetRuleEditor();
   syncCurrentSiteRule();
 }
 
@@ -607,5 +634,98 @@ if (exportButton && importButton && importFileInput) {
       showStatus("Impossible de lire le fichier.");
     }
     importFileInput.value = ""; // Reset
+  });
+}
+
+function resetRuleEditor() {
+  editingRuleDomain = null;
+  const domain = document.getElementById("rule-domain");
+  if (!domain) return;
+  domain.value = "";
+  domain.removeAttribute?.("aria-invalid");
+  document.getElementById("rule-mode").value = "overlay";
+  document.getElementById("add-domain-rule").textContent = "Ajouter la règle";
+  document.getElementById("cancel-rule-edit").hidden = true;
+  document.getElementById("rule-error").textContent = "";
+}
+
+function renderDomainRules() {
+  const list = document.getElementById("domain-rules-list");
+  if (!list) return;
+  list.replaceChildren();
+  const rules = parseDomainRules(form.elements.domainRules.value);
+  if (!rules.length) {
+    const empty = document.createElement("p");
+    empty.className = "hint";
+    empty.textContent = "Aucune règle par site.";
+    list.appendChild(empty);
+  }
+  for (const rule of rules) {
+    const row = document.createElement("div");
+    row.className = "domain-rule-row";
+    const description = document.createElement("span");
+    description.textContent = `${rule.domain} — ${RULE_MODE_LABELS[rule.mode]}`;
+    row.appendChild(description);
+    for (const action of ["Modifier", "Supprimer"]) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = action;
+      button.setAttribute("aria-label", `${action} la règle de ${rule.domain}`);
+      button.addEventListener("click", () => {
+        if (action === "Modifier") {
+          editingRuleDomain = rule.domain;
+          document.getElementById("rule-domain").value = rule.domain;
+          document.getElementById("rule-mode").value = rule.mode;
+          document.getElementById("add-domain-rule").textContent = "Appliquer la modification";
+          document.getElementById("cancel-rule-edit").hidden = false;
+          document.getElementById("rule-error").textContent = "";
+          document.getElementById("rule-domain").focus?.();
+        } else {
+          form.elements.domainRules.value = setPeekDomainRule(form.elements.domainRules.value, rule.domain, "default");
+          resetRuleEditor();
+          renderDomainRules();
+          syncCurrentSiteRule();
+          showStatus("Règle supprimée. Modifications non sauvegardées.");
+        }
+      });
+      row.appendChild(button);
+    }
+    list.appendChild(row);
+  }
+}
+
+function applyDomainRuleEdit() {
+  const input = document.getElementById("rule-domain");
+  const domain = normalizeDomainEntry(input.value);
+  const error = document.getElementById("rule-error");
+  const invalid = message => {
+    error.textContent = message;
+    input.setAttribute("aria-invalid", "true");
+    revealInvalidField(input);
+  };
+  if (!domain || domain.length > 253 || !domain.split(".").every(label => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(label))) {
+    invalid("Saisissez un domaine ou une URL valide, par exemple exemple.com.");
+    return false;
+  }
+  const rules = parseDomainRules(form.elements.domainRules.value);
+  if (rules.some(rule => rule.domain === domain && domain !== editingRuleDomain)) {
+    invalid("Une règle existe déjà pour ce domaine. Utilisez Modifier.");
+    return false;
+  }
+  let value = form.elements.domainRules.value;
+  if (editingRuleDomain && editingRuleDomain !== domain) value = setPeekDomainRule(value, editingRuleDomain, "default");
+  form.elements.domainRules.value = setPeekDomainRule(value, domain, document.getElementById("rule-mode").value);
+  resetRuleEditor();
+  renderDomainRules();
+  syncCurrentSiteRule();
+  showStatus("Modifications non sauvegardées");
+  return true;
+}
+
+function initDomainRuleEditor() {
+  document.getElementById("add-domain-rule")?.addEventListener("click", applyDomainRuleEdit);
+  document.getElementById("cancel-rule-edit")?.addEventListener("click", resetRuleEditor);
+  document.getElementById("rule-domain")?.addEventListener("keydown", event => {
+    if (event.key === "Enter") { event.preventDefault(); applyDomainRuleEdit(); }
   });
 }
