@@ -1118,7 +1118,11 @@
     const url = STATE.currentUrl;
     const opening = closeId;
     const closeOpenedPreview = () => {
-      if (STATE.currentUrl === url && closeId === opening) closePreview();
+      if (STATE.currentUrl !== url || closeId !== opening) return;
+      // The new tab takes focus: animations/timers in the source page can be
+      // throttled. Remove the preview and unload its frame synchronously.
+      closeId++;
+      doClose();
     };
     try {
       if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {

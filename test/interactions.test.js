@@ -1086,3 +1086,20 @@ test('sauvegarder la suppression d’une règle termine son annulation temporair
   assert.equal(node('settings-form').elements.domainRules.value, '');
   assert.equal(node('undo-notice').hidden, true);
 });
+
+test('ouvrir dans un onglet retire immédiatement l’aperçu animé, sans attendre les minuteries de l’onglet source', async () => {
+  const { context, STATE, window, timers } = await contentHarness();
+  context.setTimeout = window.setTimeout;
+  STATE.root = element(); STATE.root.classList.add('peek-visible');
+  STATE.panel = element();
+  let unloaded = false;
+  STATE.iframe = { removeAttribute(name) { if (name === 'src') unloaded = true; } };
+  STATE.currentUrl = 'https://example.com/article';
+  STATE.settings.animation = 'slide';
+  STATE.settings.closeAfterOpen = false;
+  context.testApi.openCurrentInTab();
+  assert.equal(STATE.root.classList.contains('peek-visible'), false);
+  assert.equal(unloaded, true);
+  assert.equal(STATE.currentUrl, '');
+  assert.equal(timers.size, 0);
+});

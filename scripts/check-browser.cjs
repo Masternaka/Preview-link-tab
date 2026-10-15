@@ -87,6 +87,14 @@ const server = http.createServer((req, res) => {
     console.log('PASS: page reopen restores reading position in a real iframe.');
     await frame().evaluate(() => history.pushState({}, '', '/article?spa'));
     await page.waitForFunction(() => document.querySelector('.peek-open') && document.querySelector('.peek-url').title.includes('?spa'));
+    saved.animation = 'slide';
+    // Reopen with animations enabled before testing the external-tab action.
+    await page.locator('.peek-close').click();
+    await page.locator('#peek-preview-extension-root.peek-visible').waitFor({ state: 'detached' });
+    await page.reload();
+    await open('article'); await ready();
+    await frame().evaluate(() => history.pushState({}, '', '/article?spa'));
+    await page.waitForFunction(() => document.querySelector('.peek-url').title.includes('?spa'));
     await page.locator('.peek-open').click();
     await page.locator('#peek-preview-extension-root.peek-visible').waitFor({ state: 'detached' });
     assert.equal(requests.filter(r => r.type === 'OPEN_URL_IN_TAB').at(-1).url, `${base}/article?spa`);
