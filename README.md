@@ -231,3 +231,55 @@ tests ont réussi ; une croix rouge permet d’ouvrir les journaux du test en é
 Le workflow peut aussi être lancé manuellement depuis **Run workflow**, une fois
 présent sur la branche par défaut. Ces tests ne remplacent pas les essais visuels
 de l’extension dans les navigateurs.
+
+## Reprise de lecture et actions annulables
+
+Dans un aperçu intégré, la position de défilement est mémorisée pour retrouver
+sa lecture en rouvrant exactement la même URL. Les positions restent dans le
+stockage de session de l’extension : au maximum 100 pages par contexte
+(normal ou privé), pendant 24 heures au plus et jusqu’à la fermeture du
+navigateur. Elles ne sont pas exportées avec les réglages. Si le stockage de
+session n’est pas disponible, la mémoire temporaire du script d’arrière-plan
+est utilisée. Aucun stockage du site n’est utilisé.
+
+La reprise nécessite que le script de l’extension puisse s’exécuter dans la page.
+Elle vise le défilement principal, pas les zones défilantes internes d’un site.
+La restauration attend brièvement le contenu dynamique et s’arrête dès une
+interaction pour laisser la main à l’utilisateur. Les changements d’URL des
+applications web sont également suivis pendant l’aperçu.
+
+Après une suppression de règle ou de thème personnel, **Annuler la suppression**
+reste disponible pendant 10 secondes. Pour une règle, la restauration reste un
+brouillon à sauvegarder ; pour un thème, elle est enregistrée immédiatement.
+Une nouvelle règle ou un nouveau thème de même identité n’est jamais écrasé.
+
+**Nouvel onglet** ferme toujours l’aperçu après confirmation de l’ouverture,
+même s’il est épinglé. En cas d’échec, l’aperçu reste accessible. L’ancien
+réglage de fermeture après ouverture externe ne concerne désormais que le
+passage en fenêtre compacte.
+
+En l’absence de confirmation de chargement sous 12 secondes, l’aperçu propose
+**Réessayer**, **Fenêtre compacte** et **Nouvel onglet**. Une confirmation tardive
+rétablit automatiquement la page. Le message ne prétend pas distinguer un site
+qui refuse l’intégration d’une page simplement lente.
+
+### Vérifications dans Chromium
+
+Un contrôle complémentaire avec de vraies pages locales et les scripts de
+l’extension est disponible :
+
+```bash
+PLAYWRIGHT_MODULE=/chemin/vers/playwright node scripts/check-browser.cjs
+```
+
+Playwright doit être fourni séparément (ou disponible dans la résolution des
+modules Node.js). `CHROMIUM_PATH` permet de choisir l’exécutable, par défaut
+`/usr/bin/chromium`. `QA_SCREENSHOT_DIR` permet d’enregistrer des captures hors du
+dépôt. Aucun paquet supplémentaire n’est requis pour `npm test` ou la génération.
+
+Ce contrôle vérifie la reprise de lecture dans une iframe d’une autre origine,
+les redirections, les changements d’URL sans rechargement, les pages lentes,
+les refus `X-Frame-Options`, le bouton Réessayer, la fermeture à l’ouverture d’un
+onglet et l’annulation des suppressions. Les API d’extension sont simulées ; ce
+contrôle complète les essais avec l’extension réellement chargée dans Chrome
+et Firefox, sans les remplacer.

@@ -66,7 +66,7 @@ async function contentHarness({ embedded = false } = {}) {
     vm.runInContext(source('content.js'), context);
     return { ...harness, document, messages };
   }
-  const script = source('content.js').replace(/\}\)\(\);\s*$/, 'this.testApi = { STATE, startPreviewLoadTimer, doClose, openPreview, panelGestureRect, initResizeListeners, applyOverlayLayout, recordPreviewNavigation, navigatePreviewHistory }; })();');
+  const script = source('content.js').replace(/\}\)\(\);\s*$/, 'this.testApi = { STATE, startPreviewLoadTimer, doClose, openPreview, panelGestureRect, initResizeListeners, applyOverlayLayout, recordPreviewNavigation, navigatePreviewHistory, openCurrentInTab, refreshPreview }; })();');
   vm.runInContext(script, context);
   await Promise.resolve();
   const { STATE } = context.testApi;
@@ -953,4 +953,136 @@ test('une règle rapide sauvegardée préserve les autres règles encore en brou
   assert.match(node('settings-form').elements.domainRules.value, /draft.example = blocked/);
   node('discard-changes').listeners.click();
   assert.equal(node('settings-form').elements.domainRules.value, 'site.example = compact');
+});
+
+test('ouvrir dans un onglet ferme toujours l’aperçu après succès, même épinglé', async () => {
+  const { context, STATE, messages } = await contentHarness();
+  STATE.root = element(); STATE.root.classList.add('peek-visible');
+  STATE.iframe = { removeAttribute() {} };
+  STATE.settings.animation = 'none';
+  STATE.settings.closeAfterOpen = false;
+  STATE.isPinned = true;
+  STATE.currentUrl = 'https://redirect.example/article';
+  context.testApi.openCurrentInTab();
+  assert.equal(messages.at(-1).url, 'https://redirect.example/article');
+  assert.equal(messages.at(-1).type, 'OPEN_URL_IN_TAB');
+  assert.equal(STATE.root.classList.contains('peek-visible'), false);
+});
+
+test('une ouverture d’onglet échouée ou ancienne conserve l’aperçu actuel', async () => {
+  const { context, STATE } = await contentHarness();
+  STATE.root = element(); STATE.root.classList.add('peek-visible');
+  STATE.settings.animation = 'none';
+  STATE.currentUrl = 'https://example.com/one';
+  context.document.getElementById = () => element();
+  context.chrome.runtime.sendMessage = (m, cb) => cb({ ok: false });
+  context.testApi.openCurrentInTab();
+  assert.equal(STATE.root.classList.contains('peek-visible'), true);
+  let complete;
+  context.chrome.runtime.sendMessage = (m, cb) => { complete = cb; };
+  context.testApi.openCurrentInTab();
+  STATE.currentUrl = 'https://example.com/two';
+  complete({ ok: true });
+  assert.equal(STATE.root.classList.contains('peek-visible'), true);
+});
+
+test('annuler une suppression de règle conserve les autres ajouts', () => {
+  const { context, node } = popupHarness();
+  node('rule-domain').value = 'one.example';
+  context.applyDomainRuleEdit();
+  node('domain-rules-list').children[0].children[2].listeners.click();
+  assert.equal(node('undo-notice').hidden, false);
+  node('rule-domain').value = 'two.example'; context.applyDomainRuleEdit();
+  node('undo-delete').listeners.click();
+  assert.match(node('settings-form').elements.domainRules.value, /one.example/);
+  assert.match(node('settings-form').elements.domainRules.value, /two.example/);
+  assert.equal(node('undo-notice').hidden, true);
+});
+
+test('annuler une suppression ne remplace pas une nouvelle règle du même domaine', () => {
+  const { context, node } = popupHarness();
+  node('rule-domain').value = 'example.com'; context.applyDomainRuleEdit();
+  node('domain-rules-list').children[0].children[2].listeners.click();
+  node('rule-domain').value = 'example.com'; node('rule-mode').value = 'blocked'; context.applyDomainRuleEdit();
+  node('undo-delete').listeners.click();
+  assert.equal(node('settings-form').elements.domainRules.value, 'example.com = blocked');
+});
+
+test('annuler une suppression de thème restaure sa palette et sa persistance', () => {
+  const { context, node, writes } = popupHarness();
+  node('theme-name').value = 'Lecture'; node('save-theme').listeners.click();
+  const theme = writes.at(-1).savedThemes[0];
+  node('delete-theme').listeners.click();
+  assert.equal(writes.at(-1).savedThemes.length, 0);
+  node('undo-delete').listeners.click();
+  assert.equal(writes.at(-1).savedThemes[0].id, theme.id);
+  assert.equal(writes.at(-1).theme, `saved:${theme.id}`);
+  assert.equal(context.getFormSettings().savedThemes.length, 1);
+});
+
+test('le bouton de rétablissement expire et disparaît après sauvegarde', () => {
+  const { context, node, timers } = popupHarness();
+  node('rule-domain').value = 'example.com'; context.applyDomainRuleEdit();
+  node('domain-rules-list').children[0].children[2].listeners.click();
+  const expire = [...timers.values()].find(fn => fn.name === 'clearDeletionUndo');
+  assert.ok(expire); expire();
+  node('undo-delete').listeners.click();
+  assert.equal(node('settings-form').elements.domainRules.value, '');
+  assert.equal(node('undo-notice').hidden, true);
+});
+
+test('la reprise de lecture est inactive dans les iframes ordinaires et respecte l’intervention de l’utilisateur', async () => {
+  const { context, window, messages } = await contentHarness({ embedded: true });
+  window.parent = window.top;
+  const intervals = new Map(); let id = 0;
+  window.setInterval = fn => { intervals.set(++id, fn); return id; };
+  window.clearInterval = id => intervals.delete(id);
+  window.scrollX = 0; window.scrollY = 0;
+  window.scrollTo = (x, y) => { window.scrollX = x; window.scrollY = y; };
+  const requests = [];
+  context.chrome.runtime.sendMessage = (message, cb) => { requests.push(message); cb({ ok: true, position: { x: 0, y: 350 } }); };
+  window.listeners.scroll();
+  assert.equal(requests.length, 0);
+  window.listeners.message({ source: {}, data: { source: 'peek-preview-host', type: 'ACTIVATE_READING_POSITION' } });
+  assert.equal(requests.length, 0);
+  window.listeners.message({ source: window.top, data: { source: 'peek-preview-host', type: 'ACTIVATE_READING_POSITION' } });
+  assert.equal(window.scrollY, 350);
+  window.scrollY = 600; window.listeners.scroll();
+  window.listeners.pagehide();
+  assert.equal(requests.at(-1).type, 'SAVE_READING_POSITION');
+  assert.equal(requests.at(-1).y, 600);
+  assert.equal(intervals.size, 0);
+});
+
+test('la restauration différée ne reprend pas après une intervention de l’utilisateur', async () => {
+  const { context, window } = await contentHarness({ embedded: true });
+  window.parent = window.top;
+  window.setInterval = () => 1; window.clearInterval = () => {};
+  let complete; let scrolls = 0;
+  window.scrollTo = () => { scrolls++; };
+  context.chrome.runtime.sendMessage = (message, cb) => { complete = cb; };
+  window.listeners.message({ source: window.top, data: { source: 'peek-preview-host', type: 'ACTIVATE_READING_POSITION' } });
+  window.listeners.wheel();
+  complete({ ok: true, position: { x: 0, y: 1000 } });
+  assert.equal(scrolls, 0);
+});
+
+test('une restauration de thème échouée conserve la possibilité de réessayer', () => {
+  const harness = popupHarness();
+  const { context, node } = harness;
+  node('theme-name').value = 'Lecture'; node('save-theme').listeners.click();
+  node('delete-theme').listeners.click(); harness.fail();
+  node('undo-delete').listeners.click();
+  assert.equal(context.getFormSettings().savedThemes.length, 0);
+  assert.equal(node('undo-notice').hidden, false);
+  assert.match(node('status').textContent, /Échec/);
+});
+
+test('sauvegarder la suppression d’une règle termine son annulation temporaire', () => {
+  const { context, node } = popupHarness();
+  node('rule-domain').value = 'example.com'; context.applyDomainRuleEdit();
+  node('domain-rules-list').children[0].children[2].listeners.click();
+  context.saveSettings(); node('undo-delete').listeners.click();
+  assert.equal(node('settings-form').elements.domainRules.value, '');
+  assert.equal(node('undo-notice').hidden, true);
 });

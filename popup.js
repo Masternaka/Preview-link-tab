@@ -11,6 +11,8 @@ const themeColorRoles = PEEK_THEME_COLOR_ROLES;
 let savedThemesDraft = [];
 let persistedSettings = null;
 let editingRuleDomain = null;
+let pendingDeletion = null;
+let undoDeletionTimer = 0;
 let activeSite = null;
 let activeSitePaused = false;
 const customThemeDraft = {};
@@ -27,6 +29,7 @@ initSiteControls();
 initDomainRuleEditor();
 document.getElementById("discard-changes")?.addEventListener("click", () => {
   if (!persistedSettings) return;
+  clearDeletionUndo();
   setFormSettings(persistedSettings);
   saveToast.classList.remove("save-toast-visible");
   showStatus("Modifications annulées. Derniers réglages sauvegardés rétablis.");
@@ -190,6 +193,7 @@ function saveSettings() {
   }
   const settings = getFormSettings();
   storeSettings(settings, () => {
+    clearDeletionUndo();
     updateAdvancedGroups();
     showStatus("Sauvegardé");
     showSaveNotification();
@@ -213,6 +217,7 @@ function storeSettings(settings, onSuccess) {
 
 resetButton.addEventListener("click", () => {
   storeSettings(PEEK_DEFAULT_SETTINGS, () => {
+    clearDeletionUndo();
     setFormSettings(PEEK_DEFAULT_SETTINGS);
     showStatus("Paramètres réinitialisés");
   });
@@ -450,6 +455,7 @@ function initThemeLibrary() {
       updateAdvancedGroups();
       updateColorSwatches();
       updateAppearancePreview();
+      offerDeletionUndo({ type: "theme", saved }, "Thème supprimé.");
       showStatus("Thème supprimé. Ses couleurs restent dans Personnalisé.");
     });
   });
@@ -618,6 +624,7 @@ if (exportButton && importButton && importFileInput) {
       try {
         const cleaned = parsePeekSettingsImport(e.target.result);
         storeSettings(cleaned, () => {
+          clearDeletionUndo();
           setFormSettings(cleaned);
           showStatus("Importé !");
           showSaveNotification();
@@ -681,7 +688,9 @@ function renderDomainRules() {
           document.getElementById("rule-error").textContent = "";
           document.getElementById("rule-domain").focus?.();
         } else {
+          const removed = parseDomainRules(form.elements.domainRules.value).filter(item => item.domain === rule.domain);
           form.elements.domainRules.value = setPeekDomainRule(form.elements.domainRules.value, rule.domain, "default");
+          offerDeletionUndo({ type: "rule", removed }, `Règle de ${rule.domain} supprimée.`);
           resetRuleEditor();
           renderDomainRules();
           syncCurrentSiteRule();
@@ -729,3 +738,55 @@ function initDomainRuleEditor() {
     if (event.key === "Enter") { event.preventDefault(); applyDomainRuleEdit(); }
   });
 }
+
+function clearDeletionUndo() {
+  pendingDeletion = null;
+  window.clearTimeout(undoDeletionTimer);
+  const notice = document.getElementById("undo-notice");
+  if (notice) notice.hidden = true;
+}
+
+function offerDeletionUndo(deletion, message) {
+  clearDeletionUndo();
+  pendingDeletion = deletion;
+  document.getElementById("undo-message").textContent = message;
+  document.getElementById("undo-notice").hidden = false;
+  undoDeletionTimer = window.setTimeout(clearDeletionUndo, 10000);
+}
+
+document.getElementById("undo-delete")?.addEventListener("click", () => {
+  const deletion = pendingDeletion;
+  if (!deletion) return;
+  if (deletion.type === "rule") {
+    const domain = deletion.removed[0].domain;
+    if (parseDomainRules(form.elements.domainRules.value).some(rule => rule.domain === domain)) {
+      showStatus("Une nouvelle règle existe pour ce domaine. Elle est conservée.");
+      return;
+    }
+    form.elements.domainRules.value = [form.elements.domainRules.value, ...deletion.removed.map(rule => `${rule.domain} = ${rule.mode}`)].filter(Boolean).join("\n");
+    clearDeletionUndo();
+    renderDomainRules();
+    syncCurrentSiteRule();
+    showStatus("Règle rétablie. Modifications non sauvegardées.");
+    return;
+  }
+  const saved = deletion.saved;
+  if (savedThemesDraft.length >= 50 || savedThemesDraft.some(item => item.id === saved.id || item.name.toLocaleLowerCase() === saved.name.toLocaleLowerCase())) {
+    showStatus("Un thème du même nom existe déjà ou la bibliothèque est pleine.");
+    return;
+  }
+  const savedThemes = cleanPeekSavedThemes([...savedThemesDraft, saved]);
+  storeSettings({ savedThemes, theme: `saved:${saved.id}` }, () => {
+    savedThemesDraft = savedThemes;
+    populatePeekSavedThemes(form.elements.theme, { savedThemes });
+    form.elements.theme.value = `saved:${saved.id}`;
+    displayedTheme = null;
+    updateThemeColors();
+    updateAdvancedGroups();
+    updateColorSwatches();
+    updateThemeLibraryControls();
+    updateAppearancePreview();
+    clearDeletionUndo();
+    showStatus("Thème rétabli.");
+  });
+});

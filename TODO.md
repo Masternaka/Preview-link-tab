@@ -11,6 +11,9 @@ Les tâches terminées ont été retirées. Le fonctionnement courant des améli
 2. Corriger les réglages de secours et clarifier la liste d’autorisation vide.
 
 Le bouton d’annulation et l’interface visuelle des règles par site sont en place.
+Les suppressions de règles et thèmes peuvent être annulées pendant 10 secondes.
+La reprise de lecture en session et le bouton Réessayer sont disponibles ;
+Nouvel onglet ferme l’aperçu après confirmation de l’ouverture.
 Les profils ne font pas partie du chantier retenu ; leur utilité reste à réévaluer.
 
 ## Fonctionnalités à ajouter
@@ -29,7 +32,7 @@ Ces points ont été reproduits le 1er octobre 2026 en exécutant le code avec d
 
 ## Améliorations techniques et de l’interface
 
-- [ ] **P2 — Tests avec un vrai navigateur.** Ajouter des pages locales et des tests d’intégration pour l’ouverture, la fermeture, le focus, les redirections et les refus d’intégration. Compléter les tests actuels utilisant des API simulées.
+- [ ] **P2 — Tests avec un vrai navigateur.** Le contrôle `scripts/check-browser.cjs` couvre déjà la reprise de lecture, la fermeture lors de l’ouverture d’un onglet, les redirections, les changements d’URL sans rechargement, les pages lentes, les refus d’intégration et l’annulation des suppressions dans Chromium avec API d’extension simulées. Compléter avec l’extension réellement chargée dans Chrome et Firefox, et approfondir le focus.
 - [ ] **P2 — Interface cohérente.** Harmoniser le panneau de réglages intégré à l’aperçu et le menu compact avec la fenêtre principale de paramètres.
 - [ ] **P2 — Code plus facile à maintenir.** Séparer progressivement la navigation, le placement, les réglages et les événements de `content.js`, en conservant les tests existants.
 - [ ] **P2 — Isolation visuelle.** Évaluer un Shadow DOM pour limiter les conflits avec les styles des sites. Valider le focus, les boutons et les thèmes sur un prototype.

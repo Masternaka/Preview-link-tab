@@ -383,3 +383,55 @@ test('Firefox : pause de site, règles et stockage de session après redémarrag
   await worker.message({ type: 'SET_DOMAIN_RULE', url: request.url, mode: 'compact' });
   assert.match(worker.local.domainRules, /example.com = compact/);
 });
+
+function readingHarness(options) {
+  const values = {};
+  const session = { async get(key) { return { [key]: structuredClone(values[key]) }; }, async set(patch) { Object.assign(values, structuredClone(patch)); } };
+  return { ...loadWorker({ session }, options), values, session };
+}
+
+test('positions de lecture : reprise exacte, isolation privée et conservation après redémarrage du worker', async () => {
+  for (const firefox of [false, true]) {
+    const worker = readingHarness({ firefox });
+    const sender = { frameId: 2, url: 'https://example.com/article', tab: { incognito: false } };
+    const url = sender.url;
+    await worker.api.handleReadingPosition({ type: 'SAVE_READING_POSITION', url, x: 0, y: 820 }, sender);
+    const restarted = loadWorker({ session: worker.session }, { firefox });
+    assert.equal((await restarted.api.handleReadingPosition({ type: 'GET_READING_POSITION', url }, sender)).y, 820);
+    assert.equal(await worker.api.handleReadingPosition({ type: 'GET_READING_POSITION', url: `${url}?other` }, sender), null);
+    assert.equal(await worker.api.handleReadingPosition({ type: 'GET_READING_POSITION', url }, { ...sender, tab: { incognito: true } }), null);
+    await worker.api.handleReadingPosition({ type: 'SAVE_READING_POSITION', url, x: 0, y: 40 }, { ...sender, tab: { incognito: true } });
+    assert.equal((await worker.api.handleReadingPosition({ type: 'GET_READING_POSITION', url }, sender)).y, 820);
+  }
+});
+
+test('positions de lecture : validation, expiration et limite de 100 pages', async () => {
+  const { api, values } = readingHarness();
+  const sender = { frameId: 1, url: 'https://example.com/article', tab: {} };
+  const save = { type: 'SAVE_READING_POSITION', url: sender.url, x: 0, y: 100 };
+  await assert.rejects(api.handleReadingPosition(save, { ...sender, frameId: 0 }));
+  await assert.rejects(api.handleReadingPosition({ ...save, url: 'https://other.example/' }, sender));
+  for (const y of [-1, Infinity, '100', 10000001]) await assert.rejects(api.handleReadingPosition({ ...save, y }, sender));
+  values['peekReadingPositions:normal'] = [{ url: save.url, x: 0, y: 50, time: Date.now() - 86400001 }];
+  assert.equal(await api.handleReadingPosition({ type: 'GET_READING_POSITION', url: save.url }, sender), null);
+  for (let i = 0; i < 102; i++) await api.handleReadingPosition({ ...save, url: `https://example.com/${i}` }, sender);
+  assert.equal(values['peekReadingPositions:normal'].length, 100);
+  assert.equal(await api.handleReadingPosition({ type: 'GET_READING_POSITION', url: 'https://example.com/0' }, sender), null);
+});
+
+test('les erreurs du stockage de lecture ne sont pas présentées comme un succès', async () => {
+  const { chrome } = readingHarness();
+  chrome.storage.session.set = async () => { throw new Error('quota'); };
+  const sender = { frameId: 1, url: 'https://example.com/', tab: {} };
+  const response = await new Promise(resolve => chrome.runtime.onMessage.listener({ type: 'SAVE_READING_POSITION', url: sender.url, x: 0, y: 10 }, sender, resolve));
+  assert.equal(response.ok, false);
+});
+
+test('sans stockage de session, les positions utilisent seulement la mémoire temporaire', async () => {
+  const { api } = loadWorker({});
+  const sender = { frameId: 1, url: 'https://example.com/', tab: {} };
+  await api.handleReadingPosition({ type: 'SAVE_READING_POSITION', url: sender.url, x: 0, y: 125 }, sender);
+  assert.equal((await api.handleReadingPosition({ type: 'GET_READING_POSITION', url: sender.url }, sender)).y, 125);
+  const restarted = loadWorker({});
+  assert.equal(await restarted.api.handleReadingPosition({ type: 'GET_READING_POSITION', url: sender.url }, sender), null);
+});

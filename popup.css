@@ -269,3 +269,6 @@ code { font-size: 10px; overflow-wrap: anywhere; }
   .save-actions > button { flex: 1 1 auto; }
   .domain-rule-row > span { flex-basis: 100%; }
 }
+
+.undo-notice { position: fixed; left: 20px; right: 20px; bottom: 150px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 12px; border: 1px solid var(--popup-accent); border-radius: 10px; background: var(--popup-surface); color: var(--popup-text); box-shadow: 0 6px 24px #0002; z-index: 6; }
+.undo-notice span { font-size: 12px; overflow-wrap: anywhere; }
