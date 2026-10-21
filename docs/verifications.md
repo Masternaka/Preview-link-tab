@@ -148,3 +148,28 @@ locales `0.2.3` sont régénérées sans changement de version. Ces contrôles u
 des API d’extension simulées; ils ne valident pas une installation réelle Chrome,
 Firefox ou Helium. Aucun lint Firefox ni contrôle CI distant relancé pour cette
 modification.
+
+## Stabilisation du test de focus clavier — 21 octobre 2026
+
+L’utilisateur a fourni un échec GitHub Actions sous Ubuntu dans
+`tests/browser/check-browser.cjs` : après la première touche Tab depuis le
+panneau, l’élément actif ne correspondait pas à un bouton `:focus-visible`.
+Ce résultat provient du journal transmis; l’exécution distante n’a pas été
+consultée directement sur GitHub.
+
+Le contrôle ancre maintenant le focus sur `.peek-open`, vérifie cet ancrage,
+puis utilise une vraie touche Tab. Il attend au maximum deux secondes que
+`.peek-close` soit l’élément actif avec `:focus-visible`, puis contrôle son
+contour `solid`. Cette séquence évite de dépendre de l’entrée dans l’iframe
+depuis le panneau, dont l’ordre natif peut varier selon la plateforme, tout en
+conservant la vérification réelle de la navigation et de l’indicateur clavier.
+Aucun changement de CSS ni de code applicatif.
+
+Validation locale : les 159 tests Node.js réussissent sous Node.js 24.10.0.
+Le contrôle complet `npm run test:browser` réussit avec le Chrome installé sur
+macOS et les API d’extension simulées : focus clavier, dimensions, navigation,
+lecture, alternatives et paramètres. Aucune erreur JavaScript; les refus
+`X-Frame-Options` du scénario prévu sont attendus. `git diff --check` réussit.
+Cette validation locale ne reproduit pas l’environnement Ubuntu de GitHub Actions.
+La CI distante n’a pas été relancée pour cette correction; les résultats
+navigateur antérieurs ci-dessus restent des validations historiques distinctes.

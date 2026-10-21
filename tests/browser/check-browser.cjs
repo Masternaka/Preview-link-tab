@@ -130,9 +130,13 @@ const server = http.createServer((req, res) => {
     assert.equal(decoration.outline, 'none');
     assert.equal(decoration.header, decoration.inner);
     assert.equal(decoration.wrap, decoration.inner);
+    // Depuis le panneau, l'ordre natif de tabulation peut passer par l'iframe selon la plateforme.
+    await page.locator('.peek-open').focus();
+    assert.equal(await page.evaluate(() => document.activeElement === document.querySelector('.peek-open')), true, 'la commande Nouvel onglet doit recevoir le focus avant la tabulation');
     await page.keyboard.press('Tab');
-    assert.equal(await page.evaluate(() => document.activeElement.matches('#peek-preview-extension-root button:focus-visible')), true);
-    assert.equal(await page.evaluate(() => getComputedStyle(document.activeElement).outlineStyle), 'solid');
+    await page.waitForFunction(() => document.activeElement === document.querySelector('.peek-close') && document.activeElement.matches(':focus-visible'), null, { timeout: 2000 })
+      .catch(error => assert.fail(`Tab depuis Nouvel onglet doit donner le focus visible à Fermer : ${error.message}`));
+    assert.equal(await page.locator('.peek-close').evaluate(button => getComputedStyle(button).outlineStyle), 'solid', 'la commande Fermer doit afficher son contour de focus clavier');
     if (process.env.QA_SCREENSHOT_DIR) {
       fs.mkdirSync(process.env.QA_SCREENSHOT_DIR, { recursive: true });
       await page.screenshot({ path: path.join(process.env.QA_SCREENSHOT_DIR, 'preview-rounded.png') });

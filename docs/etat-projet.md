@@ -28,6 +28,22 @@ restent distinctes des essais des extensions réellement chargées.
 
 ## Corrections implémentées localement
 
+### Test du focus clavier en CI — 21 octobre 2026
+
+L’échec Ubuntu fourni par l’utilisateur signale une hypothèse incorrecte du
+contrôle navigateur : une première touche Tab depuis le panneau ne cible pas
+nécessairement un bouton, car l’iframe participe à l’ordre natif de tabulation.
+Le test place désormais le focus sur Nouvel onglet, vérifie cet ancrage, puis
+appuie réellement sur Tab et attend le focus visible sur Fermer avant de
+contrôler son contour. Le code applicatif et les styles restent inchangés.
+Les 159 tests Node.js et le contrôle Playwright complet passent localement sous
+Node.js 24.10.0, avec Chrome et des API d’extension simulées. La CI distante
+n’a pas été relancée ni son échec vérifié directement sur GitHub pour cette
+correction; le résultat navigateur local est détaillé dans
+[Vérifications](verifications.md#stabilisation-du-test-de-focus-clavier--21-octobre-2026).
+
+### Corrections applicatives antérieures
+
 Les quatre lots initiaux sont présents : contexte privé des fenêtres compactes, paramètres accessibles depuis un onglet privé, redimensionnement et sauvegardes concurrentes. Les six défauts et deux recommandations de la revue locale ont ensuite été traités :
 
 - Références de conflit distinctes de la dernière version stockée, par réglage, domaine et thème.
