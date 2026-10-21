@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { releasePlan } = require('../scripts/release-plan');
+const { releasePlan } = require('../../scripts/release-plan');
 const base = { version: '0.2.2', manifestVersion: '0.2.2', event: 'push', ref: 'refs/heads/main', beforeVersion: '0.2.1' };
 
 test('un push de version publie, mais pas un push sans changement de version', () => {

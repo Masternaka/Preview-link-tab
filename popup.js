@@ -10,14 +10,23 @@ let backdropDraftMode = "dim";
 const themeColorRoles = PEEK_THEME_COLOR_ROLES;
 let savedThemesDraft = [];
 let persistedSettings = null;
+let latestSettings = null;
+let mutationInFlight = false;
+const deferredSettingsChanges = [];
 let editingRuleDomain = null;
 let pendingDeletion = null;
+let pendingConflict = null;
 let undoDeletionTimer = 0;
 let activeSite = null;
 let activeSitePaused = false;
 const customThemeDraft = {};
 let displayedTheme = null;
 
+const SCALAR_SETTING_KEYS = Object.keys(PEEK_DEFAULT_SETTINGS)
+  .filter(key => !["savedThemes", "domainRules"].includes(key));
+const RADIO_SETTING_KEYS = new Set(["size", "trigger", "animationSpeed", "backdropMode"]);
+const BOOLEAN_SETTING_KEYS = new Set(SCALAR_SETTING_KEYS
+  .filter(key => typeof PEEK_DEFAULT_SETTINGS[key] === "boolean"));
 
 const RULE_MODE_LABELS = { overlay: "Aperçu intégré", compact: "Fenêtre compacte", split: "Vue partagée native", blocked: "Désactivé" };
 
@@ -27,12 +36,35 @@ initColorPickers();
 initThemeLibrary();
 initSiteControls();
 initDomainRuleEditor();
+initSettingsSync();
 document.getElementById("discard-changes")?.addEventListener("click", () => {
-  if (!persistedSettings) return;
+  if (!persistedSettings || mutationInFlight) return;
   clearDeletionUndo();
+  clearConflictNotice();
+  persistedSettings = latestSettings || persistedSettings;
   setFormSettings(persistedSettings);
   saveToast.classList.remove("save-toast-visible");
   showStatus("Modifications annulées. Derniers réglages sauvegardés rétablis.");
+});
+
+document.getElementById("reload-settings")?.addEventListener("click", () => {
+  if (mutationInFlight) return;
+  clearConflictNotice();
+  if (persistedSettings) {
+    persistedSettings = latestSettings || persistedSettings;
+    setFormSettings(persistedSettings);
+  }
+  showStatus("Version enregistrée chargée.");
+});
+
+document.getElementById("reapply-settings")?.addEventListener("click", () => {
+  if (mutationInFlight) return;
+  const conflict = pendingConflict;
+  clearConflictNotice();
+  if (!conflict || !persistedSettings) return;
+  persistedSettings = latestSettings || persistedSettings;
+  if (conflict.retry) conflict.retry();
+  else mutateSettings(refreshMutationExpectations(conflict.mutation, persistedSettings), conflict.onSuccess);
 });
 
 form.addEventListener("submit", event => {
@@ -81,9 +113,35 @@ function initSiteControls() {
     button.textContent = activeSitePaused ? "Réactiver sur ce site" : "Mettre en pause sur ce site";
     button.setAttribute("aria-pressed", String(activeSitePaused));
   };
+  const disableSiteActions = message => {
+    activeSite = null;
+    activeSitePaused = false;
+    document.getElementById("current-site").textContent = "";
+    document.getElementById("effective-site-rule").textContent = "";
+    document.getElementById("current-site-mode").value = "default";
+    displayPause();
+    button.disabled = true;
+    ruleButton.disabled = true;
+    document.getElementById("current-site-mode").disabled = true;
+    status.textContent = message;
+  };
+  const closedTabs = new Set();
+  chrome.tabs.onRemoved?.addListener(tabId => {
+    closedTabs.add(tabId);
+    if (activeSite?.tabId === tabId) disableSiteActions("L’onglet d’origine a été fermé. Les réglages généraux restent disponibles.");
+  });
+  chrome.tabs.onUpdated?.addListener((tabId, change) => {
+    if (activeSite?.tabId === tabId && change.url && change.url !== activeSite.url) {
+      disableSiteActions("Le site d’origine a changé. Rouvrez les paramètres depuis cet onglet.");
+    }
+  });
   const loadSite = tabs => {
     if (chrome.runtime.lastError) { status.textContent = "Impossible de lire le site courant."; return; }
     const tab = tabs[0];
+    if (closedTabs.has(tab?.id)) {
+      disableSiteActions("L’onglet d’origine a été fermé. Les réglages généraux restent disponibles.");
+      return;
+    }
     try {
       const url = new URL(tab?.url);
       if (!["http:", "https:"].includes(url.protocol)) throw new Error();
@@ -93,8 +151,17 @@ function initSiteControls() {
     ruleButton.disabled = false;
     document.getElementById("current-site-mode").disabled = false;
     syncCurrentSiteRule();
-    chrome.runtime.sendMessage({ type: "GET_SITE_PAUSE", tabId: activeSite.tabId }, response => {
-      if (chrome.runtime.lastError || !response?.ok) { status.textContent = "État de pause indisponible."; return; }
+    const source = activeSite;
+    chrome.runtime.sendMessage({ type: "GET_SITE_PAUSE", tabId: source.tabId }, response => {
+      if (activeSite !== source) return;
+      if (chrome.runtime.lastError || !response?.ok) {
+        if (/onglet|tab/i.test(response?.error || "")) {
+          disableSiteActions("L’onglet d’origine a été fermé. Les réglages généraux restent disponibles.");
+        } else {
+          status.textContent = "État de pause indisponible.";
+        }
+        return;
+      }
       activeSitePaused = response.paused;
       button.disabled = false;
       displayPause();
@@ -103,35 +170,69 @@ function initSiteControls() {
   const sourceTab = new URL(window.location.href).searchParams.get("sourceTabId");
   if (sourceTab !== null && /^\d+$/.test(sourceTab)) {
     // The active tab in this window is the settings page itself.
-    chrome.tabs.get(Number(sourceTab), tab => loadSite(tab ? [tab] : []));
+    chrome.tabs.get(Number(sourceTab), tab => {
+      if (chrome.runtime.lastError || !tab) {
+        disableSiteActions("L’onglet d’origine a été fermé. Les réglages généraux restent disponibles.");
+        return;
+      }
+      loadSite([tab]);
+    });
   } else {
     chrome.tabs.query({ active: true, currentWindow: true }, loadSite);
   }
   button.addEventListener("click", () => {
     if (!activeSite) return;
     button.disabled = true;
-    chrome.runtime.sendMessage({ type: "SET_SITE_PAUSE", tabId: activeSite.tabId, paused: !activeSitePaused }, response => {
+    const source = activeSite;
+    chrome.runtime.sendMessage({ type: "SET_SITE_PAUSE", tabId: source.tabId, paused: !activeSitePaused }, response => {
+      if (activeSite !== source) return;
       button.disabled = false;
-      if (chrome.runtime.lastError || !response?.ok) { status.textContent = "Impossible de modifier la pause. Réessayez."; return; }
+      if (chrome.runtime.lastError || !response?.ok) {
+        if (/onglet|tab/i.test(response?.error || "")) {
+          disableSiteActions("L’onglet d’origine a été fermé. Les réglages généraux restent disponibles.");
+        } else {
+          status.textContent = "Impossible de modifier la pause. Réessayez.";
+        }
+        return;
+      }
       activeSitePaused = response.paused;
       displayPause();
       status.textContent = activeSitePaused ? "Les déclencheurs sont en pause sur ce site." : "Les déclencheurs sont réactivés sur ce site.";
     });
   });
   ruleButton.addEventListener("click", () => {
-    if (!activeSite) return;
+    if (!activeSite || mutationInFlight || !persistedSettings) return;
     ruleButton.disabled = true;
-    chrome.runtime.sendMessage({ type: "SET_DOMAIN_RULE", url: activeSite.url,
-      mode: document.getElementById("current-site-mode").value }, response => {
-      ruleButton.disabled = false;
-      if (chrome.runtime.lastError || !response?.ok) { status.textContent = "Impossible de sauvegarder la règle."; return; }
-      const savedRule = parseDomainRules(response.domainRules).find(rule => rule.domain === activeSite.hostname);
-      form.elements.domainRules.value = setPeekDomainRule(form.elements.domainRules.value, activeSite.hostname, savedRule?.mode || "default");
-      if (persistedSettings) persistedSettings.domainRules = response.domainRules;
-      renderDomainRules();
-      syncCurrentSiteRule();
-      status.textContent = "Règle du site enregistrée.";
-    });
+    mutationInFlight = true;
+    const source = activeSite;
+    const reference = { ...persistedSettings, domainRules: setPeekDomainRule(persistedSettings.domainRules, source.hostname,
+      rulesByDomain(form.elements.domainRules.value).get(source.hostname) || "default") };
+    try {
+      chrome.runtime.sendMessage({ type: "SET_DOMAIN_RULE", tabId: source.tabId, url: source.url,
+        mode: document.getElementById("current-site-mode").value }, response => {
+        mutationInFlight = false;
+        if (activeSite !== source) { flushSettingsNotifications(); return; }
+        ruleButton.disabled = false;
+        if (chrome.runtime.lastError || !response?.ok) {
+          flushSettingsNotifications();
+          if (/onglet|tab/i.test(response?.error || "")) {
+            disableSiteActions("L’onglet d’origine a été fermé. Les réglages généraux restent disponibles.");
+          } else {
+            status.textContent = "Impossible de sauvegarder la règle.";
+          }
+          return;
+        }
+        reconcileSettings(cleanPeekSettings({ ...(latestSettings || persistedSettings), domainRules: response.domainRules }),
+          reference, { domainRules: [{ domain: source.hostname }] });
+        flushSettingsNotifications();
+        status.textContent = "Règle du site enregistrée.";
+      });
+    } catch {
+      mutationInFlight = false;
+      flushSettingsNotifications();
+      ruleButton.disabled = !activeSite;
+      status.textContent = "Impossible de sauvegarder la règle.";
+    }
   });
 }
 
@@ -185,41 +286,293 @@ function revealInvalidField(invalid) {
 }
 
 function saveSettings() {
+  if (mutationInFlight) return;
   if (document.getElementById("rule-domain")?.value.trim() && !applyDomainRuleEdit()) return;
   if (!form.checkValidity()) {
     revealInvalidField(form.querySelector("input:invalid, select:invalid, textarea:invalid"));
     showStatus("Valeur invalide");
     return;
   }
-  const settings = getFormSettings();
-  storeSettings(settings, () => {
+  if (!persistedSettings) {
+    showStatus("Réglages encore en cours de chargement. Réessayez.");
+    return;
+  }
+  const mutation = buildSettingsMutation(getFormSettings(), persistedSettings);
+  if (!hasMutation(mutation)) {
     clearDeletionUndo();
-    updateAdvancedGroups();
-    showStatus("Sauvegardé");
-    showSaveNotification();
-  });
+    showSettingsSaveResult("Sauvegardé", true);
+    return;
+  }
+  mutateSettings(mutation, () => {
+    clearDeletionUndo();
+    showSettingsSaveResult("Sauvegardé", true);
+  }, saveSettings);
 }
 
 function storeSettings(settings, onSuccess) {
+  mutateSettings({ replace: cleanPeekSettings(settings) }, onSuccess);
+}
+
+function sameSettingValue(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function rulesByDomain(value) {
+  return new Map(parseDomainRules(value).map(rule => [rule.domain, rule.mode]));
+}
+
+function themesById(value) {
+  return new Map(value.map(item => [item.id, item]));
+}
+
+function mergeDomainRulesDraft(draft, previous, incoming) {
+  let merged = incoming;
+  const draftRules = rulesByDomain(draft);
+  const previousRules = rulesByDomain(previous);
+  for (const [domain, mode] of draftRules) {
+    if (previousRules.get(domain) !== mode) {
+      merged = setPeekDomainRule(merged, domain, mode);
+    }
+  }
+  for (const domain of previousRules.keys()) {
+    if (!draftRules.has(domain)) {
+      merged = setPeekDomainRule(merged, domain, "default");
+    }
+  }
+  return merged;
+}
+
+function mergeSavedThemesDraft(draft, previous, incoming) {
+  const merged = themesById(incoming);
+  const draftThemes = themesById(draft);
+  const previousThemes = themesById(previous);
+  for (const [id, theme] of draftThemes) {
+    if (!sameSettingValue(theme, previousThemes.get(id))) {
+      merged.set(id, theme);
+    }
+  }
+  for (const id of previousThemes.keys()) {
+    if (!draftThemes.has(id)) {
+      merged.delete(id);
+    }
+  }
+  return cleanPeekSavedThemes([...merged.values()]);
+}
+
+function buildSettingsMutation(draft, reference) {
+  const scalars = SCALAR_SETTING_KEYS
+    .filter(key => !sameSettingValue(draft[key], reference[key]))
+    .map(key => ({ key, value: draft[key], expected: reference[key] }));
+
+  const domainRules = [];
+  const draftRules = rulesByDomain(draft.domainRules);
+  const referenceRules = rulesByDomain(reference.domainRules);
+  for (const [domain, mode] of draftRules) {
+    if (referenceRules.get(domain) !== mode) {
+      domainRules.push({ domain, mode, expected: referenceRules.has(domain) ? referenceRules.get(domain) : null });
+    }
+  }
+  for (const [domain, mode] of referenceRules) {
+    if (!draftRules.has(domain)) {
+      domainRules.push({ domain, mode: "default", expected: mode });
+    }
+  }
+
+  const savedThemes = [];
+  const draftThemes = themesById(draft.savedThemes);
+  const referenceThemes = themesById(reference.savedThemes);
+  for (const [id, theme] of draftThemes) {
+    if (!sameSettingValue(theme, referenceThemes.get(id))) {
+      savedThemes.push({ id, theme, expected: referenceThemes.get(id) ?? null });
+    }
+  }
+  for (const [id, theme] of referenceThemes) {
+    if (!draftThemes.has(id)) {
+      savedThemes.push({ id, theme: null, expected: theme });
+    }
+  }
+
+  return { scalars, domainRules, savedThemes };
+}
+
+function hasMutation(mutation) {
+  return (mutation.scalars?.length || 0) + (mutation.domainRules?.length || 0) + (mutation.savedThemes?.length || 0) > 0;
+}
+
+function refreshMutationExpectations(mutation, settings) {
+  const rules = rulesByDomain(settings.domainRules);
+  const themes = themesById(settings.savedThemes);
+  return {
+    scalars: (mutation.scalars || []).map(change => ({ key: change.key, value: change.value, expected: settings[change.key] })),
+    domainRules: (mutation.domainRules || []).map(operation => ({
+      ...operation,
+      expected: rules.has(operation.domain) ? rules.get(operation.domain) : null
+    })),
+    savedThemes: (mutation.savedThemes || []).map(operation => ({
+      ...operation,
+      // A restore must not overwrite a theme recreated elsewhere.
+      expected: operation.expected === null && operation.theme != null
+        ? null
+        : (themes.get(operation.id) ?? null)
+    }))
+  };
+}
+
+// Reconcile each entry independently: locally changed entries retain their original
+// comparison value until an explicit retry or a successful write acknowledges them.
+function reconcileSettings(next, reference = persistedSettings, acknowledge = null) {
+  const draft = getFormSettings();
+  const rawDraft = {};
+  for (const key of SCALAR_SETTING_KEYS) {
+    if (RADIO_SETTING_KEYS.has(key) || BOOLEAN_SETTING_KEYS.has(key) || ["theme", "backdropOpacity", "backdropBlur"].includes(key)) continue;
+    if ((Object.hasOwn(themeColorRoles, key) || key === "customBackdropOpacity") && displayedTheme !== "custom") continue;
+    if (form.elements[key]) rawDraft[key] = form.elements[key].value;
+  }
+  const merged = { ...next };
+  const baseline = { ...next };
+  for (const [key, value] of Object.entries(rawDraft)) {
+    // Invalid intermediate text can normalize back to the old value, while
+    // still being a local edit that an unrelated notification must preserve.
+    if (String(value) !== String(draft[key]) && String(value) !== String(reference[key])) {
+      merged[key] = draft[key];
+      baseline[key] = persistedSettings[key];
+    }
+  }
+  for (const key of SCALAR_SETTING_KEYS) {
+    if (!sameSettingValue(draft[key], reference[key])) {
+      merged[key] = draft[key];
+      baseline[key] = persistedSettings[key];
+    }
+  }
+  merged.domainRules = mergeDomainRulesDraft(draft.domainRules, reference.domainRules, next.domainRules);
+  merged.savedThemes = mergeSavedThemesDraft(draft.savedThemes, reference.savedThemes, next.savedThemes);
+  baseline.domainRules = mergeDomainRulesDraft(persistedSettings.domainRules, draft.domainRules, next.domainRules);
+  baseline.savedThemes = mergeSavedThemesDraft(persistedSettings.savedThemes, draft.savedThemes, next.savedThemes);
+  if (acknowledge) {
+    for (const change of acknowledge.scalars || []) baseline[change.key] = next[change.key];
+    for (const operation of acknowledge.domainRules || []) {
+      baseline.domainRules = setPeekDomainRule(baseline.domainRules, operation.domain,
+        rulesByDomain(next.domainRules).get(operation.domain) || "default");
+    }
+    const themes = themesById(baseline.savedThemes);
+    for (const operation of acknowledge.savedThemes || []) {
+      const actual = themesById(next.savedThemes).get(operation.id);
+      if (actual) themes.set(operation.id, actual); else themes.delete(operation.id);
+    }
+    baseline.savedThemes = [...themes.values()];
+    if (acknowledge.replace) Object.assign(baseline, next);
+  }
+  latestSettings = next;
+  persistedSettings = baseline;
+  setFormSettings(merged, true);
+  // Partial/invalid text is still a draft; cleaning it is reserved for submit.
+  for (const [key, value] of Object.entries(rawDraft)) {
+    if (sameSettingValue(merged[key], draft[key]) &&
+        (!sameSettingValue(draft[key], reference[key]) || String(value) !== String(draft[key]))) {
+      form.elements[key].value = value;
+    }
+  }
+  updateColorSwatches();
+}
+
+function flushSettingsNotifications() {
+  for (const incoming of deferredSettingsChanges.splice(0)) {
+    const next = cleanPeekSettings({ ...(latestSettings || persistedSettings), ...incoming });
+    if (!sameSettingValue(next, latestSettings)) reconcileSettings(next);
+  }
+}
+
+function mutateSettings(mutation, onSuccess, retry = null) {
+  if (mutationInFlight) return;
+  clearConflictNotice();
+  mutationInFlight = true;
+  // Only submitted entries may be acknowledged by this reply. Other drafts and
+  // edits made while the worker is running must survive its notification/reply.
+  const submitted = getFormSettings();
+  const reference = { ...persistedSettings };
+  if (mutation.replace) Object.assign(reference, submitted);
+  for (const change of mutation.scalars || []) reference[change.key] = submitted[change.key];
+  if (mutation.domainRules?.length) {
+    for (const operation of mutation.domainRules) reference.domainRules = setPeekDomainRule(reference.domainRules,
+      operation.domain, rulesByDomain(submitted.domainRules).get(operation.domain) || "default");
+  }
+  if (mutation.savedThemes?.length) {
+    const themes = themesById(reference.savedThemes);
+    for (const operation of mutation.savedThemes) {
+      const item = themesById(submitted.savedThemes).get(operation.id);
+      if (item) themes.set(operation.id, item); else themes.delete(operation.id);
+    }
+    reference.savedThemes = [...themes.values()];
+  }
   try {
-    chrome.storage.local.set(settings, () => {
-      if (chrome.runtime.lastError) {
+    chrome.runtime.sendMessage({ type: "MUTATE_SETTINGS", ...mutation }, response => {
+      mutationInFlight = false;
+      if (chrome.runtime.lastError || !response?.ok) {
+        flushSettingsNotifications();
         showStatus("Échec de la sauvegarde. Réessayez.");
         return;
       }
-      persistedSettings = cleanPeekSettings({ ...(persistedSettings || PEEK_DEFAULT_SETTINGS), ...settings });
-      onSuccess();
+      if (response.conflict) {
+        reconcileSettings(cleanPeekSettings(response.settings));
+        flushSettingsNotifications();
+        pendingConflict = { mutation, onSuccess, retry };
+        const notice = document.getElementById("conflict-notice");
+        const message = document.getElementById("conflict-message");
+        if (message) message.textContent = describeConflict(response.conflict);
+        if (notice) notice.hidden = false;
+        showStatus("Conflit : des réglages ont changé dans une autre fenêtre.");
+        return;
+      }
+      reconcileSettings(cleanPeekSettings(response.settings), reference, mutation);
+      flushSettingsNotifications();
+      onSuccess(persistedSettings);
     });
   } catch {
+    mutationInFlight = false;
+    flushSettingsNotifications();
     showStatus("Échec de la sauvegarde. Réessayez.");
   }
+}
+
+function describeConflict(conflict) {
+  if (conflict?.kind === "domainRule") {
+    return `La règle de ${conflict.key} a changé dans une autre fenêtre.`;
+  }
+  if (conflict?.kind === "theme") {
+    return `Le thème « ${conflict.key} » a changé dans une autre fenêtre.`;
+  }
+  return `Le réglage « ${conflict?.key || "inconnu"} » a changé dans une autre fenêtre.`;
+}
+
+function clearConflictNotice() {
+  pendingConflict = null;
+  const notice = document.getElementById("conflict-notice");
+  if (notice) notice.hidden = true;
+}
+
+function initSettingsSync() {
+  if (!chrome.storage?.onChanged) return;
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== "local" || !persistedSettings) return;
+    const incoming = {};
+    for (const key of Object.keys(PEEK_DEFAULT_SETTINGS)) {
+      if (Object.hasOwn(changes, key)) incoming[key] = changes[key].newValue;
+    }
+    if (Object.keys(incoming).length === 0) return;
+    // Process the reply before notifications observed during this request, so
+    // a delayed reply cannot roll back a newer write from another window.
+    if (mutationInFlight) { deferredSettingsChanges.push(incoming); return; }
+
+    const next = cleanPeekSettings({ ...(latestSettings || persistedSettings), ...incoming });
+    reconcileSettings(next);
+    showStatus("Réglages actualisés ; vos modifications locales sont conservées.");
+  });
 }
 
 resetButton.addEventListener("click", () => {
   storeSettings(PEEK_DEFAULT_SETTINGS, () => {
     clearDeletionUndo();
-    setFormSettings(PEEK_DEFAULT_SETTINGS);
-    showStatus("Paramètres réinitialisés");
+    showSettingsSaveResult("Paramètres réinitialisés");
   });
 });
 
@@ -227,6 +580,7 @@ function loadSettings() {
   chrome.storage.local.get(PEEK_DEFAULT_SETTINGS, stored => {
     if (chrome.runtime.lastError) { showStatus("Impossible de charger les réglages. Rouvrez les paramètres."); return; }
     persistedSettings = cleanPeekSettings(stored);
+    latestSettings = persistedSettings;
     setFormSettings(persistedSettings);
     const discard = document.getElementById("discard-changes");
     if (discard) discard.disabled = false;
@@ -289,7 +643,11 @@ function getFormSettings() {
   });
 }
 
-function setFormSettings(settings) {
+function setFormSettings(settings, preserveEditors = false) {
+  const themeName = document.getElementById("theme-name")?.value;
+  const oldSelection = form.elements.theme.value;
+  const oldName = savedThemesDraft.find(item => `saved:${item.id}` === oldSelection)?.name || "";
+  const preserveName = preserveEditors && (themeName !== oldName);
   const clean = cleanPeekSettings(settings);
   setRadioValue("size", clean.size);
   form.elements.openMode.value = clean.openMode;
@@ -348,7 +706,8 @@ function setFormSettings(settings) {
   updateThemeLibraryControls();
   updateAppearancePreview();
   renderDomainRules();
-  resetRuleEditor();
+  if (!preserveEditors) resetRuleEditor();
+  if (preserveName && themeName !== undefined) document.getElementById("theme-name").value = themeName;
   syncCurrentSiteRule();
 }
 
@@ -420,41 +779,41 @@ function initThemeLibrary() {
     updateAppearancePreview();
     showStatus("Copié vers Personnalisé. Modifiez les couleurs puis sauvegardez.");
   });
-  document.getElementById("save-theme")?.addEventListener("click", () => {
+  const saveTheme = () => {
+    if (mutationInFlight) return;
     const name = document.getElementById("theme-name").value.trim();
     if (!name) { showStatus("Donnez un nom au thème."); return; }
     if (!form.checkValidity()) { showStatus("Corrigez les valeurs invalides."); return; }
     const existing = savedThemesDraft.find(item => item.name.toLocaleLowerCase() === name.toLocaleLowerCase());
     if (!existing && savedThemesDraft.length >= 50) { showStatus("Maximum 50 thèmes personnels."); return; }
-    const entry = { id: existing?.id || crypto.randomUUID(), name, colors: selectedThemeColors() };
-    const savedThemes = cleanPeekSavedThemes([...savedThemesDraft.filter(item => item.id !== entry.id), entry]);
-    storeSettings({ savedThemes, theme: `saved:${entry.id}` }, () => {
-      savedThemesDraft = savedThemes;
-      populatePeekSavedThemes(form.elements.theme, { savedThemes });
-      form.elements.theme.value = `saved:${entry.id}`;
-      updateThemeColors();
-      updateAdvancedGroups();
-      updateColorSwatches();
-      updateThemeLibraryControls();
-      updateAppearancePreview();
+    const [entry] = cleanPeekSavedThemes([{
+      id: existing?.id || crypto.randomUUID(), name, colors: selectedThemeColors()
+    }]);
+    if (!entry) { showStatus("Thème invalide."); return; }
+    const reference = persistedSettings?.savedThemes.find(item => item.id === entry.id) || null;
+    mutateSettings({
+      scalars: [{ key: "theme", value: `saved:${entry.id}`, expected: persistedSettings?.theme }],
+      savedThemes: [{ id: entry.id, theme: entry, expected: reference }]
+    }, () => {
       showStatus("Thème enregistré dans Mes thèmes.");
-    });
-  });
+    }, saveTheme);
+  };
+  document.getElementById("save-theme")?.addEventListener("click", saveTheme);
   document.getElementById("delete-theme")?.addEventListener("click", () => {
     const id = form.elements.theme.value;
     const saved = savedThemesDraft.find(item => `saved:${item.id}` === id);
     if (!saved) return;
-    const savedThemes = savedThemesDraft.filter(item => item !== saved);
-    storeSettings({ savedThemes, theme: "custom", ...saved.colors }, () => {
-      savedThemesDraft = savedThemes;
-      Object.assign(customThemeDraft, saved.colors);
-      displayedTheme = null;
-      populatePeekSavedThemes(form.elements.theme, { savedThemes });
-      form.elements.theme.value = "custom";
-      updateThemeColors();
-      updateAdvancedGroups();
-      updateColorSwatches();
-      updateAppearancePreview();
+    const reference = persistedSettings?.savedThemes.find(item => item.id === saved.id) || null;
+    const scalars = [
+      { key: "theme", value: "custom", expected: persistedSettings?.theme },
+      ...[...Object.keys(themeColorRoles), "customBackdropOpacity"].map(key => ({
+        key, value: saved.colors[key], expected: persistedSettings?.[key]
+      }))
+    ];
+    mutateSettings({
+      scalars,
+      savedThemes: [{ id: saved.id, theme: null, expected: reference }]
+    }, () => {
       offerDeletionUndo({ type: "theme", saved }, "Thème supprimé.");
       showStatus("Thème supprimé. Ses couleurs restent dans Personnalisé.");
     });
@@ -577,6 +936,21 @@ function showStatus(text) {
   }, 4000);
 }
 
+function showSettingsSaveResult(message, notify = false) {
+  const draft = getFormSettings();
+  const selectedName = savedThemesDraft.find(item => `saved:${item.id}` === draft.theme)?.name || "";
+  const pendingRule = document.getElementById("rule-domain")?.value.trim();
+  const pendingName = (document.getElementById("theme-name")?.value || "") !== selectedName;
+  if (hasMutation(buildSettingsMutation(draft, latestSettings || persistedSettings)) ||
+      pendingRule || pendingName || !form.checkValidity()) {
+    saveToast.classList.remove("save-toast-visible");
+    showStatus("Sauvegarde terminée ; des modifications restent à sauvegarder.");
+    return;
+  }
+  showStatus(message);
+  if (notify) showSaveNotification();
+}
+
 function showSaveNotification() {
   saveToast.classList.add("save-toast-visible");
   window.clearTimeout(showSaveNotification.timeoutId);
@@ -625,9 +999,7 @@ if (exportButton && importButton && importFileInput) {
         const cleaned = parsePeekSettingsImport(e.target.result);
         storeSettings(cleaned, () => {
           clearDeletionUndo();
-          setFormSettings(cleaned);
-          showStatus("Importé !");
-          showSaveNotification();
+          showSettingsSaveResult("Importé !", true);
         });
       } catch (err) {
         showStatus("Fichier invalide");
@@ -775,17 +1147,11 @@ document.getElementById("undo-delete")?.addEventListener("click", () => {
     showStatus("Un thème du même nom existe déjà ou la bibliothèque est pleine.");
     return;
   }
-  const savedThemes = cleanPeekSavedThemes([...savedThemesDraft, saved]);
-  storeSettings({ savedThemes, theme: `saved:${saved.id}` }, () => {
-    savedThemesDraft = savedThemes;
-    populatePeekSavedThemes(form.elements.theme, { savedThemes });
-    form.elements.theme.value = `saved:${saved.id}`;
-    displayedTheme = null;
-    updateThemeColors();
-    updateAdvancedGroups();
-    updateColorSwatches();
-    updateThemeLibraryControls();
-    updateAppearancePreview();
+  const reference = persistedSettings?.savedThemes.find(item => item.id === saved.id) || null;
+  mutateSettings({
+    scalars: [{ key: "theme", value: `saved:${saved.id}`, expected: persistedSettings?.theme }],
+    savedThemes: [{ id: saved.id, theme: saved, expected: reference }]
+  }, () => {
     clearDeletionUndo();
     showStatus("Thème rétabli.");
   });

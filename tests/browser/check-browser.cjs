@@ -1,12 +1,17 @@
 // Optional integration checks: provide Playwright externally, without changing
 // the extension's dependency-free build/test workflow.
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || '../tools/ci/node_modules/playwright');
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || '../../tools/ci/node_modules/playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
-const root = path.resolve(__dirname, '..');
+const vm = require('node:vm');
+const root = path.resolve(__dirname, '..', '..');
 const scripts = ['settings.js', 'peek-icons.js', 'content.js'].map(file => fs.readFileSync(path.join(root, file), 'utf8')).join('\n');
+const settingsContext = vm.createContext({ URL });
+vm.runInContext(`${fs.readFileSync(path.join(root, 'settings.js'), 'utf8')}
+this.settingsApi = { PEEK_DEFAULT_SETTINGS, cleanPeekSettings, applySettingsMutation };`, settingsContext);
+const settingsApi = settingsContext.settingsApi;
 const styles = ['appearance.css', 'styles.css'].map(file => fs.readFileSync(path.join(root, file), 'utf8')).join('\n');
 const article = '<!doctype html><title>Article de test</title><h1>Article</h1><div style="height:5000px;background:linear-gradient(white,lightblue)">Texte long</div>';
 const server = http.createServer((req, res) => {
@@ -34,14 +39,21 @@ const server = http.createServer((req, res) => {
   try {
     browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, headless: true, args: ['--no-sandbox'] });
     const context = await browser.newContext({ viewport: { width: 1040, height: 760 } });
-    const positions = new Map(); const saved = { animation: 'none', autoCompactFallback: false, closeAfterOpen: false };
+    const positions = new Map();
+    let saved = settingsApi.cleanPeekSettings({ animation: 'none', autoCompactFallback: false, closeAfterOpen: false });
+    const mutateSavedSettings = message => {
+      const result = settingsApi.applySettingsMutation(saved, message);
+      if (!result.conflict) saved = result.settings;
+      return { ok: true, ...result };
+    };
     const errors = []; const requests = [];
     await context.exposeBinding('previewTestApi', async ({ frame }, message) => {
       requests.push(message);
       if (message.type === 'GET_READING_POSITION') return { ok: true, position: positions.get(message.url) || null };
       if (message.type === 'SAVE_READING_POSITION') { positions.set(message.url, { x: message.x, y: message.y }); return { ok: true }; }
       if (message.type === 'READ_SETTINGS') return saved;
-      if (message.type === 'WRITE_SETTINGS') { Object.assign(saved, message.settings); return { ok: true }; }
+      if (message.type === 'WRITE_SETTINGS') { saved = settingsApi.cleanPeekSettings({ ...saved, ...message.settings }); return { ok: true, settings: saved }; }
+      if (message.type === 'MUTATE_SETTINGS') return mutateSavedSettings(message);
       if (message.type === 'OPEN_URL_IN_TAB') { const tab = await context.newPage(); await tab.goto(message.url); return { ok: true }; }
       return { ok: true, paused: false };
     });
@@ -79,6 +91,28 @@ const server = http.createServer((req, res) => {
     const open = async id => { console.log(`Checking ${id}…`); await page.locator(`#${id}`).click({ modifiers: ['Alt'] }); await page.locator('#peek-preview-extension-root.peek-visible').waitFor({ state: 'attached' }); };
     const ready = () => page.waitForFunction(() => { const root = document.getElementById('peek-preview-extension-root'); return root && !root.classList.contains('peek-loading') && !root.classList.contains('peek-blocked'); });
     const frame = () => page.frames().find(frame => frame.parentFrame() === page.mainFrame() && frame.url().includes('/article'));
+    const assertPanelInsideViewport = async (width, height, limits = {}) => {
+      await page.setViewportSize({ width, height });
+      const minWidth = limits.minWidth ?? 0;
+      const maxWidth = limits.maxWidth ?? width;
+      await page.waitForFunction(({ width, height, minWidth, maxWidth }) => {
+        const panel = document.querySelector('.peek-panel');
+        if (!panel) return false;
+        const box = panel.getBoundingClientRect();
+        return box.left >= -1.5 && box.top >= -1.5
+          && box.right <= width + 1.5 && box.bottom <= height + 1.5
+          && box.width >= minWidth - 1.5 && box.width <= maxWidth + 1.5;
+      }, { width, height, minWidth, maxWidth }, { timeout: 5000, polling: 100 }).catch(() => {});
+      const box = await page.locator('.peek-panel').boundingBox();
+      assert(box, `panneau absent après redimensionnement à ${width}×${height}`);
+      const tolerance = 1.5;
+      assert(box.x >= -tolerance && box.y >= -tolerance, `panneau hors cadre à ${width}×${height}: ${JSON.stringify(box)}`);
+      assert(box.width >= minWidth - tolerance, `panneau non agrandi à ${width}×${height}: ${JSON.stringify(box)}`);
+      assert(box.width <= maxWidth + tolerance, `panneau trop large à ${width}×${height}: ${JSON.stringify(box)}`);
+      assert(box.x + box.width <= width + tolerance, `panneau débordant à ${width}×${height}: ${JSON.stringify(box)}`);
+      assert(box.y + box.height <= height + tolerance, `panneau trop haut à ${width}×${height}: ${JSON.stringify(box)}`);
+      assert(await page.locator('.peek-actions').isVisible(), `actions inaccessibles à ${width}×${height}`);
+    };
     if (process.env.QA_FLOW !== 'settings') {
     await open('article'); await ready();
     await frame().waitForFunction(() => document.body.scrollHeight > 3000);
@@ -90,6 +124,11 @@ const server = http.createServer((req, res) => {
     await page.locator('.peek-close').click(); await open('article'); await ready();
     await frame().waitForFunction(() => scrollY === 1100);
     console.log('PASS: page reopen restores reading position in a real iframe.');
+    await assertPanelInsideViewport(1600, 900, { minWidth: 950 });
+    await assertPanelInsideViewport(900, 700, { maxWidth: 800 });
+    await assertPanelInsideViewport(520, 640, { maxWidth: 420 });
+    await page.setViewportSize({ width: 1040, height: 760 });
+    console.log('PASS: panel and actions stay inside the viewport after enlarging and shrinking it.');
     await frame().evaluate(() => history.pushState({}, '', '/article?spa'));
     await page.waitForFunction(() => document.querySelector('.peek-open') && document.querySelector('.peek-url').title.includes('?spa'));
     saved.animation = 'slide';

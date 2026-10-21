@@ -3,7 +3,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { build } = require('../scripts/build');
+const { build } = require('../../scripts/build');
 
 test('les versions générées partagent les ressources et chargent leurs scripts d’arrière-plan', async t => {
   const output = await fs.mkdtemp(path.join(os.tmpdir(), 'peek-build-'));
@@ -19,8 +19,11 @@ test('les versions générées partagent les ressources et chargent leurs script
       'popup.html', 'popup.js', 'popup.css'
     ];
     for (const file of resources) await fs.access(path.join(folder, file));
-    assert.equal(manifest.version, require('../package.json').version);
+    assert.equal(manifest.version, require('../../package.json').version);
     assert.equal((await fs.readdir(folder)).includes('test'), false);
+    for (const excluded of ['tests', 'docs', 'AGENTS.md']) {
+      assert.equal((await fs.readdir(folder)).includes(excluded), false);
+    }
     if (target === 'firefox') {
       assert.deepEqual(manifest.background.scripts, ['settings.js', 'background.js']);
       assert.equal(manifest.background.service_worker, undefined);
@@ -32,7 +35,7 @@ test('les versions générées partagent les ressources et chargent leurs script
       assert.equal(manifest.browser_specific_settings, undefined);
     }
     for (const file of ['content.js', 'settings.js', 'background.js', 'popup.js', 'appearance.css']) {
-      assert.deepEqual(await fs.readFile(path.join(folder, file)), await fs.readFile(path.join(__dirname, '..', file)));
+      assert.deepEqual(await fs.readFile(path.join(folder, file)), await fs.readFile(path.join(__dirname, '..', '..', file)));
     }
   }
   await assert.rejects(build('../other', output), /Navigateur inconnu/);

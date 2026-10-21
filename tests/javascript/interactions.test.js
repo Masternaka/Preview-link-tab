@@ -4,7 +4,78 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 
-const source = name => fs.readFileSync(path.join(__dirname, '..', name), 'utf8');
+const source = name => fs.readFileSync(path.join(__dirname, '..', '..', name), 'utf8');
+
+const settingsApi = (() => {
+  const context = vm.createContext({ URL });
+  vm.runInContext(`${source('settings.js')}
+this.settingsApi = { PEEK_DEFAULT_SETTINGS, cleanPeekSettings, applySettingsMutation };`, context);
+  return context.settingsApi;
+})();
+
+function sameSettingValue(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function settingsBackend(initial = {}) {
+  const defaults = settingsApi.PEEK_DEFAULT_SETTINGS;
+  let data = settingsApi.cleanPeekSettings({ ...defaults, backdropOpacity: 35, backdropBlur: 60, ...initial });
+  const writes = [];
+  const listeners = new Set();
+  let reads = 0;
+  let themeId = 0;
+  let failWrite = false;
+  let throwWrite = false;
+  let notificationsPaused = false;
+  const notify = previous => {
+    if (notificationsPaused) return;
+    const changes = {};
+    for (const key of Object.keys(defaults)) {
+      if (!sameSettingValue(previous[key], data[key])) {
+        changes[key] = { oldValue: previous[key], newValue: structuredClone(data[key]) };
+      }
+    }
+    if (Object.keys(changes).length) {
+      for (const listener of listeners) listener(changes, 'local');
+    }
+  };
+  const applyMutation = message => {
+    if (throwWrite) throw new Error('storage unavailable');
+    if (failWrite) return { error: true };
+    const previous = structuredClone(data);
+    const result = settingsApi.applySettingsMutation(data, message);
+    if (result.conflict) return result;
+    data = structuredClone(result.settings);
+    writes.push(structuredClone(data));
+    notify(previous);
+    return { settings: structuredClone(data) };
+  };
+  return {
+    defaults,
+    get data() { return data; },
+    writes,
+    listeners,
+    reads: () => reads,
+    fail() { failWrite = true; },
+    allowWrites() { failWrite = false; throwWrite = false; },
+    throwOnWrite() { throwWrite = true; },
+    pauseNotifications() { notificationsPaused = true; },
+    resumeNotifications() { notificationsPaused = false; },
+    nextThemeId() { return `test-theme-${++themeId}`; },
+    read() { reads++; return { ...structuredClone(defaults), ...structuredClone(data) }; },
+    subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+    applyMutation,
+    setDirect(value) {
+      if (throwWrite) throw new Error('storage unavailable');
+      if (failWrite) return false;
+      const previous = structuredClone(data);
+      data = settingsApi.cleanPeekSettings({ ...data, ...value });
+      writes.push(structuredClone(data));
+      notify(previous);
+      return true;
+    }
+  };
+}
 
 function element() {
   const listeners = {};
@@ -53,20 +124,48 @@ async function contentHarness({ embedded = false } = {}) {
   }
   const document = element();
   const messages = [];
+  const frames = new Map();
+  const store = structuredClone(settingsApi.PEEK_DEFAULT_SETTINGS);
+  const mutations = [];
+  let frameId = 0;
   Object.assign(context, {
     document, Element, HTMLElement: Element,
-    requestAnimationFrame() { return 1; }, cancelAnimationFrame() {},
+    requestAnimationFrame(callback) { frames.set(++frameId, callback); return frameId; },
+    cancelAnimationFrame(id) { frames.delete(id); },
     chrome: {
-      storage: { local: { get(defaults, cb) { cb(defaults); } } },
-      runtime: { sendMessage(message, cb) { if (message.type !== "GET_SITE_PAUSE") messages.push(message); cb?.({ ok: true, paused: false }); } }
+      storage: { local: {
+        get(defaults, cb) { cb({ ...defaults, ...structuredClone(store) }); },
+        set(settings, cb) { Object.assign(store, structuredClone(settings)); cb?.(); }
+      } },
+      runtime: { sendMessage(message, cb) {
+        if (message.type === "MUTATE_SETTINGS") {
+          mutations.push(structuredClone(message));
+          for (const change of message.scalars || []) store[change.key] = change.value;
+          for (const operation of message.domainRules || []) {
+            store.domainRules = settingsApi.setPeekDomainRule(store.domainRules, operation.domain, operation.mode);
+          }
+          cb?.({ ok: true, settings: structuredClone(store) });
+          return;
+        }
+        if (message.type !== "GET_SITE_PAUSE") messages.push(message);
+        cb?.({ ok: true, paused: false });
+      } }
     }
   });
+  const runFrames = () => {
+    let remaining = 50;
+    while (frames.size && remaining-- > 0) {
+      const callbacks = [...frames.entries()];
+      frames.clear();
+      callbacks.forEach(([, callback]) => callback());
+    }
+  };
   if (embedded) {
     harness.window.top = { postMessage(message) { messages.push(message); } };
     vm.runInContext(source('content.js'), context);
-    return { ...harness, document, messages };
+    return { ...harness, document, messages, runFrames, frames, store, mutations };
   }
-  const script = source('content.js').replace(/\}\)\(\);\s*$/, 'this.testApi = { STATE, startPreviewLoadTimer, doClose, openPreview, panelGestureRect, initResizeListeners, applyOverlayLayout, recordPreviewNavigation, navigatePreviewHistory, openCurrentInTab, refreshPreview }; })();');
+  const script = source('content.js').replace(/\}\)\(\);\s*$/, 'this.testApi = { STATE, startPreviewLoadTimer, doClose, openPreview, panelGestureRect, initResizeListeners, applyOverlayLayout, scheduleOverlayLayout, saveSettings, recordPreviewNavigation, navigatePreviewHistory, openCurrentInTab, refreshPreview }; })();');
   vm.runInContext(script, context);
   await Promise.resolve();
   const { STATE } = context.testApi;
@@ -82,7 +181,7 @@ async function contentHarness({ embedded = false } = {}) {
     });
     return { prevented, stopped };
   }
-  return { ...harness, STATE, click, messages, document, Element };
+  return { ...harness, STATE, click, messages, document, Element, runFrames, frames, store, mutations };
 }
 
 test('les raccourcis préservent les champs, les éditeurs riches et les champs du Shadow DOM', async () => {
@@ -202,16 +301,12 @@ test('aperçu : confirmation valide, délai expiré, confirmation tardive et nou
   assert.equal(timers.size, 0);
 });
 
-function popupHarness() {
+function popupHarness(backend = settingsBackend()) {
   const harness = baseContext();
   const { context } = harness;
   const fields = {};
   const radios = {};
   const nodes = {};
-  let readCount = 0;
-  let failWrite = false;
-  let throwWrite = false;
-  const writes = [];
   const form = element();
   form.elements = new Proxy(fields, { get(target, key) { return target[key] ||= element(); } });
   const radio = (name, value) => radios[`${name}:${value}`] ||= { ...element(), name, value };
@@ -225,25 +320,50 @@ function popupHarness() {
   nodes['settings-form'] = form;
   const node = id => nodes[id] ||= element();
   node('theme-colors').dataset = { enabledBy: 'theme', enabledValue: 'custom' };
+  node('conflict-notice').hidden = true;
+  node('undo-notice').hidden = true;
   context.document = {
     createElement: () => element(),
     querySelector: selector => node(selector.slice(1)),
     querySelectorAll: selector => selector === '.advanced-group' ? [node('theme-colors')] : [], getElementById: node
   };
   context.chrome = {
-    runtime: {}, storage: { local: {
-      get(defaults, cb) { readCount++; cb({ ...defaults, backdropOpacity: 35, backdropBlur: 60 }); },
-      set(value, cb) {
-        if (throwWrite) throw new Error('storage unavailable');
-        context.chrome.runtime.lastError = failWrite ? { message: 'quota exceeded' } : undefined;
-        if (!failWrite) writes.push(value);
-        cb();
-        context.chrome.runtime.lastError = undefined;
+    runtime: {
+      sendMessage(message, cb) {
+        try {
+          if (message.type !== 'MUTATE_SETTINGS') {
+            cb?.({ ok: true, paused: false });
+            return;
+          }
+          const result = backend.applyMutation(message);
+          if (result.error) {
+            context.chrome.runtime.lastError = { message: 'quota exceeded' };
+            cb({ ok: false });
+          } else {
+            cb({ ok: true, ...result });
+          }
+        } finally {
+          context.chrome.runtime.lastError = undefined;
+        }
       }
-    } }
+    },
+    storage: {
+      local: {
+        get(defaults, cb) { cb(backend.read()); },
+        set(value, cb) {
+          if (!backend.setDirect(value)) {
+            context.chrome.runtime.lastError = { message: 'quota exceeded' };
+          }
+          cb?.();
+          context.chrome.runtime.lastError = undefined;
+        }
+      },
+      onChanged: {
+        addListener(listener) { backend.subscribe(listener); }
+      }
+    }
   };
-  let themeId = 0;
-  context.crypto = { randomUUID: () => `test-theme-${++themeId}` };
+  context.crypto = { randomUUID: () => backend.nextThemeId() };
   context.FileReader = class {
     readAsText(file) {
       if (file.error) { this.onerror(); return; }
@@ -257,8 +377,9 @@ function popupHarness() {
     form.querySelectorAll().forEach(item => { item.checked = item.value === mode; });
     radio('backdropMode', mode).listeners.change();
   }
-  return { ...harness, node, switchMode, writes, reads: () => readCount,
-    fail() { failWrite = true; }, throwOnWrite() { throwWrite = true; } };
+  return { ...harness, backend, node, switchMode, writes: backend.writes, reads: backend.reads,
+    fail() { backend.fail(); }, allowWrites() { backend.allowWrites(); },
+    throwOnWrite() { backend.throwOnWrite(); } };
 }
 
 test('les deux intensités survivent aux changements de mode et à la sauvegarde', () => {
@@ -286,6 +407,7 @@ for (const failure of ['fail', 'throwOnWrite']) {
   test(`une erreur de stockage (${failure}) ne produit pas de confirmation de succès`, () => {
     const harness = popupHarness();
     harness[failure]();
+    harness.node('settings-form').elements.openMode.value = 'compact';
     harness.context.saveSettings();
     assert.match(harness.node('status').textContent, /Échec/);
     assert.equal(harness.node('save-toast').classList.contains('save-toast-visible'), false);
@@ -312,6 +434,151 @@ test('un import recharge les deux intensités du brouillon', () => {
   assert.equal(writes.at(-1).backdropBlur, 83);
 });
 
+
+test('une règle ajoutée dans une fenêtre et un réglage enregistré dans l’autre sont tous conservés', () => {
+  const backend = settingsBackend();
+  const a = popupHarness(backend);
+  const b = popupHarness(backend);
+  b.node('rule-domain').value = 'example.com';
+  b.node('rule-mode').value = 'compact';
+  assert.equal(b.context.applyDomainRuleEdit(), true);
+  b.context.saveSettings();
+  a.node('settings-form').elements.openMode.value = 'compact';
+  a.context.saveSettings();
+  assert.match(backend.data.domainRules, /example\.com = compact/);
+  assert.equal(backend.data.openMode, 'compact');
+  assert.equal(backend.data.theme, 'catppuccin');
+});
+
+test('un thème créé dans une fenêtre survit à la sauvegarde d’une option dans l’autre', () => {
+  const backend = settingsBackend();
+  const a = popupHarness(backend);
+  const b = popupHarness(backend);
+  b.node('theme-name').value = 'Lecture';
+  b.node('save-theme').listeners.click();
+  assert.equal(backend.data.savedThemes.length, 1);
+  a.node('settings-form').elements.openMode.value = 'split';
+  a.context.saveSettings();
+  assert.equal(backend.data.savedThemes.length, 1);
+  assert.equal(backend.data.savedThemes[0].name, 'Lecture');
+  assert.equal(backend.data.openMode, 'split');
+});
+
+test('deux créations de thèmes simultanées restent toutes les deux disponibles', () => {
+  const backend = settingsBackend();
+  const a = popupHarness(backend);
+  const b = popupHarness(backend);
+  a.node('theme-name').value = 'Premier';
+  a.node('save-theme').listeners.click();
+  b.node('theme-name').value = 'Second';
+  b.node('save-theme').listeners.click();
+  assert.deepEqual(backend.data.savedThemes.map(item => item.name), ['Premier', 'Second']);
+});
+
+test('une règle ajoutée ailleurs est conservée quand un brouillon local est sauvegardé', () => {
+  const backend = settingsBackend();
+  const a = popupHarness(backend);
+  const b = popupHarness(backend);
+  a.node('rule-domain').value = 'draft.example';
+  a.node('rule-mode').value = 'blocked';
+  assert.equal(a.context.applyDomainRuleEdit(), true);
+  b.node('rule-domain').value = 'remote.example';
+  b.node('rule-mode').value = 'compact';
+  assert.equal(b.context.applyDomainRuleEdit(), true);
+  b.context.saveSettings();
+  a.context.saveSettings();
+  assert.match(backend.data.domainRules, /draft\.example = blocked/);
+  assert.match(backend.data.domainRules, /remote\.example = compact/);
+});
+
+test('un changement externe actualise les champs intacts sans effacer une saisie locale', () => {
+  const backend = settingsBackend();
+  const a = popupHarness(backend);
+  const b = popupHarness(backend);
+  a.node('settings-form').elements.domainList.value = 'brouillon.example';
+  b.node('settings-form').elements.theme.value = 'nord';
+  b.context.saveSettings();
+  assert.equal(a.node('settings-form').elements.domainList.value, 'brouillon.example');
+  assert.equal(a.node('settings-form').elements.theme.value, 'nord');
+  assert.match(a.node('status').textContent, /conservées/);
+});
+
+test('deux sauvegardes du même réglage signalent un conflit puis permettent de réappliquer', () => {
+  const backend = settingsBackend();
+  const a = popupHarness(backend);
+  const b = popupHarness(backend);
+  a.node('settings-form').elements.openMode.value = 'compact';
+  backend.pauseNotifications();
+  a.context.saveSettings();
+  backend.resumeNotifications();
+  b.node('settings-form').elements.openMode.value = 'split';
+  b.context.saveSettings();
+  assert.equal(backend.data.openMode, 'compact');
+  assert.equal(b.node('settings-form').elements.openMode.value, 'split');
+  assert.equal(b.node('conflict-notice').hidden, false);
+  assert.match(b.node('conflict-message').textContent, /openMode/);
+  assert.match(b.node('status').textContent, /Conflit/);
+  b.node('reapply-settings').listeners.click();
+  assert.equal(backend.data.openMode, 'split');
+  assert.equal(b.node('conflict-notice').hidden, true);
+});
+
+test('charger la version enregistrée remplace le brouillon sans écriture', () => {
+  const backend = settingsBackend();
+  const a = popupHarness(backend);
+  const b = popupHarness(backend);
+  a.node('settings-form').elements.openMode.value = 'compact';
+  backend.pauseNotifications();
+  a.context.saveSettings();
+  backend.resumeNotifications();
+  b.node('settings-form').elements.openMode.value = 'split';
+  b.context.saveSettings();
+  const writes = backend.writes.length;
+  b.node('reload-settings').listeners.click();
+  assert.equal(b.node('settings-form').elements.openMode.value, 'compact');
+  assert.equal(backend.writes.length, writes);
+  assert.equal(b.node('conflict-notice').hidden, true);
+});
+
+test('une erreur de sauvegarde conserve le brouillon et n’empêche pas la tentative suivante', () => {
+  const backend = settingsBackend();
+  const a = popupHarness(backend);
+  a.fail();
+  a.node('settings-form').elements.openMode.value = 'compact';
+  a.context.saveSettings();
+  assert.match(a.node('status').textContent, /Échec/);
+  assert.equal(a.node('settings-form').elements.openMode.value, 'compact');
+  assert.equal(backend.data.openMode, 'overlay');
+  a.allowWrites();
+  a.node('settings-form').elements.openMode.value = 'split';
+  a.context.saveSettings();
+  assert.equal(backend.data.openMode, 'split');
+});
+
+test('restaurer un thème supprimé n’écrase pas celui recréé ailleurs', () => {
+  const backend = settingsBackend();
+  const a = popupHarness(backend);
+  a.node('theme-name').value = 'Lecture';
+  a.node('save-theme').listeners.click();
+  const themeId = backend.data.savedThemes[0].id;
+  a.node('delete-theme').listeners.click();
+  assert.equal(backend.data.savedThemes.length, 0);
+  backend.pauseNotifications();
+  const recreated = backend.applyMutation({
+    savedThemes: [{
+      id: themeId,
+      theme: { id: themeId, name: 'Recréé', colors: { customAccent: '#abcdef' } },
+      expected: null
+    }]
+  });
+  assert.equal(recreated.settings.savedThemes[0].name, 'Recréé');
+  backend.resumeNotifications();
+  a.node('undo-delete').listeners.click();
+  assert.equal(a.node('conflict-notice').hidden, false);
+  a.node('reapply-settings').listeners.click();
+  assert.equal(backend.data.savedThemes[0].name, 'Recréé');
+  assert.equal(a.node('conflict-notice').hidden, false);
+});
 
 test('le panneau est positionné avant affichage, sans navigation intermédiaire ni ouverture différée', async () => {
   const { context, STATE, window } = await contentHarness();
@@ -388,6 +655,109 @@ test('zoom et rebond ne déplacent pas le panneau ni ses actions pendant un reca
       assert.equal(actions.style.top, `${actionsTop}px`);
     }
   }
+});
+
+async function overlayLayoutHarness() {
+  const harness = await contentHarness();
+  const { context, STATE, window } = harness;
+  window.innerWidth = 1600;
+  window.innerHeight = 900;
+  STATE.root = element();
+  STATE.root.classList.add('peek-visible');
+  STATE.panel = element();
+  STATE.panel.style.width = '640px';
+  STATE.panel.style.height = '360px';
+  Object.defineProperties(STATE.panel, {
+    offsetWidth: { get: () => parseFloat(STATE.panel.style.width) || 640 },
+    offsetHeight: { get: () => parseFloat(STATE.panel.style.height) || 360 },
+    offsetLeft: { get: () => parseFloat(STATE.panel.style.left) || 0 },
+    offsetTop: { get: () => parseFloat(STATE.panel.style.top) || 0 }
+  });
+  const actions = element();
+  actions.getBoundingClientRect = () => ({ width: 40, height: 300 });
+  STATE.root.querySelector = selector => selector === '.peek-actions' ? actions : null;
+  STATE.iframe = { removeAttribute() {} };
+  STATE.settings.size = 'medium';
+  STATE.settings.position = 'topRight';
+  return harness;
+}
+
+test('les réglages de l’aperçu n’envoient au worker que les champs modifiés', async () => {
+  const { context, STATE, store, mutations } = await contentHarness();
+  context.testApi.saveSettings({ ...STATE.settings, position: 'center' });
+  assert.equal(mutations.length, 1);
+  assert.deepEqual(mutations[0].scalars.map(change => change.key), ['position']);
+  assert.equal(mutations[0].scalars[0].value, 'center');
+  assert.equal(store.position, 'center');
+});
+
+test('un redimensionnement du viewport recalcule les dimensions du panneau', async () => {
+  const { STATE, window, timers, runFrames } = await overlayLayoutHarness();
+  STATE.panel.style.width = '640px';
+  STATE.panel.style.height = '360px';
+  window.listeners.resize();
+  assert.equal(timers.size, 1);
+  [...timers.values()][0]();
+  timers.clear();
+  runFrames();
+  await Promise.resolve();
+  assert.equal(STATE.panel.style.width, '960px');
+  assert.equal(STATE.panel.style.height, '540px');
+  assert.equal(STATE.panel.style.left, '608px');
+});
+
+test('une notification interne de l’observateur ne recalcule que la position', async () => {
+  const { context, STATE, timers, runFrames } = await overlayLayoutHarness();
+  STATE.panel.style.width = '640px';
+  STATE.panel.style.height = '360px';
+  context.testApi.scheduleOverlayLayout({ debounce: true, resetAttempts: false, updateDimensions: false });
+  [...timers.values()][0]();
+  timers.clear();
+  runFrames();
+  await Promise.resolve();
+  assert.equal(STATE.panel.style.width, '640px');
+  assert.equal(STATE.panel.style.height, '360px');
+  assert.equal(STATE.panel.style.left, '928px');
+});
+
+test('une notification interne tardive ne retire pas le recalcul complet demandé par resize', async () => {
+  const { context, STATE, window, timers, runFrames } = await overlayLayoutHarness();
+  STATE.panel.style.width = '640px';
+  STATE.panel.style.height = '360px';
+  window.listeners.resize();
+  context.testApi.scheduleOverlayLayout({ debounce: true, resetAttempts: false, updateDimensions: false });
+  assert.equal(timers.size, 1, 'le minuteur est remplacé, pas dupliqué');
+  [...timers.values()][0]();
+  timers.clear();
+  runFrames();
+  await Promise.resolve();
+  assert.equal(STATE.panel.style.width, '960px');
+  assert.equal(STATE.panel.style.height, '540px');
+});
+
+test('plusieurs redimensionnements rapides restent bornés et cohérents', async () => {
+  const { STATE, window, timers, runFrames } = await overlayLayoutHarness();
+  for (let index = 0; index < 6; index++) window.listeners.resize();
+  assert.equal(timers.size, 1);
+  [...timers.values()][0]();
+  timers.clear();
+  runFrames();
+  await Promise.resolve();
+  assert.equal(STATE.panel.style.width, '960px');
+  assert.equal(timers.size, 0);
+});
+
+test('fermer l’aperçu pendant le délai annule le recalcul sans erreur', async () => {
+  const { context, STATE, window, timers, frames, runFrames } = await overlayLayoutHarness();
+  window.listeners.resize();
+  assert.equal(timers.size, 1);
+  context.testApi.doClose();
+  assert.equal(timers.size, 0);
+  assert.equal(frames.size, 0);
+  timers.forEach(callback => callback());
+  runFrames();
+  assert.equal(STATE.root.classList.contains('peek-visible'), false);
+  assert.equal(STATE.panel.style.width, undefined);
 });
 
 test('le mode split prime sur le repli compact automatique, mais respecte les règles de domaine', async () => {
@@ -468,7 +838,18 @@ async function gestureHarness() {
   STATE.root.classList.add('peek-visible');
   STATE.settings.openMode = 'overlay';
   const writes = [];
-  context.chrome.storage.local.set = (settings, cb) => { writes.push({ ...settings }); cb?.(); };
+  const sendMessage = context.chrome.runtime.sendMessage;
+  context.chrome.runtime.sendMessage = (message, cb) => {
+    if (message.type === 'MUTATE_SETTINGS') {
+      const write = { ...harness.store };
+      for (const change of message.scalars || []) write[change.key] = change.value;
+      Object.assign(harness.store, write);
+      writes.push(write);
+      cb?.({ ok: true, settings: { ...write } });
+      return;
+    }
+    sendMessage(message, cb);
+  };
   context.testApi.initResizeListeners(STATE.root);
   const down = (node, extra = {}) => node.listeners.pointerdown({ button: 0, pointerId: 1,
     clientX: 200, clientY: 100, target: { closest: () => null },
@@ -800,8 +1181,29 @@ test('un onglet d’origine fermé laisse les actions de site indisponibles', ()
   };
   context.chrome.runtime.sendMessage = () => assert.fail('aucune action de site');
   context.initSiteControls();
-  assert.match(node('site-status').textContent, /Impossible de lire/);
+  assert.match(node('site-status').textContent, /onglet d’origine a été fermé/);
   assert.equal(node('pause-site').disabled, true);
+  assert.equal(node('save-site-rule').disabled, true);
+  assert.equal(node('current-site-mode').disabled, true);
+});
+
+test('un onglet source fermé pendant la lecture de la pause désactive les actions de site', () => {
+  const { context, node, window } = popupHarness();
+  window.location.href = 'chrome-extension://test/popup.html?sourceTabId=12';
+  context.chrome.tabs = {
+    query() { assert.fail('le site ne doit pas venir de la fenêtre de paramètres'); },
+    get(id, cb) { cb({ id, url: 'https://source.example/' }); }
+  };
+  context.chrome.runtime.sendMessage = (message, cb) => {
+    cb(message.type === 'GET_SITE_PAUSE'
+      ? { ok: false, error: 'No tab with id: 12' }
+      : { ok: true });
+  };
+  context.initSiteControls();
+  assert.match(node('site-status').textContent, /onglet d’origine a été fermé/);
+  assert.equal(node('pause-site').disabled, true);
+  assert.equal(node('save-site-rule').disabled, true);
+  assert.equal(node('current-site-mode').disabled, true);
 });
 
 function popupNavigation(harness) {
@@ -1132,4 +1534,204 @@ test('le clic ferme l’aperçu avant de demander l’onglet, même sans répons
   context.testApi.openCurrentInTab();
   assert.equal(STATE.root.classList.contains('peek-visible'), false);
   assert.equal(requested.url, 'https://example.com/article');
+});
+
+
+test('le stockage simulé applique les validations et conflits du réducteur partagé', () => {
+  const backend = settingsBackend();
+  const before = JSON.stringify(backend.data);
+  for (const [message, error] of [
+    [{ scalars: [{ key: 'unknown', value: true }] }, 'Réglage inconnu.'],
+    [{ domainRules: [{ domain: '', mode: 'overlay' }] }, 'Domaine de règle invalide.'],
+    [{ domainRules: [{ domain: 'example.com', mode: 'unknown' }] }, 'Mode de règle invalide.'],
+    [{ savedThemes: [{ id: 'invalid id', theme: null }] }, 'Identifiant de thème invalide.'],
+    [{ savedThemes: [{ id: 'valid', theme: {} }] }, 'Thème invalide.']
+  ]) {
+    assert.throws(() => backend.applyMutation(message), { message: error });
+  }
+  const actual = backend.data.backdropOpacity;
+  const result = backend.applyMutation({ scalars: [{ key: 'backdropOpacity', expected: -1, value: 80 }] });
+  assert.equal(JSON.stringify(result.conflict), JSON.stringify({ kind: 'scalar', key: 'backdropOpacity', expected: -1, actual }));
+  assert.equal(JSON.stringify(backend.data), before);
+  assert.equal(backend.writes.length, 0);
+});
+
+test('notifications actives : un champ local garde sa référence et Réappliquer prend la saisie actuelle', () => {
+  const backend = settingsBackend(), a = popupHarness(backend), b = popupHarness(backend);
+  a.node('settings-form').elements.openMode.value = 'compact';
+  b.node('settings-form').elements.openMode.value = 'split'; b.context.saveSettings();
+  a.context.saveSettings();
+  assert.equal(backend.data.openMode, 'split');
+  assert.equal(a.node('conflict-notice').hidden, false);
+  a.node('settings-form').elements.openMode.value = 'overlay';
+  a.node('reapply-settings').listeners.click();
+  assert.equal(backend.data.openMode, 'overlay');
+});
+
+test('notifications actives : conflits par domaine et par thème, sans bloquer les autres entrées', () => {
+  for (const kind of ['domain', 'theme']) {
+    const backend = settingsBackend(kind === 'domain' ? { domainRules: 'same.example = overlay' } : {
+      savedThemes: [{ id: 'shared', name: 'Original', colors: { customAccent: '#111111' } }]
+    });
+    const a = popupHarness(backend), b = popupHarness(backend);
+    if (kind === 'domain') {
+      a.node('settings-form').elements.domainRules.value = 'same.example = compact';
+      b.node('settings-form').elements.domainRules.value = 'same.example = split\nother.example = blocked';
+    } else {
+      vm.runInContext('savedThemesDraft[0].colors.customAccent = "#222222"', a.context);
+      vm.runInContext('savedThemesDraft[0].colors.customAccent = "#333333"', b.context);
+    }
+    b.context.saveSettings(); a.context.saveSettings();
+    assert.equal(a.node('conflict-notice').hidden, false, kind);
+    if (kind === 'domain') assert.match(a.node('settings-form').elements.domainRules.value, /other.example = blocked/);
+  }
+});
+
+test('une requête unique préserve les changements du même champ et les éditeurs pendant sa réponse', () => {
+  const p = popupHarness(), pending = [], send = p.context.chrome.runtime.sendMessage;
+  p.context.chrome.runtime.sendMessage = (...args) => pending.push(args);
+  p.node('settings-form').elements.openMode.value = 'compact'; p.context.saveSettings(); p.context.saveSettings();
+  assert.equal(pending.length, 1);
+  p.node('settings-form').elements.openMode.value = 'split';
+  p.node('settings-form').elements.domainList.value = 'draft.example';
+  p.node('rule-domain').value = 'unfinished.example'; p.node('theme-name').value = 'Mon thème';
+  send(...pending.shift());
+  assert.equal(p.backend.data.openMode, 'compact');
+  assert.equal(p.node('settings-form').elements.openMode.value, 'split');
+  assert.equal(p.node('settings-form').elements.domainList.value, 'draft.example');
+  assert.equal(p.node('rule-domain').value, 'unfinished.example');
+  assert.equal(p.node('theme-name').value, 'Mon thème');
+  assert.equal(p.node('conflict-notice').hidden, true);
+  p.node('rule-domain').value = '';
+  p.context.saveSettings(); send(...pending.shift());
+  assert.equal(p.backend.data.openMode, 'split');
+});
+
+test('un nom de thème reste saisi pendant une notification externe sans rapport', () => {
+  const backend = settingsBackend(), a = popupHarness(backend), b = popupHarness(backend);
+  a.node('theme-name').value = 'Lecture';
+  b.node('settings-form').elements.openMode.value = 'compact'; b.context.saveSettings();
+  assert.equal(a.node('theme-name').value, 'Lecture');
+});
+
+test('fermer la source efface le contexte privé et ignore les réponses tardives', () => {
+  for (const phase of ['init', 'pause', 'rule']) {
+    const p = popupHarness(); let removed, complete;
+    p.window.location.href = 'chrome-extension://test/popup.html?sourceTabId=12';
+    p.context.chrome.tabs = { query() {}, get(id, cb) { cb({ id, url: 'https://private-test.example/' }); },
+      onRemoved: { addListener(listener) { removed = listener; } } };
+    p.context.chrome.runtime.sendMessage = (message, cb) => {
+      if (phase === 'init' || message.type !== 'GET_SITE_PAUSE') complete = cb;
+      else cb({ ok: true, paused: false });
+    };
+    p.context.initSiteControls();
+    if (phase === 'pause') p.node('pause-site').listeners.click();
+    if (phase === 'rule') p.node('save-site-rule').listeners.click();
+    removed(12); complete({ ok: true, paused: true, domainRules: 'private-test.example = compact' });
+    assert.equal(p.node('current-site').textContent, '');
+    assert.equal(p.node('effective-site-rule').textContent, '');
+    assert.equal(p.node('pause-site').disabled, true);
+    assert.equal(p.node('save-site-rule').disabled, true);
+    assert.equal(p.node('current-site-mode').disabled, true);
+  }
+});
+
+test('une règle rapide n’acquitte pas les conflits des autres domaines', () => {
+  const backend = settingsBackend({ domainRules: 'other.example = overlay' }), a = popupHarness(backend);
+  a.context.chrome.tabs = { query(options, cb) { cb([{ id: 1, url: 'https://site.example/' }]); } };
+  a.context.chrome.runtime.sendMessage = (message, cb) => {
+    if (message.type === 'GET_SITE_PAUSE') cb({ ok: true, paused: false });
+    else if (message.type === 'SET_DOMAIN_RULE') {
+      const result = backend.applyMutation({ domainRules: [{ domain: 'site.example', mode: 'compact' }] });
+      cb({ ok: true, domainRules: result.settings.domainRules });
+    } else cb({ ok: true, ...backend.applyMutation(message) });
+  };
+  a.context.initSiteControls();
+  a.node('settings-form').elements.domainRules.value = 'other.example = compact';
+  backend.setDirect({ domainRules: 'other.example = split' });
+  a.node('save-site-rule').listeners.click(); a.context.saveSettings();
+  assert.equal(a.node('conflict-notice').hidden, false);
+  assert.match(backend.data.domainRules, /other.example = split/);
+});
+
+test('un nom propre suit un renommage externe mais une saisie numérique partielle reste intacte', () => {
+  const backend = settingsBackend({ theme: 'saved:t', savedThemes: [{ id: 't', name: 'Ancien', colors: { customAccent: '#111111' } }] });
+  const a = popupHarness(backend);
+  a.node('settings-form').elements.customWidth.value = '12';
+  backend.setDirect({ savedThemes: [{ id: 't', name: 'Nouveau', colors: { customAccent: '#111111' } }], openMode: 'compact' });
+  assert.equal(a.node('theme-name').value, 'Nouveau');
+  assert.equal(a.node('settings-form').elements.customWidth.value, '12');
+});
+
+test('une réponse retardée ne remplace pas une notification plus récente', () => {
+  for (const laterEdit of [false, true]) {
+    const backend = settingsBackend(), a = popupHarness(backend), b = popupHarness(backend);
+    const send = a.context.chrome.runtime.sendMessage; let reply;
+    a.context.chrome.runtime.sendMessage = (message, cb) => send(message, result => { reply = () => cb(result); });
+    a.node('settings-form').elements.openMode.value = 'compact'; a.context.saveSettings();
+    if (laterEdit) a.node('settings-form').elements.openMode.value = 'overlay';
+    b.node('settings-form').elements.openMode.value = 'split'; b.context.saveSettings();
+    reply();
+    assert.equal(a.node('settings-form').elements.openMode.value, laterEdit ? 'overlay' : 'split');
+    if (laterEdit) {
+      a.context.saveSettings(); reply();
+      assert.equal(a.node('conflict-notice').hidden, false);
+      assert.equal(backend.data.openMode, 'split');
+    }
+  }
+});
+
+test('import, reset et thème préservent les éditeurs et les champs modifiés pendant leur réponse', () => {
+  for (const action of ['import', 'reset', 'theme']) {
+    const p = popupHarness(), send = p.context.chrome.runtime.sendMessage; let reply;
+    p.context.chrome.runtime.sendMessage = (message, cb) => send(message, response => { reply = () => cb(response); });
+    if (action === 'import') p.node('import-file').listeners.change({ target: { files: [{ contents: '{"openMode":"compact"}' }] } });
+    if (action === 'reset') p.node('reset').listeners.click();
+    if (action === 'theme') { p.node('theme-name').value = 'Lecture'; p.node('save-theme').listeners.click(); }
+    p.node('settings-form').elements.domainList.value = 'later.example';
+    p.node('rule-domain').value = 'unfinished.example'; p.node('theme-name').value = 'Nouveau brouillon';
+    reply();
+    assert.equal(p.node('settings-form').elements.domainList.value, 'later.example', action);
+    assert.equal(p.node('rule-domain').value, 'unfinished.example', action);
+    assert.equal(p.node('theme-name').value, 'Nouveau brouillon', action);
+  }
+});
+
+test('une réponse de règle rapide retardée conserve les règles plus récentes et libère les erreurs', () => {
+  const backend = settingsBackend(), p = popupHarness(backend); let complete;
+  p.context.chrome.tabs = { query(options, cb) { cb([{ id: 1, url: 'https://site.example/' }]); } };
+  p.context.chrome.runtime.sendMessage = (message, cb) => {
+    if (message.type === 'GET_SITE_PAUSE') cb({ ok: true, paused: false });
+    else if (message.type === 'SET_DOMAIN_RULE') {
+      const result = backend.applyMutation({ domainRules: [{ domain: 'site.example', mode: 'compact' }] });
+      complete = () => cb({ ok: true, domainRules: result.settings.domainRules });
+    } else cb({ ok: true, ...backend.applyMutation(message) });
+  };
+  p.context.initSiteControls(); p.node('save-site-rule').listeners.click();
+  backend.setDirect({ domainRules: 'site.example = compact\nother.example = split' });
+  complete();
+  assert.match(p.node('settings-form').elements.domainRules.value, /other.example = split/);
+  p.context.chrome.runtime.sendMessage = () => { throw new Error('unavailable'); };
+  p.node('save-site-rule').listeners.click();
+  assert.match(p.node('site-status').textContent, /Impossible/);
+  p.context.chrome.runtime.sendMessage = (message, cb) => cb({ ok: true, ...backend.applyMutation(message) });
+  p.node('settings-form').elements.openMode.value = 'compact'; p.context.saveSettings();
+  assert.equal(backend.data.openMode, 'compact');
+});
+
+test('une confirmation partielle signale les brouillons conservés et retire le toast de succès global', () => {
+  for (const later of ['field', 'rule', 'theme']) {
+    const backend = settingsBackend(), a = popupHarness(backend), b = popupHarness(backend);
+    const send = a.context.chrome.runtime.sendMessage; let reply;
+    a.context.chrome.runtime.sendMessage = (message, cb) => send(message, response => { reply = () => cb(response); });
+    a.node('settings-form').elements.openMode.value = 'compact'; a.context.saveSettings();
+    a.node('save-toast').classList.add('save-toast-visible');
+    if (later === 'field') a.node('settings-form').elements.openMode.value = 'overlay';
+    if (later === 'rule') a.node('rule-domain').value = 'draft.example';
+    if (later === 'theme') a.node('theme-name').value = 'Nouveau thème';
+    b.node('settings-form').elements.openMode.value = 'split'; b.context.saveSettings();
+    reply();
+    assert.match(a.node('status').textContent, /des modifications restent à sauvegarder/, later);
+    assert.equal(a.node('save-toast').classList.contains('save-toast-visible'), false, later);
+  }
 });

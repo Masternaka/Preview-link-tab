@@ -2,13 +2,16 @@
 
 Objectif : une extension rapide, stable et discrète pour consulter un lien sans perdre sa page de départ.
 
+**Mise à jour du 21 octobre 2026 :** les tâches et idées historiques ci-dessous sont conservées. Des corrections des quatre problèmes de la revue générale sont déjà présentes dans la copie de travail, et les six défauts ainsi que les deux recommandations de la [revue locale](archives/revue-locale-2026-10-21.md) ont été corrigés localement. Lire [l’état actuel](etat-projet.md) avant de traiter les anciennes priorités.
+
 **Priorités :** P1 = prochain chantier, P2 = ensuite, P3 = plus tard.
 Les tâches terminées ont été retirées. Le fonctionnement courant des améliorations récentes a été confirmé par l’utilisateur le 1er octobre 2026. Les vérifications ci-dessous concernent des cas complémentaires ; elles ne signalent pas des bugs confirmés.
 
 ## Prochaines étapes conseillées
 
-1. Valider la version Firefox dans le navigateur, puis vérifier les archives générées par GitHub Actions.
-2. Corriger les réglages de secours et clarifier la liste d’autorisation vide.
+1. Valider les corrections existantes et celles de la revue locale, notamment les parcours privés, le redimensionnement et les paramètres concurrents avec les extensions chargées. Le [plan initial archivé](archives/corrections-revue-2026-10-21.md) est réalisé côté code; les essais réels restants sont décrits dans [Vérifications](verifications.md).
+2. Valider la version Firefox dans le navigateur, puis vérifier les archives générées par GitHub Actions.
+3. Corriger les réglages de secours et clarifier la liste d’autorisation vide.
 
 Le bouton d’annulation et l’interface visuelle des règles par site sont en place.
 Les suppressions de règles et thèmes peuvent être annulées pendant 10 secondes.
@@ -35,7 +38,7 @@ Ces points ont été reproduits le 1er octobre 2026 en exécutant le code avec d
 
 ## Améliorations techniques et de l’interface
 
-- [ ] **P2 — Tests avec un vrai navigateur.** Le contrôle `scripts/check-browser.cjs` couvre déjà la reprise de lecture, la fermeture lors de l’ouverture d’un onglet, les redirections, les changements d’URL sans rechargement, les pages lentes, les refus d’intégration et l’annulation des suppressions dans Chromium avec API d’extension simulées. Compléter avec l’extension réellement chargée dans Chrome et Firefox, et approfondir le focus.
+- [ ] **P2 — Tests avec un vrai navigateur.** Le contrôle `tests/browser/check-browser.cjs` couvre déjà la reprise de lecture, la fermeture lors de l’ouverture d’un onglet, les redirections, les changements d’URL sans rechargement, les pages lentes, les refus d’intégration et l’annulation des suppressions dans Chromium avec API d’extension simulées. Compléter avec l’extension réellement chargée dans Chrome et Firefox, et approfondir le focus.
 - [ ] **P2 — Interface cohérente.** Harmoniser le panneau de réglages intégré à l’aperçu et le menu compact avec la fenêtre principale de paramètres.
 - [ ] **P2 — Code plus facile à maintenir.** Séparer progressivement la navigation, le placement, les réglages et les événements de `content.js`, en conservant les tests existants.
 - [ ] **P2 — Isolation visuelle.** Évaluer un Shadow DOM pour limiter les conflits avec les styles des sites. Valider le focus, les boutons et les thèmes sur un prototype.
@@ -58,6 +61,6 @@ Pour chaque anomalie, noter : navigateur/version, URL si partageable, réglages 
 
 - [ ] **P2 — Version et notes de publication.** Mettre à jour ensemble la version du manifeste et celle de `package.json`, puis rédiger les changements de chaque version.
 - [ ] **P2 — Licence et stockage.** Ajouter une licence et une description claire du stockage des préférences et des connexions réalisées lors d’un aperçu.
-- [ ] **P2 — Préparation finale.** Terminer les vérifications prioritaires, documenter les limites restantes dans le README et vérifier que les permissions du manifeste correspondent aux fonctions conservées.
+- [ ] **P2 — Préparation finale.** Terminer les vérifications prioritaires, documenter les limites restantes dans les guides de docs/ et vérifier que les permissions du manifeste correspondent aux fonctions conservées.
 
 **Décisions produit à conserver :** utiliser uniquement la vue partagée native selon l’API disponible ; ne pas ajouter de remplacement par deux fenêtres ou par des panneaux intégrés. Ne pas réintroduire l’ouverture automatique au survol.

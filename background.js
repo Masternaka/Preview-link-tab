@@ -16,6 +16,7 @@ const CONTEXT_MENU_ID = "peek-preview-link";
 const COMPACT_WINDOWS_STORAGE_KEY = "peekCompactWindows";
 let compactWindowsQueue = Promise.resolve();
 let siteSettingsQueue = Promise.resolve();
+let settingsMutationQueue = Promise.resolve();
 let readingPositionsQueue = Promise.resolve();
 const READING_POSITIONS_KEY = "peekReadingPositions";
 const readingPositionsMemory = { normal: [], private: [] };
@@ -32,13 +33,19 @@ function openSettingsWindow(tab) {
   return operation;
 }
 
+// Chrome's spanning incognito mode cannot create an extension page in an
+// incognito window from the shared worker; its settings page is opened in a
+// normal window while keeping sourceTabId. Firefox keeps the source context.
+const SETTINGS_INCOGNITO_POLICY = typeof browser !== "undefined" ? "source" : "normal";
+
 async function createOrFocusSettingsWindow(tab) {
   const url = new URL(extensionApi.runtime.getURL("popup.html"));
   if (tab?.id != null) url.searchParams.set("sourceTabId", String(tab.id));
+  const settingsIncognito = SETTINGS_INCOGNITO_POLICY === "source" ? Boolean(tab?.incognito) : false;
   const windows = await extensionApi.windows.getAll({ populate: true, windowTypes: ["popup"] });
   // Reuse this tab's settings without reloading its unsaved changes. Searching
   // real windows also works after the background service worker restarts.
-  const existing = windows.find(item => item.incognito === Boolean(tab?.incognito)
+  const existing = windows.find(item => item.incognito === settingsIncognito
     && item.tabs?.some(candidate => candidate.url === url.href || candidate.pendingUrl === url.href));
   if (existing) {
     return extensionApi.windows.update(existing.id, { focused: true, ...(existing.state === "minimized" ? { state: "normal" } : {}) });
@@ -57,7 +64,7 @@ async function createOrFocusSettingsWindow(tab) {
     Math.max(available.top, source.top + Math.round((source.height - height) / 2)));
   return extensionApi.windows.create({
     url: url.href, type: "popup", focused: true,
-    incognito: Boolean(tab?.incognito), width, height, left, top
+    incognito: settingsIncognito, width, height, left, top
   });
 }
 
@@ -104,9 +111,21 @@ extensionApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(() => sendResponse({ ok: false }));
     return true;
   }
-  if (["GET_SITE_PAUSE", "SET_SITE_PAUSE", "SET_DOMAIN_RULE"].includes(message?.type)) {
+  if (message?.type === "SET_DOMAIN_RULE") {
+    const operation = queueSettingsMutation(() => setDomainRuleFromMessage(message));
+    operation.then(result => sendResponse({ ok: true, ...result }))
+      .catch(error => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (["GET_SITE_PAUSE", "SET_SITE_PAUSE"].includes(message?.type)) {
     const operation = siteSettingsQueue.then(() => handleSiteSettings(message, sender));
     siteSettingsQueue = operation.catch(() => {});
+    operation.then(result => sendResponse({ ok: true, ...result }))
+      .catch(error => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message?.type === "MUTATE_SETTINGS") {
+    const operation = queueSettingsMutation(() => mutateSettings(message));
     operation.then(result => sendResponse({ ok: true, ...result }))
       .catch(error => sendResponse({ ok: false, error: error.message }));
     return true;
@@ -136,7 +155,10 @@ extensionApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === "OPEN_URL_IN_TAB" && isHttpUrl(message.url)) {
-    extensionApi.tabs.create({ url: message.url, active: true })
+    // Stay in the sender's window so a link opened from a private tab never
+    // migrates to a normal window.
+    const windowId = sender.tab?.windowId;
+    extensionApi.tabs.create({ url: message.url, active: true, ...(windowId != null ? { windowId } : {}) })
       .then(() => sendResponse({ ok: true }))
       .catch(() => sendResponse({ ok: false }));
     return true;
@@ -178,6 +200,9 @@ async function openCompactWindow(message, sender) {
     url: message.url,
     type: "popup",
     focused: true,
+    // Only the browser-provided sender context may decide the window's
+    // private mode; a message field cannot request a normal window instead.
+    incognito: Boolean(sender.tab?.incognito),
     width: size.width,
     height: size.height,
     left: position.left,
@@ -404,18 +429,43 @@ async function updatePauseBadge(tab, paused) {
   await extensionApi.action.setTitle({ tabId: tab.id, title: paused ? "Aperçu en pause sur ce site — cliquer pour réactiver" : "Preview link tab settings" });
 }
 
-async function handleSiteSettings(message, sender) {
-  if (message.type === "SET_DOMAIN_RULE") {
-    if (!isHttpUrl(message.url)) throw new Error("Adresse de site invalide.");
-    const hostname = new URL(message.url).hostname;
-    const stored = await extensionApi.storage.local.get({ domainRules: "" });
-    const domainRules = setPeekDomainRule(stored.domainRules, hostname, message.mode);
-    await extensionApi.storage.local.set({ domainRules });
-    return { domainRules, hostname };
+function queueSettingsMutation(operation) {
+  // Serialize the whole read/modify/write cycle. A failed mutation must not
+  // block later ones, and every retry starts from the persisted state.
+  const queued = settingsMutationQueue.then(operation);
+  settingsMutationQueue = queued.catch(() => {});
+  return queued;
+}
+
+async function readStoredSettings() {
+  return cleanPeekSettings(await extensionApi.storage.local.get(PEEK_DEFAULT_SETTINGS));
+}
+
+async function mutateSettings(message) {
+  const result = applySettingsMutation(await readStoredSettings(), message);
+  if (!result.conflict) {
+    await extensionApi.storage.local.set(result.settings);
   }
+  return result;
+}
+
+async function setDomainRuleFromMessage(message) {
+  if (!isHttpUrl(message.url)) throw new Error("Adresse de site invalide.");
+  const hostname = new URL(message.url).hostname;
+  const result = await mutateSettings({ domainRules: [{ domain: hostname, mode: message.mode }] });
+  return { domainRules: result.settings.domainRules, hostname };
+}
+
+async function handleSiteSettings(message, sender) {
   const tabId = sender.tab?.id ?? message.tabId;
   if (!Number.isInteger(tabId)) throw new Error("Ouvrez cette action depuis un onglet.");
-  const tab = await extensionApi.tabs.get(tabId);
+  let tab;
+  try {
+    tab = await extensionApi.tabs.get(tabId);
+  } catch {
+    throw new Error("L’onglet d’origine a été fermé.");
+  }
+  if (!tab) throw new Error("L’onglet d’origine a été fermé.");
   const key = pausedSiteKey(tab);
   const stored = await extensionApi.storage.session.get(PAUSED_SITES_KEY);
   const pausedSites = new Set(Array.isArray(stored[PAUSED_SITES_KEY]) ? stored[PAUSED_SITES_KEY] : []);

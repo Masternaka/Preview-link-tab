@@ -152,12 +152,16 @@
   let lastHoveredAnchor = null;
   let overlayPositionFrame = 0;
   let overlayResizeTimer = 0;
+  let overlayRetryTimer = 0;
+  let overlayPendingUpdateDimensions = false;
   let overlayPositionAttempts = 0;
   let overlayPanelObserver = null;
   let previewLoadTimer = 0;
   let settingsSaveTimer = 0;
+  let persistedSettings = null;
 
   loadSettings().then(settings => {
+    persistedSettings = settings;
     STATE.settings = settings;
     if (STATE.root) {
       applySettings();
@@ -179,6 +183,7 @@
       if (Object.keys(next).length === 0) {
         return;
       }
+      persistedSettings = cleanSettings({ ...(persistedSettings || STATE.settings), ...next });
       STATE.settings = cleanSettings({ ...STATE.settings, ...next });
       if (STATE.root) {
         applySettings();
@@ -972,21 +977,33 @@
     }
 
     if (debounce) {
+      // A viewport resize must keep its full recalculation even when the panel's
+      // ResizeObserver replaces the timer before it fires.
+      overlayPendingUpdateDimensions = overlayPendingUpdateDimensions || updateDimensions;
       window.clearTimeout(overlayResizeTimer);
-      overlayResizeTimer = window.setTimeout(
-        () => scheduleOverlayLayout({ resetAttempts: false, updateDimensions: false }),
-        120
-      );
+      overlayResizeTimer = window.setTimeout(() => {
+        overlayResizeTimer = 0;
+        const pendingUpdateDimensions = overlayPendingUpdateDimensions;
+        overlayPendingUpdateDimensions = false;
+        scheduleOverlayLayout({ resetAttempts: false, updateDimensions: pendingUpdateDimensions });
+      }, 120);
       return;
     }
 
     cancelAnimationFrame(overlayPositionFrame);
     overlayPositionFrame = requestAnimationFrame(() => {
       overlayPositionFrame = requestAnimationFrame(async () => {
+        overlayPositionFrame = 0;
         const ok = await applyOverlayLayout({ updateDimensions });
         if (!ok && overlayPositionAttempts < 6) {
           overlayPositionAttempts += 1;
-          window.setTimeout(() => scheduleOverlayLayout({ resetAttempts: false }), 60);
+          window.clearTimeout(overlayRetryTimer);
+          overlayRetryTimer = window.setTimeout(() => {
+            overlayRetryTimer = 0;
+            if (STATE.root?.classList.contains("peek-visible")) {
+              scheduleOverlayLayout({ resetAttempts: false });
+            }
+          }, 60);
         }
       });
     });
@@ -1005,6 +1022,14 @@
 
   function doClose() {
     finishPanelGesture?.();
+    window.clearTimeout(overlayResizeTimer);
+    overlayResizeTimer = 0;
+    window.clearTimeout(overlayRetryTimer);
+    overlayRetryTimer = 0;
+    cancelAnimationFrame(overlayPositionFrame);
+    overlayPositionFrame = 0;
+    overlayPendingUpdateDimensions = false;
+    overlayPositionAttempts = 0;
     if (!STATE.root) {
       return;
     }
@@ -1458,6 +1483,53 @@
       }
       return;
     }
+    const reference = persistedSettings || STATE.settings;
+    const changes = Object.keys(PEEK_DEFAULT_SETTINGS)
+      .filter(key => key !== "savedThemes" && key !== "domainRules")
+      .filter(key => JSON.stringify(settings[key]) !== JSON.stringify(reference[key]))
+      .map(key => ({
+        key,
+        value: settings[key],
+        expected: Object.hasOwn(reference, key) ? reference[key] : null
+      }));
+    if (changes.length === 0) {
+      return;
+    }
+    const fallbackToLocalStorage = err => {
+      console.warn("saveSettings: extension context might be invalidated, falling back to localStorage", err.message);
+      try {
+        window.localStorage.setItem("peek-preview-settings", JSON.stringify(settings));
+      } catch (e) {
+        /* ignore */
+      }
+    };
+    const send = (mutation, retried = false) => {
+      chrome.runtime.sendMessage({ type: "MUTATE_SETTINGS", ...mutation }, response => {
+        if (chrome.runtime.lastError || !response?.ok) {
+          console.warn("saveSettings: error saving to storage", chrome.runtime.lastError?.message || response?.error);
+          return;
+        }
+        const confirmed = cleanSettings(response.settings);
+        if (response.conflict) {
+          persistedSettings = confirmed;
+          if (!retried) {
+            send({
+              scalars: mutation.scalars.map(change => ({ ...change, expected: confirmed[change.key] ?? null }))
+            }, true);
+          }
+          return;
+        }
+        persistedSettings = confirmed;
+      });
+    };
+    if (typeof chrome.runtime?.sendMessage === "function") {
+      try {
+        send({ scalars: changes });
+      } catch (err) {
+        fallbackToLocalStorage(err);
+      }
+      return;
+    }
     try {
       chrome.storage.local.set(settings, () => {
         if (chrome.runtime.lastError) {
@@ -1465,12 +1537,7 @@
         }
       });
     } catch (err) {
-      console.warn("saveSettings: extension context might be invalidated, falling back to localStorage", err.message);
-      try {
-        window.localStorage.setItem("peek-preview-settings", JSON.stringify(settings));
-      } catch (e) {
-        /* ignore */
-      }
+      fallbackToLocalStorage(err);
     }
   }
 

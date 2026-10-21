@@ -5,7 +5,7 @@ const test = require("node:test");
 const vm = require("node:vm");
 
 function loadSettings() {
-  const source = fs.readFileSync(path.join(__dirname, "..", "settings.js"), "utf8");
+  const source = fs.readFileSync(path.join(__dirname, "..", "..", "settings.js"), "utf8");
   const context = { URL };
   vm.createContext(context);
   vm.runInContext(`${source}\nthis.exportsForTest = { setPeekDomainRule, cleanPeekSavedThemes, parsePeekSettingsImport, PEEK_THEME_PRESETS, PEEK_SETTING_OPTIONS, applyPeekTheme, cleanPeekSettings, parseDomainList, parseDomainRules, getDomainRule, isPeekAllowedForHost, peekOverlayViewportPosition };`, context);
@@ -116,7 +116,7 @@ test('les nouveaux cadres et ombres survivent à la sauvegarde et à l’import'
 test("tous les sélecteurs proposent uniquement la même liste de thèmes", () => {
   let count = 0;
   for (const name of ['popup.html', 'content.js']) {
-    const source = fs.readFileSync(path.join(__dirname, '..', name), 'utf8');
+    const source = fs.readFileSync(path.join(__dirname, '..', '..', name), 'utf8');
     for (const match of source.matchAll(/<select name="theme">([\s\S]*?)<\/select>/g)) {
       const values = [...match[1].matchAll(/value="([^"]+)"/g)].map(item => item[1]);
       assert.deepEqual(values, Array.from(settings.PEEK_SETTING_OPTIONS.theme));

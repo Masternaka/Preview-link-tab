@@ -33,6 +33,7 @@ function loadWorker(storage, { firefox = false } = {}) {
   const event = () => ({ addListener(listener) { this.listener = listener; } });
   let nextWindow = 10;
   const sent = [];
+  const createdWindows = [];
   const chrome = {
     storage: { session: storage.session },
     runtime: { onInstalled: event(), onMessage: event(), getURL: name => `chrome-extension://test/${name}` },
@@ -41,7 +42,11 @@ function loadWorker(storage, { firefox = false } = {}) {
     commands: { onCommand: event() },
     windows: {
       onRemoved: event(),
-      async create() {
+      async get(id) {
+        return { id, left: 0, top: 0, width: 1400, height: 900 };
+      },
+      async create(options) {
+        createdWindows.push(options);
         const id = nextWindow++;
         return { id, tabs: [{ id: id * 10 }] };
       },
@@ -57,12 +62,12 @@ function loadWorker(storage, { firefox = false } = {}) {
   };
   const context = vm.createContext(firefox ? { browser: chrome, URL } : { chrome, URL });
   const loadScript = name => vm.runInContext(
-    fs.readFileSync(path.join(__dirname, '..', name), 'utf8'), context
+    fs.readFileSync(path.join(__dirname, '..', '..', name), 'utf8'), context
   );
   if (firefox) loadScript('settings.js');
   else context.importScripts = loadScript;
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'background.js'), 'utf8'), context);
-  return { api: context, chrome, sent };
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', '..', 'background.js'), 'utf8'), context);
+  return { api: context, chrome, sent, createdWindows };
 }
 
 const request = { url: 'https://example.com/', settings: { size: 'medium', position: 'center' } };
@@ -111,6 +116,73 @@ test('les paramètres restent dans la zone utilisable d’un petit écran second
   assert.ok(options.top >= workArea.top);
   assert.ok(options.left + options.width <= 0);
   assert.ok(options.top + options.height <= 480);
+});
+
+test('une fenêtre compacte reprend le contexte privé de l’onglet émetteur', async () => {
+  const { api, createdWindows } = loadWorker(storageHarness());
+  await api.openCompactWindow(request, { tab: { incognito: true, windowId: 7 } });
+  assert.equal(createdWindows[0].incognito, true);
+  assert.equal(createdWindows[0].url, request.url);
+  await api.openCompactWindow(request, { tab: { incognito: false, windowId: 7 } });
+  assert.equal(createdWindows[1].incognito, false);
+  await api.openCompactWindow(request, {});
+  assert.equal(createdWindows[2].incognito, false);
+});
+
+test('le message ne peut pas imposer une fenêtre compacte normale depuis un onglet privé', async () => {
+  const { api, createdWindows } = loadWorker(storageHarness());
+  await api.openCompactWindow({ ...request, incognito: false }, { tab: { incognito: true } });
+  assert.equal(createdWindows[0].incognito, true);
+});
+
+test('un refus de fenêtre compacte privée n’ouvre pas de fenêtre normale de secours', async () => {
+  const { chrome, createdWindows } = loadWorker(storageHarness());
+  let attempts = 0;
+  chrome.windows.create = async options => {
+    attempts++;
+    createdWindows.push(options);
+    throw new Error('private window refused');
+  };
+  const response = await new Promise(resolve => {
+    chrome.runtime.onMessage.listener(
+      { type: 'OPEN_COMPACT_WINDOW', url: request.url, settings: request.settings },
+      { tab: { incognito: true } },
+      resolve
+    );
+  });
+  assert.equal(response.ok, false);
+  assert.equal(attempts, 1);
+  assert.equal(createdWindows[0].incognito, true);
+});
+
+test('les paramètres d’un onglet privé Chrome s’ouvrent dans une fenêtre normale avec le bon sourceTabId', async () => {
+  const worker = settingsWindowHarness({ left: 100, top: 50, width: 1400, height: 900 });
+  await worker.api.openSettingsWindow({ id: 12, windowId: 7, incognito: true });
+  assert.equal(worker.creations[0].incognito, false);
+  assert.equal(worker.creations[0].url, 'chrome-extension://test/popup.html?sourceTabId=12');
+  assert.equal(worker.creations[0].type, 'popup');
+  worker.windows[0].tabs[0] = { url: worker.creations[0].url };
+  await worker.api.openSettingsWindow({ id: 12, windowId: 7, incognito: true });
+  assert.equal(worker.creations.length, 1, 'la fenêtre normale existante est réutilisée');
+  assert.equal(worker.updates.length, 1);
+});
+
+test('les paramètres Firefox conservent le contexte privé de l’onglet source', async () => {
+  const worker = settingsWindowHarness({ left: 0, top: 0, width: 1400, height: 900 }, null, { firefox: true });
+  worker.chrome.runtime.getURL = name => `moz-extension://test/${name}`;
+  await worker.api.openSettingsWindow({ id: 12, windowId: 7, incognito: true });
+  assert.equal(worker.creations[0].incognito, true);
+  assert.equal(worker.creations[0].url, 'moz-extension://test/popup.html?sourceTabId=12');
+});
+
+test('deux onglets sources distincts gardent chacun leur fenêtre de paramètres', async () => {
+  const worker = settingsWindowHarness({ left: 0, top: 0, width: 1400, height: 900 });
+  await worker.api.openSettingsWindow({ id: 12, windowId: 7 });
+  await worker.api.openSettingsWindow({ id: 13, windowId: 7 });
+  assert.deepEqual(worker.creations.map(item => item.url), [
+    'chrome-extension://test/popup.html?sourceTabId=12',
+    'chrome-extension://test/popup.html?sourceTabId=13'
+  ]);
 });
 
 test('des clics répétés réutilisent les paramètres sans recharger les changements en cours', async () => {
@@ -219,6 +291,19 @@ test('la vue partagée ouvre le lien avec l’onglet émetteur dans sa fenêtre'
   });
 });
 
+test('ouvrir dans un onglet reste dans la fenêtre privée de l’onglet émetteur', async () => {
+  const { chrome } = loadWorker(storageHarness());
+  const created = [];
+  chrome.tabs.create = async options => { created.push(options); return { id: 1 }; };
+  const send = sender => new Promise(resolve => {
+    chrome.runtime.onMessage.listener({ type: 'OPEN_URL_IN_TAB', url: 'https://example.com/' }, sender, resolve);
+  });
+  assert.equal((await send({ tab: { id: 7, windowId: 3, incognito: true } })).ok, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(created[0])), { url: 'https://example.com/', active: true, windowId: 3 });
+  assert.equal((await send({})).ok, true);
+  assert.equal(created[1].windowId, undefined);
+});
+
 test('une vue partagée indisponible ou déjà active ne crée pas d’onglet supplémentaire', async () => {
   const { api, chrome } = loadWorker(storageHarness());
   let creations = 0;
@@ -291,6 +376,25 @@ test('la pause se propage aux onglets du même site et survit au redémarrage du
   assert.equal((await message({ type: 'GET_SITE_PAUSE', tabId: 5 })).ok, false);
   // Content scripts must act on their own tab, not a supplied alternate tab ID.
   assert.equal((await message({ type: 'GET_SITE_PAUSE', tabId: 1 }, { tab: { id: 3 } })).hostname, 'sub.example.com');
+});
+
+test('la pause d’un site privé reste séparée de la pause normale du même domaine', async () => {
+  const { message } = siteHarness();
+  await message({ type: 'SET_SITE_PAUSE', tabId: 4, paused: true });
+  assert.equal((await message({ type: 'GET_SITE_PAUSE', tabId: 4 })).paused, true);
+  assert.equal((await message({ type: 'GET_SITE_PAUSE', tabId: 1 })).paused, false);
+  await message({ type: 'SET_SITE_PAUSE', tabId: 1, paused: true });
+  assert.equal((await message({ type: 'GET_SITE_PAUSE', tabId: 4 })).paused, true);
+  await message({ type: 'SET_SITE_PAUSE', tabId: 4, paused: false });
+  assert.equal((await message({ type: 'GET_SITE_PAUSE', tabId: 1 })).paused, true);
+});
+
+test('une pause demandée pour un onglet disparu échoue sans toucher un autre onglet', async () => {
+  const { message, sent } = siteHarness();
+  const response = await message({ type: 'SET_SITE_PAUSE', tabId: 999, paused: true });
+  assert.equal(response.ok, false);
+  assert.match(response.error, /fermé/);
+  assert.deepEqual(sent, []);
 });
 
 test('les changements de pause concurrents ne perdent pas de site', async () => {
@@ -382,6 +486,151 @@ test('Firefox : pause de site, règles et stockage de session après redémarrag
   assert.equal((await restarted.api.handleSiteSettings({ type: 'GET_SITE_PAUSE', tabId: 4 }, {})).paused, false);
   await worker.message({ type: 'SET_DOMAIN_RULE', url: request.url, mode: 'compact' });
   assert.match(worker.local.domainRules, /example.com = compact/);
+});
+
+function localArea(initial = {}) {
+  let data = structuredClone(initial);
+  let failNext = false;
+  return {
+    snapshot: () => structuredClone(data),
+    failNextWrite() { failNext = true; },
+    async get(defaults) {
+      await new Promise(resolve => setImmediate(resolve));
+      const values = defaults && typeof defaults === 'object' && !Array.isArray(defaults)
+        ? structuredClone(defaults) : {};
+      return { ...values, ...structuredClone(data) };
+    },
+    async set(value) {
+      await new Promise(resolve => setImmediate(resolve));
+      if (failNext) {
+        failNext = false;
+        throw new Error('storage unavailable');
+      }
+      data = { ...data, ...structuredClone(value) };
+    }
+  };
+}
+
+function mutationHarness(options, local = localArea({ domainRules: 'other.example = overlay' })) {
+  const worker = loadWorker(storageHarness(), options);
+  worker.chrome.storage.local = local;
+  const message = (data, sender = {}) => new Promise(resolve => {
+    assert.equal(worker.chrome.runtime.onMessage.listener(data, sender, resolve), true);
+  });
+  return { ...worker, local, message };
+}
+
+test('deux fenêtres conservent une règle et un réglage modifiés en parallèle', async () => {
+  const { local, message } = mutationHarness();
+  const [rule, scalar] = await Promise.all([
+    message({ type: 'MUTATE_SETTINGS', domainRules: [{ domain: 'example.com', mode: 'compact', expected: null }] }),
+    message({ type: 'MUTATE_SETTINGS', scalars: [{ key: 'theme', value: 'nord', expected: 'catppuccin' }] })
+  ]);
+  assert.equal(rule.ok, true);
+  assert.equal(scalar.ok, true);
+  assert.match(local.snapshot().domainRules, /other\.example = overlay/);
+  assert.match(local.snapshot().domainRules, /example\.com = compact/);
+  assert.equal(local.snapshot().theme, 'nord');
+});
+
+test('deux créations de thèmes distinctes sont conservées', async () => {
+  const { local, message } = mutationHarness();
+  const theme = (id, name) => ({ id, name, colors: { customAccent: '#123456' } });
+  await Promise.all([
+    message({ type: 'MUTATE_SETTINGS', savedThemes: [{ id: 'theme-a', theme: theme('theme-a', 'A'), expected: null }] }),
+    message({ type: 'MUTATE_SETTINGS', savedThemes: [{ id: 'theme-b', theme: theme('theme-b', 'B'), expected: null }] })
+  ]);
+  assert.deepEqual(local.snapshot().savedThemes.map(item => item.id), ['theme-a', 'theme-b']);
+});
+
+test('deux règles simultanées sur des domaines différents sont conservées', async () => {
+  const { local, message } = mutationHarness();
+  await Promise.all([
+    message({ type: 'MUTATE_SETTINGS', domainRules: [{ domain: 'one.example', mode: 'compact', expected: null }] }),
+    message({ type: 'MUTATE_SETTINGS', domainRules: [{ domain: 'two.example', mode: 'split', expected: null }] })
+  ]);
+  assert.match(local.snapshot().domainRules, /one\.example = compact/);
+  assert.match(local.snapshot().domainRules, /two\.example = split/);
+});
+
+test('une modification scalaire fondée sur un état ancien signale un conflit sans écraser', async () => {
+  const { local, message } = mutationHarness();
+  await message({ type: 'MUTATE_SETTINGS', scalars: [{ key: 'theme', value: 'nord', expected: 'catppuccin' }] });
+  const conflict = await message({ type: 'MUTATE_SETTINGS', scalars: [{ key: 'theme', value: 'dracula', expected: 'catppuccin' }] });
+  assert.equal(conflict.ok, true);
+  assert.equal(conflict.conflict.kind, 'scalar');
+  assert.equal(conflict.conflict.key, 'theme');
+  assert.equal(local.snapshot().theme, 'nord');
+});
+
+test('une règle modifiée ailleurs produit un conflit de domaine', async () => {
+  const { local, message } = mutationHarness();
+  await message({ type: 'MUTATE_SETTINGS', domainRules: [{ domain: 'example.com', mode: 'compact', expected: null }] });
+  const conflict = await message({ type: 'MUTATE_SETTINGS', domainRules: [{ domain: 'example.com', mode: 'split', expected: null }] });
+  assert.equal(conflict.conflict.kind, 'domainRule');
+  assert.match(local.snapshot().domainRules, /example\.com = compact/);
+});
+
+test('une modification de thème fondée sur une version ancienne signale un conflit', async () => {
+  const { local, message } = mutationHarness();
+  const colors = { customAccent: '#123456' };
+  await message({ type: 'MUTATE_SETTINGS', savedThemes: [{ id: 'theme-a', theme: { id: 'theme-a', name: 'A', colors }, expected: null }] });
+  const reference = structuredClone(local.snapshot().savedThemes[0]);
+  await message({ type: 'MUTATE_SETTINGS', savedThemes: [{ id: 'theme-a', theme: { id: 'theme-a', name: 'A2', colors }, expected: reference }] });
+  const conflict = await message({ type: 'MUTATE_SETTINGS', savedThemes: [{ id: 'theme-a', theme: { id: 'theme-a', name: 'A3', colors }, expected: reference }] });
+  assert.equal(conflict.conflict.kind, 'theme');
+  assert.equal(local.snapshot().savedThemes[0].name, 'A2');
+});
+
+test('la règle rapide et les mutations de préférences partagent la même file', async () => {
+  const { local, message } = mutationHarness();
+  await Promise.all([
+    message({ type: 'SET_DOMAIN_RULE', url: 'https://quick.example/page', mode: 'compact' }),
+    message({ type: 'MUTATE_SETTINGS', domainRules: [{ domain: 'draft.example', mode: 'blocked', expected: null }] })
+  ]);
+  assert.match(local.snapshot().domainRules, /quick\.example = compact/);
+  assert.match(local.snapshot().domainRules, /draft\.example = blocked/);
+});
+
+test('une erreur d’écriture ne bloque pas les mutations suivantes de la file', async () => {
+  const { local, message } = mutationHarness();
+  local.failNextWrite();
+  const failed = await message({ type: 'MUTATE_SETTINGS', scalars: [{ key: 'theme', value: 'nord', expected: 'catppuccin' }] });
+  assert.equal(failed.ok, false);
+  const next = await message({ type: 'MUTATE_SETTINGS', scalars: [{ key: 'openMode', value: 'compact', expected: 'overlay' }] });
+  assert.equal(next.ok, true);
+  assert.equal(local.snapshot().openMode, 'compact');
+});
+
+test('après redémarrage du worker, une mutation repart de l’état réellement enregistré', async () => {
+  const first = mutationHarness();
+  await first.message({ type: 'MUTATE_SETTINGS', scalars: [{ key: 'theme', value: 'nord', expected: 'catppuccin' }] });
+  const restarted = mutationHarness(undefined, first.local);
+  const result = await restarted.message({ type: 'MUTATE_SETTINGS', scalars: [{ key: 'openMode', value: 'split', expected: 'overlay' }] });
+  assert.equal(result.ok, true);
+  assert.equal(first.local.snapshot().theme, 'nord');
+  assert.equal(first.local.snapshot().openMode, 'split');
+});
+
+test('un import ou une réinitialisation remplace l’état dans la même file', async () => {
+  const { local, message } = mutationHarness();
+  await message({ type: 'MUTATE_SETTINGS', scalars: [{ key: 'theme', value: 'nord', expected: 'catppuccin' }] });
+  const replaced = await message({
+    type: 'MUTATE_SETTINGS',
+    replace: { theme: 'dracula', domainRules: 'example.com = blocked' }
+  });
+  assert.equal(replaced.ok, true);
+  assert.equal(local.snapshot().theme, 'dracula');
+  assert.equal(local.snapshot().domainRules, 'example.com = blocked');
+  assert.equal(local.snapshot().openMode, 'overlay');
+});
+
+test('les mutations refusent les clés inconnues et les identifiants de thème invalides', async () => {
+  const { message } = mutationHarness();
+  const unknown = await message({ type: 'MUTATE_SETTINGS', scalars: [{ key: 'unknown', value: true }] });
+  assert.equal(unknown.ok, false);
+  const invalid = await message({ type: 'MUTATE_SETTINGS', savedThemes: [{ id: '../bad', theme: null }] });
+  assert.equal(invalid.ok, false);
 });
 
 function readingHarness(options) {

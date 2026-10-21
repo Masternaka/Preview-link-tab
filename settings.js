@@ -67,7 +67,7 @@ function peekAnimationDurationMs(settings) {
   return PEEK_ANIMATION_SPEED_MS[settings.animationSpeed] ?? PEEK_ANIMATION_SPEED_MS.normal;
 }
 
-// Official palette sources and variants: THEMES.md. Shared by both preview interfaces.
+// Official palette sources and variants: docs/themes.md. Shared by both preview interfaces.
 const PEEK_THEME_PRESETS = {
   "catppuccin": {
     "accent": "#cba6f7",
@@ -613,4 +613,102 @@ function shouldAutoCompact(urlObj, settings) {
   
   // Check built-in list
   return PEEK_BUILTIN_BLOCKED_DOMAINS.some(domain => hostMatchesDomain(host, domain));
+}
+
+// Shared pure reducer; callers serialize reads and persist only successful mutations.
+const PEEK_MUTATION_STRUCTURED_KEYS = new Set(["domainRules", "savedThemes"]);
+const PEEK_MUTATION_SCALAR_KEYS = new Set(Object.keys(PEEK_DEFAULT_SETTINGS).filter(key => !PEEK_MUTATION_STRUCTURED_KEYS.has(key)));
+
+function samePeekMutationValue(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function peekMutationDomainRuleMode(domainRules, domain) {
+  return parseDomainRules(domainRules).find(rule => rule.domain === domain)?.mode ?? null;
+}
+
+function clonePeekMutationThemes(themes) {
+  return themes.map(item => ({ ...item, colors: { ...item.colors } }));
+}
+
+function applySettingsMutation(current, message) {
+  if (message.replace) {
+    const replacement = cleanPeekSettings(message.replace);
+    return { settings: replacement };
+  }
+
+  const next = { ...current, savedThemes: clonePeekMutationThemes(current.savedThemes) };
+  let conflict = null;
+  const reportConflict = (kind, key, expected, actual) => {
+    if (!conflict) {
+      conflict = { kind, key, expected, actual };
+    }
+  };
+
+  for (const change of Array.isArray(message.scalars) ? message.scalars : []) {
+    if (!change || !PEEK_MUTATION_SCALAR_KEYS.has(change.key)) {
+      throw new Error("Réglage inconnu.");
+    }
+    if (Object.hasOwn(change, "expected") && !samePeekMutationValue(current[change.key], change.expected)) {
+      reportConflict("scalar", change.key, change.expected, current[change.key]);
+    }
+    next[change.key] = change.value;
+  }
+
+  let domainRules = current.domainRules;
+  for (const operation of Array.isArray(message.domainRules) ? message.domainRules : []) {
+    const domain = normalizeDomainEntry(operation?.domain);
+    if (!domain || domain.length > 253) {
+      throw new Error("Domaine de règle invalide.");
+    }
+    if (!["default", "overlay", "compact", "split", "blocked"].includes(operation.mode)) {
+      throw new Error("Mode de règle invalide.");
+    }
+    const actual = peekMutationDomainRuleMode(current.domainRules, domain);
+    if (Object.hasOwn(operation, "expected") && actual !== (operation.expected ?? null)) {
+      reportConflict("domainRule", domain, operation.expected ?? null, actual);
+    }
+    domainRules = setPeekDomainRule(domainRules, domain, operation.mode);
+  }
+  next.domainRules = domainRules;
+
+  let savedThemes = next.savedThemes;
+  for (const operation of Array.isArray(message.savedThemes) ? message.savedThemes : []) {
+    const id = operation?.id;
+    if (typeof id !== "string" || !/^[a-zA-Z0-9_-]{1,80}$/.test(id)) {
+      throw new Error("Identifiant de thème invalide.");
+    }
+    const actual = savedThemes.find(item => item.id === id) || null;
+    if (Object.hasOwn(operation, "expected") && !samePeekMutationValue(actual, operation.expected)) {
+      reportConflict("theme", actual?.name || id, operation.expected ?? null, actual);
+    }
+    if (operation.theme == null) {
+      savedThemes = savedThemes.filter(item => item.id !== id);
+      continue;
+    }
+    const [theme] = cleanPeekSavedThemes([operation.theme]);
+    if (!theme || theme.id !== id) {
+      throw new Error("Thème invalide.");
+    }
+    if (savedThemes.some(item => item.id !== id && item.name.toLocaleLowerCase() === theme.name.toLocaleLowerCase())) {
+      throw new Error("Un thème porte déjà ce nom.");
+    }
+    const index = savedThemes.findIndex(item => item.id === id);
+    if (index === -1) {
+      savedThemes = [...savedThemes, theme];
+    } else {
+      savedThemes = savedThemes.map(item => item.id === id ? theme : item);
+    }
+    if (savedThemes.length > 50) {
+      throw new Error("Maximum 50 thèmes personnels.");
+    }
+  }
+  next.savedThemes = savedThemes;
+
+  if (conflict) {
+    return { conflict, settings: current };
+  }
+
+  const clean = cleanPeekSettings(next);
+  return { settings: clean };
 }

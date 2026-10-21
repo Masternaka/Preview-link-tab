@@ -8,6 +8,6 @@
     "build:firefox": "node scripts/build.js firefox",
     "test": "node --test",
     "package": "node scripts/package.js",
-    "test:browser": "node scripts/check-browser.cjs"
+    "test:browser": "node tests/browser/check-browser.cjs"
   }
 }
