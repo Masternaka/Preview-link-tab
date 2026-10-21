@@ -403,6 +403,10 @@
                   </legend>
                   <div class="segmented" role="radiogroup" aria-label="Taille">
                     <label>
+                      <input type="radio" name="size" value="relative">
+                      <span>75 %</span>
+                    </label>
+                    <label>
                       <input type="radio" name="size" value="small">
                       <span>
                         Petite
@@ -434,6 +438,7 @@
                     </label>
                   </div>
                 </fieldset>
+                <p class="hint">75 % de la largeur et de la hauteur du navigateur, dans les limites de l’espace disponible.</p>
                 <fieldset class="advanced-group" data-enabled-by="size" data-enabled-value="custom">
                   <legend>
                     Dimensions personnalisées

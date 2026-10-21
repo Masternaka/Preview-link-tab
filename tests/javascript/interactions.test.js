@@ -607,8 +607,8 @@ test('le panneau est positionné avant affichage, sans navigation intermédiaire
       assert.equal(STATE.root.classList.contains('peek-preparing'), true);
       assert.equal(STATE.root.classList.contains('peek-position-calculated'), true);
       assert.equal(STATE.root.classList.contains('peek-loading'), true);
-      assert.equal(STATE.panel.style.left, '408px');
-      assert.equal(STATE.panel.style.top, '32px');
+      assert.equal(STATE.panel.style.left, '175px');
+      assert.equal(STATE.panel.style.top, '113px');
       navigations.push(value);
     },
     removeAttribute() { cleared++; }
@@ -684,11 +684,11 @@ async function overlayLayoutHarness() {
 
 test('les réglages de l’aperçu n’envoient au worker que les champs modifiés', async () => {
   const { context, STATE, store, mutations } = await contentHarness();
-  context.testApi.saveSettings({ ...STATE.settings, position: 'center' });
+  context.testApi.saveSettings({ ...STATE.settings, position: 'topLeft' });
   assert.equal(mutations.length, 1);
   assert.deepEqual(mutations[0].scalars.map(change => change.key), ['position']);
-  assert.equal(mutations[0].scalars[0].value, 'center');
-  assert.equal(store.position, 'center');
+  assert.equal(mutations[0].scalars[0].value, 'topLeft');
+  assert.equal(store.position, 'topLeft');
 });
 
 test('un redimensionnement du viewport recalcule les dimensions du panneau', async () => {
@@ -869,7 +869,7 @@ test('glisser mémorise la position sans changer la taille et nettoie les évén
   assert.equal(writes[0].position, 'custom');
   assert.equal(writes[0].customLeft, 350);
   assert.equal(writes[0].customTop, 180);
-  assert.equal(writes[0].size, 'medium');
+  assert.equal(writes[0].size, 'relative');
   assert.equal(header.hasPointerCapture(), false);
   assert.equal(header.listeners.pointermove, undefined);
   assert.equal(window.listeners.blur, undefined);

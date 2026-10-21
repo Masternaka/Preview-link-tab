@@ -106,6 +106,10 @@ const server = http.createServer((req, res) => {
       const box = await page.locator('.peek-panel').boundingBox();
       assert(box, `panneau absent après redimensionnement à ${width}×${height}`);
       const tolerance = 1.5;
+      assert(Math.abs(box.width - Math.round(width * 0.75)) <= tolerance, `largeur relative incorrecte à ${width}×${height}`);
+      assert(Math.abs(box.height - Math.min(Math.round(height * 0.75), height - 128)) <= tolerance, `hauteur relative incorrecte à ${width}×${height}`);
+      assert(Math.abs(box.x - (width - box.width) / 2) <= tolerance, 'panneau non centré horizontalement');
+      assert(Math.abs(box.y - (height - box.height) / 2) <= tolerance, 'panneau non centré verticalement');
       assert(box.x >= -tolerance && box.y >= -tolerance, `panneau hors cadre à ${width}×${height}: ${JSON.stringify(box)}`);
       assert(box.width >= minWidth - tolerance, `panneau non agrandi à ${width}×${height}: ${JSON.stringify(box)}`);
       assert(box.width <= maxWidth + tolerance, `panneau trop large à ${width}×${height}: ${JSON.stringify(box)}`);
@@ -115,6 +119,24 @@ const server = http.createServer((req, res) => {
     };
     if (process.env.QA_FLOW !== 'settings') {
     await open('article'); await ready();
+    const initialViewport = page.viewportSize();
+    await assertPanelInsideViewport(initialViewport.width, initialViewport.height);
+    const decoration = await page.locator('.peek-panel').evaluate(panel => {
+      const style = getComputedStyle(panel);
+      const header = getComputedStyle(panel.querySelector('.peek-header'));
+      const wrap = getComputedStyle(panel.querySelector('.peek-frame-wrap'));
+      return { outline: style.outlineStyle, inner: parseFloat(style.borderTopLeftRadius) - parseFloat(style.paddingTop) - parseFloat(style.borderTopWidth), header: parseFloat(header.borderTopLeftRadius), wrap: parseFloat(wrap.borderBottomLeftRadius) };
+    });
+    assert.equal(decoration.outline, 'none');
+    assert.equal(decoration.header, decoration.inner);
+    assert.equal(decoration.wrap, decoration.inner);
+    await page.keyboard.press('Tab');
+    assert.equal(await page.evaluate(() => document.activeElement.matches('#peek-preview-extension-root button:focus-visible')), true);
+    assert.equal(await page.evaluate(() => getComputedStyle(document.activeElement).outlineStyle), 'solid');
+    if (process.env.QA_SCREENSHOT_DIR) {
+      fs.mkdirSync(process.env.QA_SCREENSHOT_DIR, { recursive: true });
+      await page.screenshot({ path: path.join(process.env.QA_SCREENSHOT_DIR, 'preview-rounded.png') });
+    }
     await frame().waitForFunction(() => document.body.scrollHeight > 3000);
     await frame().evaluate(() => scrollTo(0, 1100));
     for (let attempt = 0; attempt < 60 && positions.get(`${base}/article`)?.y !== 1100; attempt++) {

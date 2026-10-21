@@ -2,10 +2,11 @@
 :where(#peek-preview-extension-root, .theme-preview) {
   --peek-decoration-scale: 1;
   --peek-radius: calc(16px * var(--peek-decoration-scale));
-  --peek-frame-padding: 0px;
+  --peek-frame-padding: calc(4px * var(--peek-decoration-scale));
   --peek-frame-border-width: 1px;
+  --peek-inner-radius: max(0px, calc(var(--peek-radius) - var(--peek-frame-padding) - var(--peek-frame-border-width)));
   --peek-frame-border-style: solid;
-  --peek-frame-border-color: color-mix(in srgb, var(--peek-border) 85%, var(--peek-text) 15%);
+  --peek-frame-border-color: color-mix(in srgb, var(--peek-border) 90%, var(--peek-text) 10%);
   --peek-frame-background: var(--peek-bg);
   --peek-frame-header-background: var(--peek-header-bg);
   --peek-frame-divider: var(--peek-border);
@@ -20,14 +21,15 @@
 
 :where(#peek-preview-extension-root, .theme-preview)[data-frame-style="square"] {
   --peek-radius: 0px;
+  --peek-frame-padding: calc(2px * var(--peek-decoration-scale));
   --peek-frame-border-color: color-mix(in srgb, var(--peek-border) 65%, var(--peek-text) 35%);
 }
 
 :where(#peek-preview-extension-root, .theme-preview)[data-frame-style="roundedLarge"] {
   --peek-radius: calc(28px * var(--peek-decoration-scale));
   --peek-frame-padding: calc(8px * var(--peek-decoration-scale));
-  --peek-frame-background: color-mix(in srgb, var(--peek-accent) 12%, var(--peek-bg));
-  --peek-frame-border-color: color-mix(in srgb, var(--peek-accent) 28%, var(--peek-border));
+  --peek-frame-background: color-mix(in srgb, var(--peek-accent) 6%, var(--peek-bg));
+  --peek-frame-border-color: color-mix(in srgb, var(--peek-accent) 18%, var(--peek-border));
 }
 
 :where(#peek-preview-extension-root, .theme-preview)[data-frame-style="glass"] {
@@ -43,7 +45,7 @@
 :where(#peek-preview-extension-root, .theme-preview)[data-frame-style="outlined"] {
   --peek-radius: calc(14px * var(--peek-decoration-scale));
   --peek-frame-border-width: 2px;
-  --peek-frame-border-color: var(--peek-accent);
+  --peek-frame-border-color: color-mix(in srgb, var(--peek-accent) 60%, var(--peek-border));
   --peek-frame-header-background: color-mix(in srgb, var(--peek-accent) 9%, var(--peek-header-bg));
   --peek-frame-divider: color-mix(in srgb, var(--peek-accent) 35%, var(--peek-border));
 }
@@ -51,14 +53,15 @@
 :where(#peek-preview-extension-root, .theme-preview)[data-frame-style="borderless"] {
   --peek-radius: calc(12px * var(--peek-decoration-scale));
   --peek-frame-border-width: 0px;
+  --peek-frame-padding: 0px;
   --peek-frame-divider: transparent;
 }
 
 :where(#peek-preview-extension-root, .theme-preview)[data-frame-style="double"] {
   --peek-radius: calc(18px * var(--peek-decoration-scale));
-  --peek-frame-border-width: max(3px, calc(4px * var(--peek-decoration-scale)));
+  --peek-frame-border-width: 3px;
   --peek-frame-border-style: double;
-  --peek-frame-border-color: color-mix(in srgb, var(--peek-accent) 75%, var(--peek-border));
+  --peek-frame-border-color: color-mix(in srgb, var(--peek-accent) 45%, var(--peek-border));
 }
 
 :where(#peek-preview-extension-root, .theme-preview)[data-panel-shadow="none"] {

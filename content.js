@@ -284,6 +284,7 @@
             <label>
               <span>Taille</span>
               <select name="size">
+                <option value="relative">75 % du navigateur</option>
                 <option value="small">Petite</option>
                 <option value="medium">Moyenne</option>
                 <option value="large">Grande</option>
@@ -1257,6 +1258,7 @@
         <label>
           <span>Taille</span>
           <select name="size">
+            <option value="relative">75 % du navigateur</option>
             <option value="small">Petite</option>
             <option value="medium">Moyenne</option>
             <option value="large">Grande</option>

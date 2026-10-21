@@ -354,7 +354,7 @@ function isHttpUrl(value) {
 
 function clampSize(settings, sourceWindow, display) {
   const fallback = SIZE_MAP.medium;
-  const sizeName = settings?.size;
+  const sizeName = settings?.size || PEEK_DEFAULT_SETTINGS.size;
   const availableWidth = Math.max(520, (display?.width ?? sourceWindow?.width ?? 1280) - 48);
   const availableHeight = Math.max(420, (display?.height ?? sourceWindow?.height ?? 900) - 72);
 
@@ -366,6 +366,13 @@ function clampSize(settings, sourceWindow, display) {
   }
   if (sizeName === "full" && sourceWindow) {
     return { width: availableWidth, height: availableHeight };
+  }
+
+  if (sizeName === "relative") {
+    return {
+      width: Math.min(Math.round((sourceWindow?.width ?? display?.width ?? 1280) * 0.75), availableWidth),
+      height: Math.min(Math.round((sourceWindow?.height ?? display?.height ?? 900) * 0.75), availableHeight)
+    };
   }
 
   const size = SIZE_MAP[sizeName] || fallback;

@@ -50,6 +50,15 @@ thème, animation, cadre, ombre, déclencheur au clic, clic
 molette, fermeture au clic extérieur ou avec Échap, arrière-plan (assombrissement
 ou flou, intensité réglable) et fermeture après ouverture externe.
 
+Sans position enregistrée, l’aperçu et la fenêtre compacte s’ouvrent au **centre**. Les positions déjà enregistrées ou importées sont conservées.
+
+La taille par défaut **75 % du navigateur** suit 75 % de sa largeur et de sa
+hauteur : la zone de page pour l’aperçu intégré et la fenêtre source pour la
+fenêtre compacte. Les marges disponibles peuvent réduire ces dimensions. Les
+formats Petite, Moyenne, Grande, Plein écran et Personnalisée restent disponibles;
+les tailles déjà enregistrées sont conservées. Ce réglage ne modifie pas la taille
+de la fenêtre de paramètres ni la vue partagée native.
+
 Les thèmes disponibles sont **Catppuccin, Nordic, Nord, Gruvbox, Tokyo Night,
 Dracula et Everforest**, avec Catppuccin Mocha par défaut. Le choix
 **Personnalisé** permet aussi de définir ses couleurs manuellement. Les variantes et les

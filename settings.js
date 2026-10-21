@@ -1,9 +1,9 @@
 const PEEK_DEFAULT_SETTINGS = {
-  size: "medium",
+  size: "relative",
   openMode: "overlay",
   customWidth: 920,
   customHeight: 760,
-  position: "topRight",
+  position: "center",
   customLeft: 80,
   customTop: 80,
   trigger: "alt",
@@ -39,7 +39,7 @@ const PEEK_DEFAULT_SETTINGS = {
 
 const PEEK_SETTING_OPTIONS = {
   openMode: ["overlay", "compact", "split"],
-  size: ["small", "medium", "large", "full", "custom"],
+  size: ["relative", "small", "medium", "large", "full", "custom"],
   position: ["topRight", "bottomRight", "topLeft", "bottomLeft", "center", "custom"],
   trigger: ["alt", "meta", "shift"],
   theme: ["catppuccin", "nordic", "nord", "gruvbox", "tokyoNight", "dracula", "everforest", "custom"],
@@ -443,7 +443,7 @@ function peekOverlayUsesCssAnchor(position) {
 function peekOverlayViewportPosition(settings, panelWidth, panelHeight, viewportWidth, viewportHeight) {
   const vw = Math.max(320, viewportWidth ?? 1280);
   const vh = Math.max(240, viewportHeight ?? 900);
-  const position = settings?.position || "topRight";
+  const position = settings?.position || PEEK_DEFAULT_SETTINGS.position;
 
   if (position === "center") {
     return {
@@ -487,11 +487,14 @@ function peekOverlayViewportPosition(settings, panelWidth, panelHeight, viewport
 function peekEstimateOverlayPanelSize(settings, viewportWidth, viewportHeight) {
   const vw = Math.max(320, viewportWidth ?? 1280);
   const vh = Math.max(240, viewportHeight ?? 900);
-  const sizeName = settings?.size || "medium";
+  const sizeName = settings?.size || PEEK_DEFAULT_SETTINGS.size;
   let width = 960;
   let height = 540;
 
-  if (sizeName === "small") {
+  if (sizeName === "relative") {
+    width = Math.round(vw * 0.75);
+    height = Math.round(vh * 0.75);
+  } else if (sizeName === "small") {
     width = 640;
     height = 360;
   } else if (sizeName === "large") {

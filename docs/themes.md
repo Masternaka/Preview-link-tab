@@ -42,3 +42,18 @@ réenregistrer. Les exports/imports JSON incluent cette bibliothèque.
 
 La miniature d’Apparence utilise la même application de palette que l’aperçu.
 Elle montre du contenu local fictif et ne modifie pas les couleurs des sites.
+
+## Cadres
+
+Les sept cadres conservent leur nom et leur palette. Arrondi ménage une fine
+enveloppe autour du contenu; Carré garde des angles nets; Verre dépoli utilise
+une matière translucide avec un reflet discret. Arrondi large augmente le rayon
+et l’espacement, Contour accent modère la couleur du trait, Double emploie deux
+traits fins et Sans bordure reste sans enveloppe. Les rayons intérieurs tiennent
+compte du trait et de l’espacement pour raccorder proprement l’en-tête et le site
+chargé. La miniature reprend ces mêmes mesures à son échelle.
+
+L’ombre reste un réglage indépendant, prioritaire sur le thème. Le plein écran
+garde des coins droits et aucun espacement. Le focus clavier des commandes reste
+visible, tandis que le conteneur de l’aperçu ne dessine pas de contour de focus
+automatique autour du cadre.

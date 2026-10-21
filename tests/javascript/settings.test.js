@@ -8,7 +8,7 @@ function loadSettings() {
   const source = fs.readFileSync(path.join(__dirname, "..", "..", "settings.js"), "utf8");
   const context = { URL };
   vm.createContext(context);
-  vm.runInContext(`${source}\nthis.exportsForTest = { setPeekDomainRule, cleanPeekSavedThemes, parsePeekSettingsImport, PEEK_THEME_PRESETS, PEEK_SETTING_OPTIONS, applyPeekTheme, cleanPeekSettings, parseDomainList, parseDomainRules, getDomainRule, isPeekAllowedForHost, peekOverlayViewportPosition };`, context);
+  vm.runInContext(`${source}\nthis.exportsForTest = { PEEK_DEFAULT_SETTINGS, peekEstimateOverlayPanelSize, setPeekDomainRule, cleanPeekSavedThemes, parsePeekSettingsImport, PEEK_THEME_PRESETS, PEEK_SETTING_OPTIONS, applyPeekTheme, cleanPeekSettings, parseDomainList, parseDomainRules, getDomainRule, isPeekAllowedForHost, peekOverlayViewportPosition };`, context);
   return context.exportsForTest;
 }
 
@@ -193,4 +193,36 @@ test('une bibliothèque importée filtre les entrées invalides, les doublons et
   assert.equal(cleaned[0].colors.customAccent, '#2563eb');
   assert.equal(Object.hasOwn(cleaned[0].colors, 'unwanted'), false);
   assert.equal(Object.hasOwn(cleaned[0], 'extra'), false);
+});
+
+
+test("la taille relative est le défaut et conserve tous les formats sauvegardés ou importés", () => {
+  assert.equal(settings.PEEK_DEFAULT_SETTINGS.size, "relative");
+  assert.equal(settings.cleanPeekSettings({}).size, "relative");
+  for (const size of ["relative", "small", "medium", "large", "full", "custom"]) {
+    const input = { size, customWidth: 1111, customHeight: 777 };
+    for (const clean of [settings.cleanPeekSettings(input), settings.parsePeekSettingsImport(JSON.stringify(input))]) {
+      assert.equal(clean.size, size);
+      assert.equal(clean.customWidth, 1111);
+      assert.equal(clean.customHeight, 777);
+    }
+  }
+});
+
+test("la taille intégrée suit 75 % du viewport et respecte les marges", () => {
+  const estimate = (config, width, height) => JSON.parse(JSON.stringify(settings.peekEstimateOverlayPanelSize(config, width, height)));
+  assert.deepEqual(estimate({}, 1200, 800), { width: 900, height: 600 });
+  assert.deepEqual(estimate({ size: "relative" }, 1600, 1000), { width: 1200, height: 750 });
+  assert.deepEqual(estimate({ size: "relative" }, 320, 240), { width: 240, height: 112 });
+  assert.deepEqual(estimate({ size: "medium" }, 1600, 1000), { width: 960, height: 540 });
+});
+
+test("centre par défaut et préserve les positions enregistrées ou importées", () => {
+  assert.equal(settings.PEEK_DEFAULT_SETTINGS.position, "center");
+  assert.equal(settings.cleanPeekSettings({}).position, "center");
+  assert.deepEqual(JSON.parse(JSON.stringify(settings.peekOverlayViewportPosition({}, 960, 540, 1280, 900))), { left: 160, top: 180 });
+  for (const position of settings.PEEK_SETTING_OPTIONS.position) {
+    assert.equal(settings.cleanPeekSettings({ position }).position, position);
+  }
+  assert.equal(settings.cleanPeekSettings({ position: "right" }).position, "topRight");
 });

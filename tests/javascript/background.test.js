@@ -684,3 +684,17 @@ test('sans stockage de session, les positions utilisent seulement la mémoire te
   const restarted = loadWorker({});
   assert.equal(await restarted.api.handleReadingPosition({ type: 'GET_READING_POSITION', url: sender.url }, sender), null);
 });
+
+
+test('la fenêtre compacte relative utilise la fenêtre source avant les dimensions de l’écran', () => {
+  const worker = loadWorker(storageHarness());
+  const dimensions = (settings, source, display) => JSON.parse(JSON.stringify(worker.api.clampSize(settings, source, display)));
+  const source = { width: 1000, height: 700 };
+  const display = { width: 2560, height: 1440 };
+  assert.deepEqual(dimensions({ size: 'relative' }, source, display), { width: 750, height: 525 });
+  assert.deepEqual(dimensions({}, source, display), { width: 750, height: 525 });
+  assert.deepEqual(dimensions({ size: 'relative' }, null, display), { width: 1920, height: 1080 });
+  assert.deepEqual(dimensions({ size: 'relative' }, null, null), { width: 960, height: 675 });
+  assert.deepEqual(dimensions({ size: 'relative' }, { width: 3000, height: 2000 }, { width: 1200, height: 800 }), { width: 1152, height: 728 });
+  assert.deepEqual(dimensions({ size: 'medium' }, source, display), { width: 960, height: 540 });
+});

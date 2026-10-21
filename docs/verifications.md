@@ -108,3 +108,43 @@ Environnement du contrôle ciblé : Google Chrome `155.0.8059.86`, Playwright `1
 Captures inspectées : conflit sur ordinateur, brouillon sur fenêtre étroite, source fermée. Elles restent temporaires sous `/private/tmp/preview-adaptive-qa`, hors du dépôt. La connexion au navigateur intégré n’a pas pu être initialisée, car son outil d’exécution n’était pas disponible après découverte; le contrôle a utilisé le Chrome externe déjà autorisé dans cette session. Aucune dépendance supplémentaire installée.
 
 Ces essais avec API simulées ont été exécutés pendant la correction. Le ménage documentaire ultérieur n’a pas relancé les navigateurs ni le lint. Après ce ménage : 155 tests Node.js réussis, builds et ZIP Chrome/Firefox régénérés, 87 liens locaux et ancres valides, `git diff --check` réussi. Les empreintes confirment que le code, les tests, les scripts et les ressources conservées sont inchangés; l’image rangée dans `icons/sources/` a gardé son contenu. Les détails du rangement figurent dans [l’état du projet](etat-projet.md).
+
+
+## Taille relative — 21 octobre 2026
+
+Après l’ajout du format par défaut **75 % du navigateur**, 158 tests Node.js réussissent sous Node.js 24.10.0. Ils vérifient le défaut, le nettoyage et l’import de tous les formats, la conservation des dimensions personnalisées, les proportions sur plusieurs zones de page, les marges et le calcul compact à partir d’une fenêtre source plus petite que l’écran, avec replis lorsque la source manque.
+
+`npm run build`, `npm run package` et `git diff --check` réussissent. Les builds Chrome/Firefox et leurs ZIP locaux `0.2.3` sont régénérés sans changement de version.
+
+Le contrôle `npm run test:browser` réussit avec le Chrome installé et les API d’extension simulées. Les dimensions mesurées du panneau suivent 75 % à `1040 × 760`, `1600 × 900`, `900 × 700` et `520 × 640`; les commandes restent accessibles. Les parcours de lecture, navigation, délai, refus d’intégration, nouvel onglet et annulation des suppressions passent aussi, sans erreur JavaScript. Les refus iframe provoqués par le scénario `X-Frame-Options` sont attendus. La capture du panneau avec ses alternatives a été inspectée et reste hors dépôt sous `/private/tmp/preview-relative-qa/preview-blocked.png`.
+
+L’outil d’exécution du navigateur intégré étant indisponible après découverte, le contrôle Playwright existant du projet a été utilisé. Sa première exécution a été bloquée par le bac à sable lors de l’ouverture du port local; la relance autorisée hors bac à sable a réussi. Aucun essai avec une extension réellement chargée, lint Firefox ou contrôle CI distant n’a été exécuté pour cet ajout.
+
+## Centrage et cadres — 21 octobre 2026
+
+Les 159 tests Node.js passent après l’ajout du défaut centré, la conservation des
+positions enregistrées et l’adaptation des tests de position et de mutation.
+Le contrôle Playwright inclut désormais le centrage après redimensionnement,
+l’accès à la barre d’actions, les rayons intérieurs calculés dans le DOM et les
+contours de focus du panneau et des commandes. `QA_SCREENSHOT_DIR` permet aussi
+de capturer le cadre arrondi sur l’article local. Son exécution réussit, avec
+centrage mesuré à `1040 × 760`, `1600 × 900`, `900 × 700` et `520 × 640`.
+La navigation par Tab affiche un contour sur la commande active, tandis que le
+dialogue conserve le focus initial sans contour parasite. Le premier test de
+focus utilisait seulement `focus()` après un clic; il a été adapté pour exercer
+une vraie touche Tab et la modalité clavier de `:focus-visible`.
+
+Un contrôle Playwright temporaire complémentaire vérifie les sept cadres avec
+Catppuccin et une palette personnelle claire à `1440 × 1000` : panneau centré de
+`1080 × 750`, rayons intérieurs cohérents, choix « aucune ombre » respecté et
+plein écran sans arrondi. La miniature et les paramètres sont aussi contrôlés
+à `1440 × 1000` et `390 × 844`, sans débordement horizontal ni erreur JavaScript.
+Captures inspectées : cadre arrondi avec focus clavier, double contour sombre,
+verre clair, miniature sur ordinateur et fenêtre étroite. Les captures restent
+hors dépôt sous `/private/tmp/preview-centred-qa` et `/private/tmp/preview-frames-qa`.
+
+`npm run build`, `npm run package` et `git diff --check` réussissent; les sorties
+locales `0.2.3` sont régénérées sans changement de version. Ces contrôles utilisent
+des API d’extension simulées; ils ne valident pas une installation réelle Chrome,
+Firefox ou Helium. Aucun lint Firefox ni contrôle CI distant relancé pour cette
+modification.

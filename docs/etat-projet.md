@@ -1,12 +1,30 @@
 # État du projet
 
-État local au 21 octobre 2026. Référence Git de départ : `61dd7b3`; version de `manifest.json` et `package.json` : `0.2.2`. Les modifications restent locales et non commitées.
+État local au 21 octobre 2026. Version actuelle de `manifest.json` et `package.json` : `0.2.3`, inchangée pendant l’ajout de la taille relative. Le dépôt était propre au début de cette tâche; les changements de taille restent locaux et non commités. Les sections suivantes conservent les résultats historiques du même jour.
 
 ## Fonctionnement et décisions
 
 Preview link tab permet de consulter un lien sans perdre sa page de départ. Le code commun Chrome/Chromium et Firefox propose l’aperçu intégré, la fenêtre compacte, la vue partagée native selon l’API disponible, les règles par domaine, la pause, les thèmes et la reprise de lecture en session. Les tests, builds et workflows de préparation des ZIP et de publication sont présents.
 
 Conserver le déclenchement explicite sans aperçu automatique au survol, la vue partagée exclusivement native et le respect des protections d’intégration des sites. Les idées non retenues restent des propositions dans [Travaux restants](travaux-restants.md).
+
+## Taille relative par défaut
+
+Le nouveau format **75 % du navigateur** est le défaut en l’absence de taille enregistrée. Il suit la largeur et la hauteur de la zone de page pour l’aperçu intégré, et celles de la fenêtre source pour la fenêtre compacte, avec les limites d’espace existantes. Les cinq formats antérieurs et les dimensions personnalisées sauvegardées ou importées sont conservés. Les paramètres et les deux menus intégrés proposent ce choix. Validation de cet ajout : 158 tests Node.js réussis, builds et ZIP Chrome/Firefox `0.2.3` régénérés et `git diff --check` réussi. Le contrôle Playwright dans Chrome avec API simulées confirme les proportions après ouverture et redimensionnement; les essais des extensions réellement chargées restent à effectuer. Voir [les résultats détaillés](verifications.md#taille-relative--21-octobre-2026).
+
+## Centrage et cadres
+
+Sans position enregistrée, le placement est désormais centré; les positions
+existantes et importées sont conservées. Les sept cadres partagent avec la
+miniature un calcul de rayon intérieur qui tient compte des bordures et de
+l’espacement. Le contour de focus automatique du conteneur est supprimé, avec
+un indicateur explicite sur les commandes au clavier. Les palettes et la priorité
+du choix d’ombre sont conservées. Ces changements restent locaux. Les 159 tests
+Node.js et le contrôle Chrome avec API simulées réussissent; les sept cadres ont
+aussi été contrôlés avec des palettes sombre et claire, le plein écran et les
+paramètres sur ordinateur et fenêtre étroite. Les builds et ZIP `0.2.3` sont
+régénérés. Les [vérifications détaillées](verifications.md#centrage-et-cadres--21-octobre-2026)
+restent distinctes des essais des extensions réellement chargées.
 
 ## Corrections implémentées localement
 
