@@ -63,7 +63,9 @@ Les documents historiques signalent aussi un secours des préférences dans le `
 
 - `tests/javascript/` contient les tests Node.js, y compris les harnais de worker et d’interface avec API simulées.
 - `tests/browser/check-browser.cjs` sert des pages locales et exécute les scripts avec Playwright; il simule les API d’extension.
-- `scripts/package.js` reconstruit les deux versions, génère leurs ZIP et calcule `SHA256SUMS`.
+- Le CLI `scripts/package.js` actualise les deux dossiers chargeables, puis génère les ZIP depuis un staging temporaire propre et calcule `SHA256SUMS`. Son API `packageExtensions(output)` produit uniquement les archives dans le dossier demandé.
+- Après réussite des deux ZIP et de `SHA256SUMS`, la rétention conserve la version générée et les deux autres versions numériquement les plus élevées. Elle ne retire que les fichiers réguliers aux noms stricts des archives générées, sans toucher aux autres ressources ni aux dossiers chargeables.
+- `scripts/watch.js` (`npm run dev`) compare périodiquement les empreintes des seules entrées de génération. Il regroupe les changements et lance un nouveau processus Node.js pour chaque préparation, sans cache des versions. Une seule génération tourne à la fois; les changements reçus pendant son exécution sont traités ensuite. Aucun hook Git ni service système n’est installé.
 - `scripts/release-plan.js` vérifie la cohérence de version, de référence Git et de release avant une éventuelle publication par la CI.
 - `.github/workflows/tests.yml` exécute les contrôles et prépare les artefacts; `release.yml` orchestre la publication autorisée par ses déclencheurs.
 
@@ -82,3 +84,12 @@ Sur macOS :
 L’alternative `python3 scripts/generate-icons.py` nécessite Pillow. Ne pas régénérer les icônes pour une simple réorganisation. La popup utilise `icons/icon48.png`.
 
 L’ancienne image `iconhighres.png`, qui n’est utilisée ni par les manifestes ni par les générateurs actuels, est conservée dans `icons/sources/`. Les quatre fichiers `icons/icon16.png`, `icon32.png`, `icon48.png` et `icon128.png` restent les ressources utilisées et empaquetées.
+
+## Hooks Git locaux
+
+`scripts/install-hooks.js` configure explicitement `.githooks` dans chaque clone,
+avec protection des hooks existants et chemin Node local stable. `post-commit`
+et `pre-push` partagent le lanceur `prepare-distribution`, qui appelle directement
+`scripts/package.js` sans transmettre les arguments Git. Le premier avertit après
+un échec; le second bloque le push. Aucun service permanent. Le runtime Node
+éventuellement copié sous `tools/local-runtime/` est ignoré par Git.

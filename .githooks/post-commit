@@ -1,0 +1,6 @@
+#!/bin/sh
+root=$(git rev-parse --show-toplevel) || exit 0
+if ! "$root/.githooks/prepare-distribution"; then
+  echo 'Attention : le commit existe déjà, mais la génération locale a échoué. Corriger puis relancer npm run package.' >&2
+fi
+exit 0

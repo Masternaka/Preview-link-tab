@@ -1,0 +1,6 @@
+#!/bin/sh
+root=$(git rev-parse --show-toplevel) || exit 1
+if ! "$root/.githooks/prepare-distribution"; then
+  echo 'Push bloqué : la génération locale a échoué. Corriger puis réessayer.' >&2
+  exit 1
+fi

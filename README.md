@@ -38,6 +38,20 @@ npm run package
 git diff --check
 ```
 
+Pour maintenir les dossiers chargeables et les ZIP à jour pendant le développement :
+
+```sh
+npm run dev
+```
+
+Garder cette commande active; elle génère d’abord `dist/chrome`, `dist/firefox` et `dist/packages`, puis les actualise après modification des entrées de génération. `Ctrl+C` arrête la surveillance. Recharger ensuite l’extension et les pages ouvertes dans le navigateur. `npm run package` réalise la même préparation une seule fois. Voir [Distribution](docs/distribution.md) pour les limites.
+
+Pour générer aussi après chaque commit et avant chaque push sans garder de terminal
+ouvert, exécuter une fois `npm run hooks:install` dans ce clone. Les hooks locaux
+actualisent les sorties; leur échec bloque le push, mais ne défait pas un commit.
+Ils utilisent les fichiers du répertoire de travail et ne lancent pas les tests.
+Voir [Distribution](docs/distribution.md#génération-après-commit-et-avant-push).
+
 Les tests JavaScript et la génération ne nécessitent aucune dépendance npm applicative. Les tests d’archives et la préparation des ZIP nécessitent `zip` et `unzip`. Les outils Playwright et `web-ext` sont optionnels et installés séparément sous `tools/ci`; voir [Vérifications](docs/verifications.md).
 
 Les fichiers chargés par l’extension restent à la racine; les variantes de manifeste sont dans `manifests/`, les outils dans `scripts/`, les tests dans `tests/` et les sorties non versionnées dans `dist/`. Les mêmes scripts et styles servent aux deux navigateurs.

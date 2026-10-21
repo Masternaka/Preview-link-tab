@@ -26,3 +26,6 @@ CLAUDE.md
 
 # Outils optionnels des workflows GitHub
 /tools/ci/node_modules/
+
+# Exécutable Node local des hooks (installation explicite)
+/tools/local-runtime/

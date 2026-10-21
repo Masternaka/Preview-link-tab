@@ -1,8 +1,19 @@
 # État du projet
 
-État local au 21 octobre 2026. Version actuelle de `manifest.json` et `package.json` : `0.2.3`, inchangée pendant l’ajout de la taille relative. Le dépôt était propre au début de cette tâche; les changements de taille restent locaux et non commités. Les sections suivantes conservent les résultats historiques du même jour.
+État local au 21 octobre 2026. Version actuelle de `manifest.json` et `package.json` : `1.0.1`. Les sources étaient à cette version au début de la tâche d’automatisation. `npm run package` actualise maintenant les dossiers chargeables et les archives en une commande; `npm run dev` maintient ces sorties à jour tant que le terminal reste actif. Recharger l’extension dans le navigateur reste nécessaire. Les sections suivantes conservent les résultats historiques du même jour. Aucun changement de version, commit, push ou publication effectué pour cette automatisation.
+
 
 ## Fonctionnement et décisions
+
+Les hooks sont activés dans ce clone : génération après chaque commit et avant
+chaque push, sans terminal de surveillance. Le hook `pre-push` a été exécuté
+avec `git hook run pre-push`, sans envoi distant, et a régénéré les ZIP `1.0.1`.
+Les autres clones nécessitent `npm run hooks:install`.
+
+La distribution locale conserve au maximum trois versions de ZIP : celle générée
+et les deux autres numériquement les plus récentes. La suppression des anciennes
+archives intervient après génération réussie et écriture des empreintes, sans
+nettoyage des dossiers chargeables ni des fichiers étrangers aux archives.
 
 Preview link tab permet de consulter un lien sans perdre sa page de départ. Le code commun Chrome/Chromium et Firefox propose l’aperçu intégré, la fenêtre compacte, la vue partagée native selon l’API disponible, les règles par domaine, la pause, les thèmes et la reprise de lecture en session. Les tests, builds et workflows de préparation des ZIP et de publication sont présents.
 
@@ -79,3 +90,11 @@ Aucun essai navigateur supplémentaire n’a été exécuté pour ce ménage. Le
 ## Prochaine étape
 
 Valider l’extension réellement chargée dans Chrome et Firefox : navigation privée, plusieurs fenêtres de paramètres, focus, gestes et API native de vue partagée. Reprendre ensuite les sujets ouverts du [suivi](travaux-restants.md), notamment le secours des réglages et la liste d’autorisation vide, après vérification du code courant.
+
+## Hooks locaux de génération
+
+`npm run hooks:install` prépare une activation propre à chaque clone pour générer
+après commit et avant push sans surveillance active. Les hooks utilisent le
+répertoire de travail, pas nécessairement le commit envoyé, et ne lancent pas les
+tests. Un échec bloque le push; après commit, il annonce que le commit existe déjà.
+Voir [Distribution](distribution.md#génération-après-commit-et-avant-push).

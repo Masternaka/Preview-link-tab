@@ -173,3 +173,66 @@ lecture, alternatives et paramètres. Aucune erreur JavaScript; les refus
 Cette validation locale ne reproduit pas l’environnement Ubuntu de GitHub Actions.
 La CI distante n’a pas été relancée pour cette correction; les résultats
 navigateur antérieurs ci-dessus restent des validations historiques distinctes.
+
+## Automatisation de la distribution locale — 21 octobre 2026
+
+Sous Node.js 24.10.0, les 163 tests Node.js réussissent, ainsi que `npm run build`,
+`npm run package` et `git diff --check`. Les dossiers Chrome/Firefox et les ZIP
+locaux `1.0.0` sont régénérés. Aucun changement de version ni publication.
+Un lancement réel de `npm run dev` a également généré les deux dossiers et ZIP
+`1.0.0`, annoncé la réussite, puis été arrêté avec `Ctrl+C`.
+
+Les nouveaux tests utilisent exclusivement des copies temporaires : le CLI
+actualise les manifestes des dossiers chargeables et les ZIP, conserve les
+anciennes archives et exclut les fichiers périmés des archives. Une incohérence
+de version échoue avant toute sortie. La surveillance détecte une modification
+de version par remplacement atomique et relance un processus avec la nouvelle
+version; les documents et sorties sont ignorés. Un contrôle avec génération
+injectée vérifie l’absence de chevauchement, la reprise des changements reçus
+pendant une génération et la reprise après une erreur suivie d’une correction.
+
+Aucun contrôle navigateur, installation réelle, lint Firefox ou CI distante
+n’a été exécuté pour ce changement d’outillage. La surveillance ne recharge pas
+l’extension dans un navigateur.
+
+## Rétention des archives locales — 21 octobre 2026
+
+Les 165 tests Node.js réussissent sous Node.js 24.10.0. Les nouveaux scénarios
+vérifient la limite de trois versions, les paires Chrome/Firefox, le tri numérique
+(dont `1.10.0` après `1.9.0` et une quatrième composante), la conservation de la
+version générée même plus ancienne, l’idempotence et la préservation des fichiers
+étrangers, dossiers, liens symboliques et empreintes. Une génération Firefox en
+échec après le ZIP Chrome préserve toutes les anciennes archives et empreintes.
+Le scénario complet de génération vérifie aussi la rétention et les SHA-256.
+
+`npm run build`, `npm run package` et `git diff --check` réussissent. Les dossiers
+chargeables et ZIP locaux `1.0.0` sont régénérés; les trois versions présentes
+dans `dist/packages` sont conservées. Aucun contrôle navigateur, lint Firefox,
+CI distante, changement de version ou publication effectué pour cette rétention.
+
+## Hooks Git locaux — 21 octobre 2026
+
+Les 170 tests Node.js réussissent sous Node.js 24.10.0, ainsi que `npm run build`,
+`npm run package` et `git diff --check`. Les dossiers chargeables et ZIP `1.0.1`
+sont régénérés; ce numéro était déjà présent dans les sources avant les hooks.
+
+Les nouveaux tests utilisent des dépôts Git temporaires isolés : installation
+et réinstallation, préservation d’une autre configuration locale ou globale,
+refus d’un hook actif existant avant écriture du runtime, chemins avec espaces,
+exécution sans Node dans le PATH et arguments Git exclus de la génération.
+Ils vérifient aussi la copie d’un exécutable temporaire, dont `/tmp` quand le
+dossier temporaire système est différent, l’avertissement après commit et
+le blocage avant push lors d’un échec. Les hooks sont invoqués directement dans
+ces dépôts; aucun commit ni push du dépôt de travail n’est effectué pour le test.
+La copie utilise un petit exécutable injecté dans les tests; la validation réelle
+du binaire Node est faite par l’installateur à son activation.
+
+Activation effectuée dans le clone courant : `core.hooksPath` local vaut
+`.githooks`. Le Node temporaire a été copié sous `tools/local-runtime/node`,
+vérifié en `v24.10.0` et confirmé ignoré par Git. L’exécution réelle
+`git hook run pre-push` réussit et régénère les ZIP `1.0.1` sans effectuer de
+push. Aucun commit ni push n’a été créé pour cette activation.
+
+Aucun essai navigateur, lint Firefox ou CI distante exécuté pour ces hooks.
+L’installation est propre au clone et leur génération ne valide pas les tests
+ni l’identité entre répertoire de travail et commit envoyé.

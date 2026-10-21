@@ -1,0 +1,9 @@
+#!/bin/sh
+root=$(git rev-parse --show-toplevel) || exit 1
+cd "$root" || exit 1
+node_file=$(git rev-parse --git-path preview-node-path) || exit 1
+if ! IFS= read -r node_path < "$node_file" || [ ! -x "$node_path" ]; then
+  echo 'Node local indisponible. Relancer npm run hooks:install avec Node.js 22 ou 24.' >&2
+  exit 1
+fi
+"$node_path" "$root/scripts/package.js"

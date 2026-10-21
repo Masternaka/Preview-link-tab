@@ -96,3 +96,78 @@ leurs anciens scripts. Les fichiers générés doivent être reconstruits avec
 `npm run build` avant de recharger une installation pointant sur `dist/`.
 
 Cette note conserve le contexte de la modification 0.2.1. Pour une installation actuelle, vérifier la version effectivement indiquée par les manifestes plutôt que rechercher ce numéro historique.
+
+## Actualisation locale pendant le développement
+
+`npm run package` prépare en une commande les dossiers chargeables `dist/chrome`
+et `dist/firefox`, puis les ZIP et `SHA256SUMS` dans `dist/packages`. Les archives
+sont construites dans un dossier temporaire propre; les fichiers périmés déjà
+présents dans `dist/` ne sont pas inclus dans les ZIP. Les ZIP d’anciennes versions
+restent disponibles pour trois versions au maximum : la version générée et les
+deux autres versions aux numéros les plus élevés (tri numérique). Chaque version
+comprend les ZIP Chrome et Firefox. Le retrait des ZIP plus anciens intervient
+seulement après la réussite des deux archives et de l’écriture de `SHA256SUMS`,
+qui décrit la dernière génération. Seuls les fichiers réguliers portant les noms
+stricts des ZIP générés sont concernés; les autres fichiers, dossiers et liens
+symboliques sont conservés. Les dossiers chargeables ne sont pas nettoyés par
+cette rétention.
+
+`npm run dev` réalise cette préparation au démarrage et après chaque modification
+d’une ressource applicative copiée, de `manifest.json`, `manifests/firefox.json`,
+`package.json` ou des scripts de build, d’archives et de surveillance. La commande
+doit rester active dans un terminal; `Ctrl+C` l’arrête. Elle nécessite Node.js 22
+ou 24 et `zip`; la vérification des archives nécessite aussi `unzip`.
+
+La surveillance regroupe les sauvegardes rapprochées et attend la fin d’une
+génération avant de traiter les changements suivants. Elle détecte les
+remplacements de fichiers, y compris une sauvegarde atomique ou un changement
+provenant de Git. Les sorties, documents, tests et métadonnées Git ne déclenchent
+pas de génération. Un JSON momentanément invalide ou des versions incohérentes
+font échouer la génération avec un message; la surveillance attend une correction.
+
+La liste des ressources surveillées et le code du surveillant sont chargés au
+lancement : redémarrer `npm run dev` après modification de `scripts/watch.js` ou
+de la liste `RUNTIME_FILES` dans `scripts/build.js`. Les modifications des autres
+scripts sont prises en compte par le processus de génération suivant.
+Pour une sortie isolée, `node scripts/package.js /chemin/dossier` utilise cet
+argument comme racine contenant `chrome/`, `firefox/` et `packages/`.
+
+La surveillance reste locale et n’installe aucun service permanent ni hook Git;
+les hooks décrits ci-dessous nécessitent leur commande d’installation explicite. Le navigateur ne recharge pas automatiquement
+l’extension ni les pages déjà ouvertes. Après une erreur, les sorties existantes
+peuvent provenir d’une génération antérieure; attendre le message de réussite.
+
+## Génération après commit et avant push
+
+Activer une fois dans chaque clone, avec Node.js 22 ou 24 :
+
+```sh
+npm run hooks:install
+```
+
+L’installation locale configure `core.hooksPath` sur `.githooks`. Elle refuse de
+remplacer une autre configuration effective ou globale, ou des hooks exécutables
+existants dans le dossier Git par défaut (les exemples `.sample` sont ignorés).
+La commande est réexécutable. Elle mémorise le chemin absolu de Node dans un fichier
+texte local Git; si Node provient d’un dossier temporaire, son seul exécutable est
+copié sous `tools/local-runtime/node`, ignoré par Git, puis vérifié. Aucun téléchargement,
+service ou changement de configuration globale n’est effectué. Node n’a donc pas
+besoin d’être dans le PATH du client Git après installation.
+
+Après chaque commit et avant chaque push, les hooks exécutent directement
+`scripts/package.js` avec ce Node : dossiers chargeables et ZIP sont actualisés,
+avec la rétention de trois versions décrite ci-dessus. Aucun terminal de
+surveillance ne doit rester ouvert. Si la génération échoue après un commit,
+le message précise que le commit existe déjà; avant un push, l’échec bloque
+le push. Corriger puis relancer `npm run package` ou réessayer le push.
+
+Les sorties correspondent aux fichiers du répertoire de travail au moment du
+hook. Un commit partiel, des modifications non commitées ou le push d’une autre
+référence peuvent donc produire des fichiers différents du commit envoyé.
+Les hooks ne lancent pas les tests; seule la CI valide la version qu’elle reçoit.
+Ils ne publient rien et ne rechargent pas le navigateur : recharger l’extension
+et les pages reste manuel. `npm run dev` reste disponible pendant le développement.
+
+Pour désactiver ces hooks, vérifier que `git config --local --get core.hooksPath`
+affiche bien `.githooks`, puis exécuter `git config --local --unset core.hooksPath`.
+Ne pas supprimer une configuration appartenant à un autre outil.
