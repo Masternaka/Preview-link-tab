@@ -1,8 +1,6 @@
 const PEEK_SVG_ICONS = {
-  split:
-    '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg>',
   settings:
-    '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>',
+    '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.25 4.97L10.39 2.89L13.61 2.89L13.75 4.97L14.77 5.3L15.73 5.79L17.31 4.42L19.58 6.69L18.21 8.27L18.7 9.23L19.03 10.25L21.11 10.39L21.11 13.61L19.03 13.75L18.7 14.77L18.21 15.73L19.58 17.31L17.31 19.58L15.73 18.21L14.77 18.7L13.75 19.03L13.61 21.11L10.39 21.11L10.25 19.03L9.23 18.7L8.27 18.21L6.69 19.58L4.42 17.31L5.79 15.73L5.3 14.77L4.97 13.75L2.89 13.61L2.89 10.39L4.97 10.25L5.3 9.23L5.79 8.27L4.42 6.69L6.69 4.42L8.27 5.79L9.23 5.3Z"/><circle cx="12" cy="12" r="3"/></svg>',
   popup:
     '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="14" height="14" rx="2"/><path d="M17 9h4v10H7"/></svg>',
   external:

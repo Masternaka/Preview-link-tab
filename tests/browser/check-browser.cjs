@@ -21,7 +21,8 @@ const server = http.createServer((req, res) => {
   if (req.url === '/slow') { const timer = setTimeout(() => res.end(article), 13000); res.on('close', () => clearTimeout(timer)); return; }
   if (req.url === '/host') {
     res.end('<!doctype html><title>Preview integration</title><h1>Liens de test</h1>' +
-      ['article', 'redirect', 'blocked', 'slow'].map(p => `<p><a id="${p}" href="http://127.0.0.1:${server.address().port}/${p}">${p}</a></p>`).join(''));
+      ['article', 'redirect', 'blocked', 'slow'].map(p => `<p><a id="${p}" href="http://127.0.0.1:${server.address().port}/${p}">${p}</a></p>`).join('') +
+      '<div style="height:5000px">Page principale défilante</div>');
   } else if (req.url.startsWith('/popup') || /\.(js|css|png)$/.test(req.url)) {
     const file = path.resolve(root, '.' + req.url.split('?')[0]);
     if (!file.startsWith(root + path.sep)) { res.writeHead(403); res.end(); return; }
@@ -47,8 +48,10 @@ const server = http.createServer((req, res) => {
       return { ok: true, ...result };
     };
     const errors = []; const requests = [];
-    await context.exposeBinding('previewTestApi', async ({ frame }, message) => {
+    const compactPages = new Set();
+    await context.exposeBinding('previewTestApi', async ({ frame, page }, message) => {
       requests.push(message);
+      if (message.type === 'GET_COMPACT_CONTEXT') return { ok: true, windowId: compactPages.has(page) ? 42 : null };
       if (message.type === 'GET_READING_POSITION') return { ok: true, position: positions.get(message.url) || null };
       if (message.type === 'SAVE_READING_POSITION') { positions.set(message.url, { x: message.x, y: message.y }); return { ok: true }; }
       if (message.type === 'READ_SETTINGS') return saved;
@@ -62,11 +65,14 @@ const server = http.createServer((req, res) => {
     // restrictions, timers and scroll restoration run in the real browser.
     await context.addInitScript(({ scripts, styles }) => {
       window.chrome = {
-        runtime: { sendMessage(message, cb) {
+        runtime: { onMessage: { addListener(listener) { window.previewTestMessageListener = listener; } }, sendMessage(message, cb) {
           const operation = window.previewTestApi(message);
           // Fault injection: opening succeeds, but the source page receives no
           // reply. Closing must happen before this background request.
-          if (message.type !== 'OPEN_URL_IN_TAB') operation.then(response => cb?.(response));
+          if (message.type !== 'OPEN_URL_IN_TAB') operation.then(response => {
+            cb?.(response);
+            if (message.type === 'GET_COMPACT_CONTEXT') window.previewTestCompactReady = true;
+          });
         } },
         tabs: { query(o, cb) { cb([{ id: 1, url: location.origin + '/article' }]); } },
         storage: { local: {
@@ -82,6 +88,38 @@ const server = http.createServer((req, res) => {
       }, { once: true });
     }, { scripts, styles });
     const page = await context.newPage(); page.on('pageerror', e => errors.push(e.message));
+    // Google News links target news.google.com before redirecting to publishers;
+    // the built-in google.com fallback opens these in compact mode.
+    const compactPage = await context.newPage();
+    compactPages.add(compactPage);
+    compactPage.on('pageerror', e => errors.push(e.message));
+    await compactPage.goto(`${base}/article`);
+    const assertNoCompactToolbar = async () => {
+      await compactPage.waitForFunction(() => window.previewTestCompactReady === true);
+      assert.equal(await compactPage.locator('#peek-compact-menu-root, .peek-compact-actions').count(), 0);
+      assert.equal(await compactPage.locator('h1').innerText(), 'Article');
+    };
+    for (const width of [1040, 390]) {
+      await compactPage.setViewportSize({ width, height: 844 });
+      await assertNoCompactToolbar();
+    }
+    await compactPage.goto(`${base}/redirect`);
+    assert.equal(new URL(compactPage.url()).search, '?redirected');
+    await assertNoCompactToolbar();
+    await compactPage.reload();
+    await assertNoCompactToolbar();
+    const closeRequests = requests.filter(message => message.type === 'CLOSE_COMPACT_WINDOW').length;
+    await compactPage.keyboard.press('Escape');
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(requests.filter(message => message.type === 'CLOSE_COMPACT_WINDOW').length, closeRequests + 1);
+    assert.equal(requests.filter(message => message.type === 'CLOSE_COMPACT_WINDOW').at(-1).windowId, 42);
+    if (process.env.QA_SCREENSHOT_DIR) {
+      fs.mkdirSync(process.env.QA_SCREENSHOT_DIR, { recursive: true });
+      await compactPage.screenshot({ path: path.join(process.env.QA_SCREENSHOT_DIR, 'compact-without-toolbar.png') });
+    }
+    await compactPage.close();
+    compactPages.delete(compactPage);
+    console.log('PASS: compact pages have no toolbar after redirect or reload; Escape still requests window closure.');
     console.log('Browser started; opening fixture pages.');
     page.on('console', m => { if (m.type() === 'error') console.error(m.text()); });
     page.on('pageerror', e => console.error(e.message));
@@ -130,6 +168,12 @@ const server = http.createServer((req, res) => {
     assert.equal(decoration.outline, 'none');
     assert.equal(decoration.header, decoration.inner);
     assert.equal(decoration.wrap, decoration.inner);
+    const settingsButton = page.getByRole('button', { name: 'Paramètres de l’aperçu', exact: true });
+    await settingsButton.click();
+    assert.equal(await settingsButton.getAttribute('aria-expanded'), 'true');
+    assert(await page.locator('.peek-settings').isVisible());
+    await settingsButton.click();
+    assert.equal(await settingsButton.getAttribute('aria-expanded'), 'false');
     // Depuis le panneau, l'ordre natif de tabulation peut passer par l'iframe selon la plateforme.
     await page.locator('.peek-open').focus();
     assert.equal(await page.evaluate(() => document.activeElement === document.querySelector('.peek-open')), true, 'la commande Nouvel onglet doit recevoir le focus avant la tabulation');
@@ -142,12 +186,53 @@ const server = http.createServer((req, res) => {
       await page.screenshot({ path: path.join(process.env.QA_SCREENSHOT_DIR, 'preview-rounded.png') });
     }
     await frame().waitForFunction(() => document.body.scrollHeight > 3000);
+    assert.equal(await page.locator('.peek-split, option[value="split"]').count(), 0,
+      'aucun bouton ni mode de vue partagée dans l’aperçu');
+    // Real wheel events must scroll the cross-origin preview, never its host,
+    // including at both ends and over the header or floating actions.
+    await page.evaluate(() => scrollTo(0, 300));
+    const sourceY = await page.evaluate(() => scrollY);
+    const wheelAt = async (locator, deltaY) => {
+      const box = await locator.boundingBox();
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.wheel(0, deltaY);
+      await page.waitForTimeout(250); // Native scrolling and wheel latching settle.
+    };
+    await frame().evaluate(() => scrollTo(0, 0));
+    await wheelAt(page.locator('.peek-frame'), 500);
+    assert(await frame().evaluate(() => scrollY > 0), 'l’article doit défiler normalement');
+    assert.equal(await page.evaluate(() => scrollY), sourceY, 'la page derrière ne doit pas suivre l’article');
+    await frame().evaluate(() => scrollTo(0, document.scrollingElement.scrollHeight));
+    await wheelAt(page.locator('.peek-frame'), 700);
+    assert.equal(await page.evaluate(() => scrollY), sourceY, 'le bas de l’article ne doit pas transmettre le défilement');
+    await frame().evaluate(() => scrollTo(0, 0));
+    await wheelAt(page.locator('.peek-frame'), -700);
+    assert.equal(await page.evaluate(() => scrollY), sourceY, 'le haut de l’article ne doit pas transmettre le défilement');
+    for (const selector of ['.peek-header', '.peek-actions']) {
+      await wheelAt(page.locator(selector), 500);
+      assert.equal(await page.evaluate(() => scrollY), sourceY, `défilement transmis depuis ${selector}`);
+    }
+    await page.locator('.peek-pin').click();
+    await page.mouse.move(10, 700);
+    await page.mouse.wheel(0, 500);
+    await page.waitForTimeout(250);
+    assert.equal(await page.evaluate(() => scrollY), sourceY, 'la page principale doit rester bloquée aussi en dehors de l’aperçu');
+    await page.keyboard.press('PageDown');
+    await page.waitForTimeout(250);
+    assert.equal(await page.evaluate(() => scrollY), sourceY, 'le clavier ne doit pas faire défiler la page derrière');
+    console.log('PASS: host scrolling stays blocked inside and outside the preview, including keyboard scrolling.');
     await frame().evaluate(() => scrollTo(0, 1100));
     for (let attempt = 0; attempt < 60 && positions.get(`${base}/article`)?.y !== 1100; attempt++) {
       await require('node:timers/promises').setTimeout(50);
     }
     assert.equal(positions.get(`${base}/article`).y, 1100);
-    await page.locator('.peek-close').click(); await open('article'); await ready();
+    await page.locator('.peek-close').click();
+    assert.equal(await page.evaluate(() => scrollY), sourceY, 'la fermeture doit conserver la position de lecture de la page principale');
+    await page.mouse.move(10, 700);
+    await page.mouse.wheel(0, 500);
+    await page.waitForFunction(y => scrollY > y, sourceY);
+    await page.evaluate(() => scrollTo(0, 0));
+    await open('article'); await ready();
     await frame().waitForFunction(() => scrollY === 1100);
     console.log('PASS: page reopen restores reading position in a real iframe.');
     await assertPanelInsideViewport(1600, 900, { minWidth: 950 });
@@ -195,6 +280,7 @@ const server = http.createServer((req, res) => {
     await page.locator('.peek-close').click();
     }
     await page.goto(`${base}/popup.html`);
+    assert.equal(await page.locator('option[value="split"]').count(), 0, 'aucun mode de vue partagée dans les paramètres');
     await page.locator('#tab-sites').click(); await page.locator('.domain-rules-details summary').click();
     await page.locator('#rule-domain').fill('example.com'); await page.locator('#add-domain-rule').click();
     await page.getByRole('button', { name: 'Supprimer la règle de example.com', exact: true }).click();

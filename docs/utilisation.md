@@ -5,18 +5,18 @@
 - **Échap** ferme l'aperçu (si **Fermer avec Échap** est activé).
 - L'épinglage empêche un clic extérieur de fermer l'aperçu ; Échap le ferme
   toujours lorsque **Fermer avec Échap** est activé.
-- Le mode **Vue partagée (Split View)** ouvre le lien à côté de l'onglet courant.
-  La barre d'outils de l'aperçu dispose aussi d'un bouton dédié. La compatibilité
-  dépend de l'API réellement exposée par l'extension, pas du nom du navigateur :
-  les dérivés de Chromium comme Brave ou Helium peuvent l'utiliser s'ils exposent
-  l'API Split View. La présence d'un menu **Vue partagée** natif ne garantit pas
-  pour autant le support de l'API. Les navigateurs non compatibles ou les onglets
-  déjà en vue partagée affichent un message explicatif et conservent l'aperçu en
-  cours. Aucun repli vers une fenêtre séparée n'est proposé. Si l'API est
-  indisponible, ouvrir le lien dans un nouvel onglet puis utiliser le menu
-  contextuel de l'onglet pour créer une vue partagée native, si disponible.
-- Boutons de la barre d'outils : paramètres, précédent/suivant, actualiser,
-  copier l'URL, épingler, fenêtre compacte, vue partagée, nouvel onglet, fermer.
+- Boutons de la barre d'outils : paramètres de l’aperçu (roue dentée), précédent/suivant, actualiser,
+  copier l'URL, épingler, fenêtre compacte, nouvel onglet, fermer.
+- Tant que l’aperçu intégré est ouvert, le défilement est réservé à son contenu.
+  La page principale reste bloquée, même si le curseur est en dehors de l’aperçu
+  ou si celui-ci est épinglé. À sa fermeture, la page principale retrouve son
+  défilement normal en conservant sa position.
+- Les fenêtres compactes n’ajoutent aucune barre d’outils dans la page. Utiliser
+  les commandes du navigateur pour fermer la fenêtre et l’icône de l’extension
+  pour les paramètres. Échap ferme aussi la fenêtre si **Fermer avec Échap** est
+  activé. Un lien passant par `news.google.com` (Google Actualités) utilise ce
+  mode si le repli compact automatique est activé, comme les autres
+  sous-domaines Google. La barre complète ci-dessus appartient à l’aperçu intégré.
 - Faire glisser l’en-tête pour déplacer l’aperçu ; sa position est mémorisée.
   Les bords et les coins permettent de le redimensionner en restant dans la
   zone visible. Ces gestes passent la position en mode personnalisé ; choisir
@@ -45,7 +45,7 @@ au premier plan sans perdre les modifications en cours.
 Les paramètres sont regroupés dans quatre rubriques : **Utilisation**, **Apparence**,
 **Sites** et **Données**. Le bouton de sauvegarde reste toujours visible ; les
 options détaillées se déplient au besoin. Les réglages disponibles comprennent :
-mode d'ouverture (intégré, fenêtre compacte, vue partagée), taille, position,
+mode d'ouverture (intégré ou fenêtre compacte), taille, position,
 thème, animation, cadre, ombre, déclencheur au clic, clic
 molette, fermeture au clic extérieur ou avec Échap, arrière-plan (assombrissement
 ou flou, intensité réglable) et fermeture après ouverture externe.
@@ -57,12 +57,16 @@ hauteur : la zone de page pour l’aperçu intégré et la fenêtre source pour 
 fenêtre compacte. Les marges disponibles peuvent réduire ces dimensions. Les
 formats Petite, Moyenne, Grande, Plein écran et Personnalisée restent disponibles;
 les tailles déjà enregistrées sont conservées. Ce réglage ne modifie pas la taille
-de la fenêtre de paramètres ni la vue partagée native.
+de la fenêtre de paramètres.
 
 Les thèmes disponibles sont **Catppuccin, Nordic, Nord, Gruvbox, Tokyo Night,
 Dracula et Everforest**, avec Catppuccin Mocha par défaut. Le choix
 **Personnalisé** permet aussi de définir ses couleurs manuellement. Les variantes et les
 sources des palettes sont détaillées dans [Thèmes](themes.md).
+
+La vue partagée a été retirée de l’extension. Les anciens réglages et règles
+qui utilisaient ce mode sont repris en **Aperçu intégré** lors de leur lecture
+ou d’un import, en conservant les autres préférences.
 
 ## Règles par domaine
 
@@ -93,8 +97,7 @@ Dans l’aperçu, ouvrir **Paramètres → Comportement → Toujours ouvrir ce s
 pour mémoriser un mode pour le domaine du lien affiché. Dans les paramètres, la commande
 **Ouverture des liens vers ce site** vise le domaine de l’onglet courant. Choisir
 **Réglage général / règle héritée** et mémoriser supprime la règle exacte ; une
-règle de domaine parent peut encore s’appliquer. La vue partagée reste native et
-nécessite l’API du navigateur.
+règle de domaine parent peut encore s’appliquer.
 
 **Mettre en pause sur ce site**, dans la rubrique **Sites** des paramètres, suspend les déclencheurs
 sur les pages du même nom d’hôte. Les clics gardent leur comportement normal.

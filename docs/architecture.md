@@ -43,6 +43,20 @@ Les fichiers applicatifs restent à la racine afin de préserver les chemins des
 | `appearance.css` | Thèmes, cadres et ombres partagés. |
 | `styles.css`, `popup.css` | Présentation propre à l’aperçu et à la fenêtre de paramètres. |
 
+Dans chaque page principale, `content.js` demande au démarrage
+`GET_COMPACT_CONTEXT`. Le worker identifie la fenêtre depuis le contexte
+`sender` du navigateur et consulte le suivi des fenêtres compactes, conservé en
+session. Cette demande permet à Échap de fermer une fenêtre compacte après
+navigation selon la préférence enregistrée. Aucune barre n’est injectée dans
+les fenêtres compactes; les iframes et fenêtres ordinaires ne reçoivent pas de
+contexte compact.
+
+La vue partagée est retirée. `settings.js` reprend les anciens réglages globaux
+et règles de domaine `split` en `overlay`, y compris à l’import. Le worker ne
+traite plus le message d’ouverture correspondant; aucun code de création de
+split n’est conservé. Les préférences passent toujours par son protocole de
+mutation commun.
+
 ## Deux manifestes, un code commun
 
 `scripts/build.js` lit le manifeste racine et copie une liste explicite de ressources dans `dist/chrome` ou `dist/firefox`. Pour Firefox, il remplace les clés concernées avec `manifests/firefox.json`.

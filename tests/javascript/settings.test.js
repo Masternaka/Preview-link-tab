@@ -51,8 +51,34 @@ test("positionne le panneau sans sortir du viewport", () => {
   );
 });
 
-test("le mode vue partagée est conservé dans les réglages", () => {
-  assert.equal(settings.cleanPeekSettings({ openMode: "split" }).openMode, "split");
+test("les anciens réglages split deviennent des aperçus intégrés sans perdre les autres préférences", () => {
+  const original = {
+    openMode: "split", theme: "nord", closeWithEsc: false,
+    domainRules: " docs.example = SPLIT ; keep.example = compact\nhttps://other.example/path: split\nblocked.example = blocked",
+    domainList: "personal.example", customWidth: 1100
+  };
+  const clean = settings.cleanPeekSettings(original);
+  assert.equal(clean.openMode, "overlay");
+  assert.equal(clean.theme, "nord");
+  assert.equal(clean.closeWithEsc, false);
+  assert.equal(clean.customWidth, 1100);
+  assert.equal(clean.domainList, "personal.example");
+  assert.equal(clean.domainRules, " docs.example = overlay ; keep.example = compact\nhttps://other.example/path: overlay\nblocked.example = blocked");
+  assert.equal(original.openMode, "split");
+  assert.equal(settings.getDomainRule("docs.example", { domainRules: original.domainRules }).mode, "overlay");
+  assert.deepEqual(Array.from(settings.PEEK_SETTING_OPTIONS.openMode), ["overlay", "compact"]);
+});
+
+test("un ancien export split est importé en aperçu et les nouvelles règles split sont refusées", () => {
+  const imported = settings.parsePeekSettingsImport(JSON.stringify({
+    openMode: "compact", domainRules: "first.example = split, second.example:compact\nnotes à préserver",
+    theme: "dracula"
+  }));
+  assert.equal(imported.openMode, "compact");
+  assert.equal(imported.theme, "dracula");
+  assert.equal(imported.domainRules, "first.example = overlay, second.example:compact\nnotes à préserver");
+  assert.equal(settings.cleanPeekSettings(imported).domainRules, imported.domainRules);
+  assert.throws(() => settings.setPeekDomainRule('', 'first.example', 'split'), /invalide/);
 });
 
 
@@ -123,7 +149,8 @@ test("tous les sélecteurs proposent uniquement la même liste de thèmes", () =
       count++;
     }
   }
-  assert.equal(count, 3);
+  // The popup and overlay retain theme controls; compact windows have no UI.
+  assert.equal(count, 2);
 });
 
 
@@ -160,8 +187,8 @@ test('un import exige un objet de réglages et ignore les clés inconnues', () =
 
 test('une règle rapide remplace seulement le domaine choisi et peut être supprimée', () => {
   const rules = 'example.com = compact\ndocs.example.com = overlay\nother.test = blocked';
-  const updated = settings.setPeekDomainRule(rules, 'https://docs.example.com/path', 'split');
-  assert.equal(settings.getDomainRule('docs.example.com', { domainRules: updated }).mode, 'split');
+  const updated = settings.setPeekDomainRule(rules, 'https://docs.example.com/path', 'blocked');
+  assert.equal(settings.getDomainRule('docs.example.com', { domainRules: updated }).mode, 'blocked');
   assert.equal(settings.getDomainRule('example.com', { domainRules: updated }).mode, 'compact');
   const removed = settings.setPeekDomainRule(updated, 'docs.example.com', 'default');
   assert.equal(settings.getDomainRule('docs.example.com', { domainRules: removed }).mode, 'compact');

@@ -4,7 +4,7 @@ Ces instructions s’appliquent à tout le dépôt **Preview link tab**. Respect
 
 ## Comprendre le projet et reprendre le travail
 
-Preview link tab est une extension Manifest V3 pour Chrome/Chromium et Firefox sur ordinateur. Les deux versions partagent leurs scripts JavaScript, leur HTML et leurs styles CSS. Elle ouvre les liens dans un aperçu intégré, une fenêtre compacte ou une vue partagée native selon les réglages et les API disponibles.
+Preview link tab est une extension Manifest V3 pour Chrome/Chromium et Firefox sur ordinateur. Les deux versions partagent leurs scripts JavaScript, leur HTML et leurs styles CSS. Elle ouvre les liens dans un aperçu intégré ou une fenêtre compacte selon les réglages.
 
 À la reprise, lire dans cet ordre :
 
@@ -82,7 +82,7 @@ Après un changement applicatif, recharger l’extension et les pages déjà ouv
 
 - Préserver les déclencheurs explicites et le raccourci global. Ne pas réintroduire l’aperçu automatique au survol.
 - Vérifier les exclusions avant d’intercepter le clic. Sur un site exclu ou en pause, conserver le comportement normal du lien.
-- Utiliser uniquement la vue partagée native lorsque son API est exposée. Ne pas la remplacer par deux fenêtres ou des panneaux intégrés, ni déduire sa disponibilité du nom du navigateur.
+- La vue partagée a été retirée de l’extension le 6 novembre 2026 à la demande de l’utilisateur. Ne pas la réintroduire sans nouvelle demande; conserver la reprise des anciens réglages et règles `split` en aperçu intégré.
 - Ne pas contourner les protections iframe des sites. La confirmation de navigation de l’extension fait foi; un événement `load` seul ne prouve pas la réussite. Conserver les alternatives et les messages de délai prévus.
 - Préserver le contexte privé des fenêtres et onglets externes. Un échec d’ouverture privée ne doit pas ouvrir silencieusement une fenêtre normale. L’ouverture des paramètres doit rester compatible avec le mode partagé Chrome et conserver l’onglet source.
 - Garder les pauses et positions de lecture privées séparées des normales. Ne pas ajouter d’URL privée aux journaux ou documents. Vérifier l’accès au site source et son éventuelle fermeture avant une action.

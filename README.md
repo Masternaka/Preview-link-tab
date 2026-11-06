@@ -1,6 +1,6 @@
 # Preview link tab
 
-Extension Manifest V3 pour consulter un lien sans quitter sa page de départ, sur Chrome/Chromium et Firefox sur ordinateur. Elle propose un aperçu intégré, une fenêtre compacte et la vue partagée native lorsque l’API du navigateur est disponible.
+Extension Manifest V3 pour consulter un lien sans quitter sa page de départ, sur Chrome/Chromium et Firefox sur ordinateur. Elle propose un aperçu intégré et une fenêtre compacte.
 
 ## Installer et utiliser
 
@@ -58,6 +58,6 @@ Les fichiers chargés par l’extension restent à la racine; les variantes de m
 
 ## Limites
 
-Certains sites refusent les iframes ou empêchent le script de confirmer le chargement. L’extension propose alors les alternatives prévues. La vue partagée dépend de l’API réellement exposée, sans remplacement par deux fenêtres. Firefox cible la version ordinateur 140 ou ultérieure; le chargement temporaire doit être renouvelé après redémarrage. Une distribution permanente Firefox nécessite une signature Mozilla.
+Certains sites refusent les iframes ou empêchent le script de confirmer le chargement. L’extension propose alors les alternatives prévues. Firefox cible la version ordinateur 140 ou ultérieure; le chargement temporaire doit être renouvelé après redémarrage. Une distribution permanente Firefox nécessite une signature Mozilla.
 
 Les tests avec des API simulées complètent les essais de l’extension réellement chargée dans Chrome et Firefox. Aucun commit, push ou publication n’est effectué automatiquement par une demande de modification.

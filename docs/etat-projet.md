@@ -1,9 +1,55 @@
 # État du projet
 
+**Revue du 6 novembre 2026 :** la [révision du code](revue-code-2026-11-06.md)
+de la copie de travail `1.0.1` identifie six défauts reproduits avec des API
+simulées et une décision à prendre sur la liste blanche vide. Les 171 tests
+existants passent. Aucun correctif appliqué dans cette revue; traiter d’abord
+la concurrence du panneau intégré et le secours des réglages. Les résultats
+historiques ci-dessous restent distincts de cette nouvelle vérification.
+
 État local au 21 octobre 2026. Version actuelle de `manifest.json` et `package.json` : `1.0.1`. Les sources étaient à cette version au début de la tâche d’automatisation. `npm run package` actualise maintenant les dossiers chargeables et les archives en une commande; `npm run dev` maintient ces sorties à jour tant que le terminal reste actif. Recharger l’extension dans le navigateur reste nécessaire. Les sections suivantes conservent les résultats historiques du même jour. Aucun changement de version, commit, push ou publication effectué pour cette automatisation.
 
 
 ## Fonctionnement et décisions
+
+### Retrait de la vue partagée — 6 novembre 2026
+
+À la demande de l’utilisateur, la vue partagée est retirée de toute l’extension :
+bouton, choix du mode global, règles par domaine, icône et code du worker.
+Les deux modes conservés sont l’aperçu intégré et la fenêtre compacte.
+Les anciens réglages et règles `split`, enregistrés ou importés, sont repris
+en `overlay` sans perdre les autres préférences. Les tests de concurrence
+restent couverts avec les modes et positions conservés.
+Le [diagnostic antérieur](archives/diagnostic-vue-partagee-2026-11-06.md) est
+archivé; il ne décrit plus une fonctionnalité disponible ni un chantier actif.
+Voir [Vérifications](verifications.md#retrait-de-la-vue-partagée--6-novembre-2026).
+
+### Défilement de l’aperçu — 6 novembre 2026
+
+Le défilement est réservé au contenu de l’aperçu intégré jusqu’à sa fermeture.
+La page principale reste bloquée sous et hors du panneau, y compris lorsque
+l’aperçu est épinglé. À sa fermeture, ses règles normales de défilement
+reprennent en conservant sa position. Le verrouillage CSS est conditionné par
+la visibilité de l’aperçu, sans écriture dans les styles en ligne du site.
+Les fenêtres compactes restent hors de ce verrouillage.
+Les contrôles Chrome utilisent des API simulées; la validation réelle dans
+Vivaldi et Firefox reste à faire. Voir
+[Vérifications](verifications.md#défilement-contenu-dans-laperçu--6-novembre-2026).
+
+### Fenêtres compactes sans barre — 6 novembre 2026
+
+À la demande de l’utilisateur, la barre flottante et ses réglages sont retirés
+uniquement des fenêtres compactes. Les commandes du navigateur restent
+utilisables et la fermeture par Échap conserve sa préférence. La barre de
+l’aperçu intégré est conservée. Les corrections de placement et de restauration
+de la barre compacte réalisées plus tôt le même jour sont remplacées par ce
+retrait. Le contexte compact est toujours récupéré après navigation pour Échap.
+Les tests et leurs limites figurent dans
+[Vérifications](verifications.md#retrait-de-la-barre-compacte--6-novembre-2026).
+
+La protection contre les exceptions d’ouverture après invalidation du contexte
+est conservée. Le message exact de l’erreur signalée après mise à jour n’ayant
+pas été fourni, cette invalidation reste une hypothèse pour ce signalement.
 
 Les hooks sont activés dans ce clone : génération après chaque commit et avant
 chaque push, sans terminal de surveillance. Le hook `pre-push` a été exécuté
@@ -15,13 +61,13 @@ et les deux autres numériquement les plus récentes. La suppression des ancienn
 archives intervient après génération réussie et écriture des empreintes, sans
 nettoyage des dossiers chargeables ni des fichiers étrangers aux archives.
 
-Preview link tab permet de consulter un lien sans perdre sa page de départ. Le code commun Chrome/Chromium et Firefox propose l’aperçu intégré, la fenêtre compacte, la vue partagée native selon l’API disponible, les règles par domaine, la pause, les thèmes et la reprise de lecture en session. Les tests, builds et workflows de préparation des ZIP et de publication sont présents.
+Preview link tab permet de consulter un lien sans perdre sa page de départ. Le code commun Chrome/Chromium et Firefox propose l’aperçu intégré, la fenêtre compacte, les règles par domaine, la pause, les thèmes et la reprise de lecture en session. Les tests, builds et workflows de préparation des ZIP et de publication sont présents.
 
-Conserver le déclenchement explicite sans aperçu automatique au survol, la vue partagée exclusivement native et le respect des protections d’intégration des sites. Les idées non retenues restent des propositions dans [Travaux restants](travaux-restants.md).
+Conserver le déclenchement explicite sans aperçu automatique au survol et le respect des protections d’intégration des sites. Les idées non retenues restent des propositions dans [Travaux restants](travaux-restants.md).
 
 ## Taille relative par défaut
 
-Le nouveau format **75 % du navigateur** est le défaut en l’absence de taille enregistrée. Il suit la largeur et la hauteur de la zone de page pour l’aperçu intégré, et celles de la fenêtre source pour la fenêtre compacte, avec les limites d’espace existantes. Les cinq formats antérieurs et les dimensions personnalisées sauvegardées ou importées sont conservés. Les paramètres et les deux menus intégrés proposent ce choix. Validation de cet ajout : 158 tests Node.js réussis, builds et ZIP Chrome/Firefox `0.2.3` régénérés et `git diff --check` réussi. Le contrôle Playwright dans Chrome avec API simulées confirme les proportions après ouverture et redimensionnement; les essais des extensions réellement chargées restent à effectuer. Voir [les résultats détaillés](verifications.md#taille-relative--21-octobre-2026).
+Le nouveau format **75 % du navigateur** est le défaut en l’absence de taille enregistrée. Il suit la largeur et la hauteur de la zone de page pour l’aperçu intégré, et celles de la fenêtre source pour la fenêtre compacte, avec les limites d’espace existantes. Les cinq formats antérieurs et les dimensions personnalisées sauvegardées ou importées sont conservés. Les paramètres et le menu de l’aperçu intégré proposent ce choix. Validation de cet ajout : 158 tests Node.js réussis, builds et ZIP Chrome/Firefox `0.2.3` régénérés et `git diff --check` réussi. Le contrôle Playwright dans Chrome avec API simulées confirme les proportions après ouverture et redimensionnement; les essais des extensions réellement chargées restent à effectuer. Voir [les résultats détaillés](verifications.md#taille-relative--21-octobre-2026).
 
 ## Centrage et cadres
 
@@ -89,7 +135,7 @@ Aucun essai navigateur supplémentaire n’a été exécuté pour ce ménage. Le
 
 ## Prochaine étape
 
-Valider l’extension réellement chargée dans Chrome et Firefox : navigation privée, plusieurs fenêtres de paramètres, focus, gestes et API native de vue partagée. Reprendre ensuite les sujets ouverts du [suivi](travaux-restants.md), notamment le secours des réglages et la liste d’autorisation vide, après vérification du code courant.
+Valider l’extension réellement chargée dans Chrome et Firefox : navigation privée, plusieurs fenêtres de paramètres, focus et gestes. Reprendre ensuite les sujets ouverts du [suivi](travaux-restants.md), notamment le secours des réglages et la liste d’autorisation vide, après vérification du code courant.
 
 ## Hooks locaux de génération
 

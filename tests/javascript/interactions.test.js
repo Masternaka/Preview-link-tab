@@ -147,7 +147,7 @@ async function contentHarness({ embedded = false } = {}) {
           cb?.({ ok: true, settings: structuredClone(store) });
           return;
         }
-        if (message.type !== "GET_SITE_PAUSE") messages.push(message);
+        if (!["GET_SITE_PAUSE", "GET_COMPACT_CONTEXT"].includes(message.type)) messages.push(message);
         cb?.({ ok: true, paused: false });
       } }
     }
@@ -457,11 +457,11 @@ test('un thème créé dans une fenêtre survit à la sauvegarde d’une option 
   b.node('theme-name').value = 'Lecture';
   b.node('save-theme').listeners.click();
   assert.equal(backend.data.savedThemes.length, 1);
-  a.node('settings-form').elements.openMode.value = 'split';
+  a.node('settings-form').elements.position.value = 'bottomRight';
   a.context.saveSettings();
   assert.equal(backend.data.savedThemes.length, 1);
   assert.equal(backend.data.savedThemes[0].name, 'Lecture');
-  assert.equal(backend.data.openMode, 'split');
+  assert.equal(backend.data.position, 'bottomRight');
 });
 
 test('deux créations de thèmes simultanées restent toutes les deux disponibles', () => {
@@ -507,19 +507,19 @@ test('deux sauvegardes du même réglage signalent un conflit puis permettent de
   const backend = settingsBackend();
   const a = popupHarness(backend);
   const b = popupHarness(backend);
-  a.node('settings-form').elements.openMode.value = 'compact';
+  a.node('settings-form').elements.position.value = 'topLeft';
   backend.pauseNotifications();
   a.context.saveSettings();
   backend.resumeNotifications();
-  b.node('settings-form').elements.openMode.value = 'split';
+  b.node('settings-form').elements.position.value = 'bottomRight';
   b.context.saveSettings();
-  assert.equal(backend.data.openMode, 'compact');
-  assert.equal(b.node('settings-form').elements.openMode.value, 'split');
+  assert.equal(backend.data.position, 'topLeft');
+  assert.equal(b.node('settings-form').elements.position.value, 'bottomRight');
   assert.equal(b.node('conflict-notice').hidden, false);
-  assert.match(b.node('conflict-message').textContent, /openMode/);
+  assert.match(b.node('conflict-message').textContent, /position/);
   assert.match(b.node('status').textContent, /Conflit/);
   b.node('reapply-settings').listeners.click();
-  assert.equal(backend.data.openMode, 'split');
+  assert.equal(backend.data.position, 'bottomRight');
   assert.equal(b.node('conflict-notice').hidden, true);
 });
 
@@ -527,15 +527,15 @@ test('charger la version enregistrée remplace le brouillon sans écriture', () 
   const backend = settingsBackend();
   const a = popupHarness(backend);
   const b = popupHarness(backend);
-  a.node('settings-form').elements.openMode.value = 'compact';
+  a.node('settings-form').elements.position.value = 'topLeft';
   backend.pauseNotifications();
   a.context.saveSettings();
   backend.resumeNotifications();
-  b.node('settings-form').elements.openMode.value = 'split';
+  b.node('settings-form').elements.position.value = 'bottomRight';
   b.context.saveSettings();
   const writes = backend.writes.length;
   b.node('reload-settings').listeners.click();
-  assert.equal(b.node('settings-form').elements.openMode.value, 'compact');
+  assert.equal(b.node('settings-form').elements.position.value, 'topLeft');
   assert.equal(backend.writes.length, writes);
   assert.equal(b.node('conflict-notice').hidden, true);
 });
@@ -544,15 +544,15 @@ test('une erreur de sauvegarde conserve le brouillon et n’empêche pas la tent
   const backend = settingsBackend();
   const a = popupHarness(backend);
   a.fail();
-  a.node('settings-form').elements.openMode.value = 'compact';
+  a.node('settings-form').elements.position.value = 'topLeft';
   a.context.saveSettings();
   assert.match(a.node('status').textContent, /Échec/);
-  assert.equal(a.node('settings-form').elements.openMode.value, 'compact');
-  assert.equal(backend.data.openMode, 'overlay');
+  assert.equal(a.node('settings-form').elements.position.value, 'topLeft');
+  assert.equal(backend.data.position, 'center');
   a.allowWrites();
-  a.node('settings-form').elements.openMode.value = 'split';
+  a.node('settings-form').elements.position.value = 'bottomRight';
   a.context.saveSettings();
-  assert.equal(backend.data.openMode, 'split');
+  assert.equal(backend.data.position, 'bottomRight');
 });
 
 test('restaurer un thème supprimé n’écrase pas celui recréé ailleurs', () => {
@@ -760,18 +760,6 @@ test('fermer l’aperçu pendant le délai annule le recalcul sans erreur', asyn
   assert.equal(STATE.panel.style.width, undefined);
 });
 
-test('le mode split prime sur le repli compact automatique, mais respecte les règles de domaine', async () => {
-  const { STATE, click, messages } = await contentHarness();
-  STATE.settings.openMode = 'split';
-  click('https://github.com/');
-  assert.equal(messages[0].type, 'OPEN_URL_IN_SPLIT_VIEW');
-  STATE.settings.domainRules = 'github.com = compact';
-  click('https://github.com/');
-  assert.equal(messages[1].type, 'OPEN_COMPACT_WINDOW');
-  STATE.settings.domainRules = 'github.com = blocked';
-  assert.equal(click('https://github.com/').prevented, false);
-  assert.equal(messages.length, 2);
-});
 
 
 test('déplacement : les quatre limites du viewport sont respectées', async () => {
@@ -1115,12 +1103,38 @@ test('la pause conserve les clics natifs même si une règle autorise le lien', 
   assert.equal(click('https://example.com/').prevented, true);
 });
 
-test('une règle split explicite prime sur le mode compact', async () => {
-  const { STATE, click, messages } = await contentHarness();
-  STATE.settings.domainRules = 'example.com = split';
-  click('https://example.com/');
-  assert.equal(messages[0].type, 'OPEN_URL_IN_SPLIT_VIEW');
+test('une ouverture compacte après invalidation du contexte invite à recharger la page', async () => {
+  for (const phase of ['initial', 'fallback']) {
+    const { context, click, window, document } = await contentHarness();
+    const notice = element();
+    document.getElementById = () => notice;
+    let opened = false;
+    let reply;
+    window.open = () => { opened = true; };
+    context.chrome.runtime.sendMessage = (message, cb) => {
+      if (phase === 'fallback' && message.type === 'OPEN_COMPACT_WINDOW') { reply = cb; return; }
+      throw new Error('Extension context invalidated.');
+    };
+    assert.doesNotThrow(() => click('https://news.google.com/articles/test'));
+    if (reply) assert.doesNotThrow(() => reply({ ok: false }));
+    assert.match(notice.textContent, /Rechargez cette page/);
+    assert.equal(opened, false);
+  }
 });
+
+test('Échap ferme une fenêtre compacte sans barre, en respectant la préférence', async () => {
+  const { STATE, document, messages } = await contentHarness();
+  STATE.compactWindowId = 42;
+  STATE.settings.closeWithEsc = false;
+  document.listeners.keydown({ key: 'Escape' });
+  assert.equal(messages.length, 0);
+  STATE.settings.closeWithEsc = true;
+  document.listeners.keydown({ key: 'Escape' });
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].type, 'CLOSE_COMPACT_WINDOW');
+  assert.equal(messages[0].windowId, 42);
+});
+
 
 
 test('la popup permet de mettre en pause, réactiver et mémoriser une règle de site', () => {
@@ -1268,16 +1282,16 @@ test('une valeur invalide révèle sa rubrique et ses sections repliées', () =>
 test('annuler restaure les réglages sauvegardés et la miniature sans écriture', () => {
   const { context, node, writes } = popupHarness();
   const form = node('settings-form');
-  form.elements.openMode.value = 'compact';
+  form.elements.position.value = 'topLeft';
   node('backdropIntensitySlider').value = '82';
   node('backdropIntensitySlider').listeners.input();
   context.saveSettings();
-  form.elements.openMode.value = 'split';
+  form.elements.position.value = 'bottomRight';
   form.elements.domainRules.value = 'example.com = blocked';
   node('backdropIntensitySlider').value = '20';
   node('backdropIntensitySlider').listeners.input();
   node('discard-changes').listeners.click();
-  assert.equal(form.elements.openMode.value, 'compact');
+  assert.equal(form.elements.position.value, 'topLeft');
   assert.equal(form.elements.domainRules.value, '');
   assert.equal(Number(node('backdropIntensitySlider').value), 82);
   assert.equal(writes.length, 1);
@@ -1558,14 +1572,14 @@ test('le stockage simulé applique les validations et conflits du réducteur par
 
 test('notifications actives : un champ local garde sa référence et Réappliquer prend la saisie actuelle', () => {
   const backend = settingsBackend(), a = popupHarness(backend), b = popupHarness(backend);
-  a.node('settings-form').elements.openMode.value = 'compact';
-  b.node('settings-form').elements.openMode.value = 'split'; b.context.saveSettings();
+  a.node('settings-form').elements.position.value = 'topLeft';
+  b.node('settings-form').elements.position.value = 'bottomRight'; b.context.saveSettings();
   a.context.saveSettings();
-  assert.equal(backend.data.openMode, 'split');
+  assert.equal(backend.data.position, 'bottomRight');
   assert.equal(a.node('conflict-notice').hidden, false);
-  a.node('settings-form').elements.openMode.value = 'overlay';
+  a.node('settings-form').elements.position.value = 'center';
   a.node('reapply-settings').listeners.click();
-  assert.equal(backend.data.openMode, 'overlay');
+  assert.equal(backend.data.position, 'center');
 });
 
 test('notifications actives : conflits par domaine et par thème, sans bloquer les autres entrées', () => {
@@ -1576,7 +1590,7 @@ test('notifications actives : conflits par domaine et par thème, sans bloquer l
     const a = popupHarness(backend), b = popupHarness(backend);
     if (kind === 'domain') {
       a.node('settings-form').elements.domainRules.value = 'same.example = compact';
-      b.node('settings-form').elements.domainRules.value = 'same.example = split\nother.example = blocked';
+      b.node('settings-form').elements.domainRules.value = 'same.example = blocked\nother.example = blocked';
     } else {
       vm.runInContext('savedThemesDraft[0].colors.customAccent = "#222222"', a.context);
       vm.runInContext('savedThemesDraft[0].colors.customAccent = "#333333"', b.context);
@@ -1590,21 +1604,21 @@ test('notifications actives : conflits par domaine et par thème, sans bloquer l
 test('une requête unique préserve les changements du même champ et les éditeurs pendant sa réponse', () => {
   const p = popupHarness(), pending = [], send = p.context.chrome.runtime.sendMessage;
   p.context.chrome.runtime.sendMessage = (...args) => pending.push(args);
-  p.node('settings-form').elements.openMode.value = 'compact'; p.context.saveSettings(); p.context.saveSettings();
+  p.node('settings-form').elements.position.value = 'topLeft'; p.context.saveSettings(); p.context.saveSettings();
   assert.equal(pending.length, 1);
-  p.node('settings-form').elements.openMode.value = 'split';
+  p.node('settings-form').elements.position.value = 'bottomRight';
   p.node('settings-form').elements.domainList.value = 'draft.example';
   p.node('rule-domain').value = 'unfinished.example'; p.node('theme-name').value = 'Mon thème';
   send(...pending.shift());
-  assert.equal(p.backend.data.openMode, 'compact');
-  assert.equal(p.node('settings-form').elements.openMode.value, 'split');
+  assert.equal(p.backend.data.position, 'topLeft');
+  assert.equal(p.node('settings-form').elements.position.value, 'bottomRight');
   assert.equal(p.node('settings-form').elements.domainList.value, 'draft.example');
   assert.equal(p.node('rule-domain').value, 'unfinished.example');
   assert.equal(p.node('theme-name').value, 'Mon thème');
   assert.equal(p.node('conflict-notice').hidden, true);
   p.node('rule-domain').value = '';
   p.context.saveSettings(); send(...pending.shift());
-  assert.equal(p.backend.data.openMode, 'split');
+  assert.equal(p.backend.data.position, 'bottomRight');
 });
 
 test('un nom de thème reste saisi pendant une notification externe sans rapport', () => {
@@ -1648,10 +1662,10 @@ test('une règle rapide n’acquitte pas les conflits des autres domaines', () =
   };
   a.context.initSiteControls();
   a.node('settings-form').elements.domainRules.value = 'other.example = compact';
-  backend.setDirect({ domainRules: 'other.example = split' });
+  backend.setDirect({ domainRules: 'other.example = blocked' });
   a.node('save-site-rule').listeners.click(); a.context.saveSettings();
   assert.equal(a.node('conflict-notice').hidden, false);
-  assert.match(backend.data.domainRules, /other.example = split/);
+  assert.match(backend.data.domainRules, /other.example = blocked/);
 });
 
 test('un nom propre suit un renommage externe mais une saisie numérique partielle reste intacte', () => {
@@ -1668,15 +1682,15 @@ test('une réponse retardée ne remplace pas une notification plus récente', ()
     const backend = settingsBackend(), a = popupHarness(backend), b = popupHarness(backend);
     const send = a.context.chrome.runtime.sendMessage; let reply;
     a.context.chrome.runtime.sendMessage = (message, cb) => send(message, result => { reply = () => cb(result); });
-    a.node('settings-form').elements.openMode.value = 'compact'; a.context.saveSettings();
-    if (laterEdit) a.node('settings-form').elements.openMode.value = 'overlay';
-    b.node('settings-form').elements.openMode.value = 'split'; b.context.saveSettings();
+    a.node('settings-form').elements.position.value = 'topLeft'; a.context.saveSettings();
+    if (laterEdit) a.node('settings-form').elements.position.value = 'center';
+    b.node('settings-form').elements.position.value = 'bottomRight'; b.context.saveSettings();
     reply();
-    assert.equal(a.node('settings-form').elements.openMode.value, laterEdit ? 'overlay' : 'split');
+    assert.equal(a.node('settings-form').elements.position.value, laterEdit ? 'center' : 'bottomRight');
     if (laterEdit) {
       a.context.saveSettings(); reply();
       assert.equal(a.node('conflict-notice').hidden, false);
-      assert.equal(backend.data.openMode, 'split');
+      assert.equal(backend.data.position, 'bottomRight');
     }
   }
 });
@@ -1708,9 +1722,9 @@ test('une réponse de règle rapide retardée conserve les règles plus récente
     } else cb({ ok: true, ...backend.applyMutation(message) });
   };
   p.context.initSiteControls(); p.node('save-site-rule').listeners.click();
-  backend.setDirect({ domainRules: 'site.example = compact\nother.example = split' });
+  backend.setDirect({ domainRules: 'site.example = compact\nother.example = blocked' });
   complete();
-  assert.match(p.node('settings-form').elements.domainRules.value, /other.example = split/);
+  assert.match(p.node('settings-form').elements.domainRules.value, /other.example = blocked/);
   p.context.chrome.runtime.sendMessage = () => { throw new Error('unavailable'); };
   p.node('save-site-rule').listeners.click();
   assert.match(p.node('site-status').textContent, /Impossible/);
@@ -1724,12 +1738,12 @@ test('une confirmation partielle signale les brouillons conservés et retire le 
     const backend = settingsBackend(), a = popupHarness(backend), b = popupHarness(backend);
     const send = a.context.chrome.runtime.sendMessage; let reply;
     a.context.chrome.runtime.sendMessage = (message, cb) => send(message, response => { reply = () => cb(response); });
-    a.node('settings-form').elements.openMode.value = 'compact'; a.context.saveSettings();
+    a.node('settings-form').elements.position.value = 'topLeft'; a.context.saveSettings();
     a.node('save-toast').classList.add('save-toast-visible');
-    if (later === 'field') a.node('settings-form').elements.openMode.value = 'overlay';
+    if (later === 'field') a.node('settings-form').elements.position.value = 'center';
     if (later === 'rule') a.node('rule-domain').value = 'draft.example';
     if (later === 'theme') a.node('theme-name').value = 'Nouveau thème';
-    b.node('settings-form').elements.openMode.value = 'split'; b.context.saveSettings();
+    b.node('settings-form').elements.position.value = 'bottomRight'; b.context.saveSettings();
     reply();
     assert.match(a.node('status').textContent, /des modifications restent à sauvegarder/, later);
     assert.equal(a.node('save-toast').classList.contains('save-toast-visible'), false, later);

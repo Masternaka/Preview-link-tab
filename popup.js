@@ -28,7 +28,7 @@ const RADIO_SETTING_KEYS = new Set(["size", "trigger", "animationSpeed", "backdr
 const BOOLEAN_SETTING_KEYS = new Set(SCALAR_SETTING_KEYS
   .filter(key => typeof PEEK_DEFAULT_SETTINGS[key] === "boolean"));
 
-const RULE_MODE_LABELS = { overlay: "Aperçu intégré", compact: "Fenêtre compacte", split: "Vue partagée native", blocked: "Désactivé" };
+const RULE_MODE_LABELS = { overlay: "Aperçu intégré", compact: "Fenêtre compacte", blocked: "Désactivé" };
 
 loadSettings();
 initSectionNav();

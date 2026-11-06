@@ -15,6 +15,7 @@ Depuis le 21 octobre 2026, les fichiers Markdown du dépôt sont la référence 
 | [Vérifications](verifications.md) | Contrôles automatiques et essais réels. |
 | [Distribution](distribution.md) | ZIP, empreintes, CI et publication. |
 | [Travaux restants](travaux-restants.md) | Priorités ouvertes et évolutions à réévaluer. |
+| [Révision du code du 6 novembre 2026](revue-code-2026-11-06.md) | Six défauts reproduits, une décision produit et recommandations; corrections non appliquées. |
 | [AGENTS.md](../AGENTS.md) | Règles des assistants pour ce dépôt. |
 
 ## Archives des travaux réalisés
@@ -23,6 +24,7 @@ Ces documents décrivent les étapes antérieures aux corrections locales. Ils r
 
 | Archive | Statut |
 | --- | --- |
+| [Diagnostic de la vue partagée](archives/diagnostic-vue-partagee-2026-11-06.md) | Historique des essais; fonctionnalité retirée le 6 novembre 2026 à la demande de l’utilisateur. |
 | [Plan des quatre corrections](archives/corrections-revue-2026-10-21.md) | Lots implémentés et vérifiés automatiquement; essais réels des extensions à terminer. |
 | [Revue générale](archives/revue-generale-2026-10-21.md) | Quatre constats historiques sur `61dd7b3`, suivis des correctifs locaux. |
 | [Revue locale](archives/revue-locale-2026-10-21.md) | Six défauts et deux recommandations traités; rapport d’origine conservé. |

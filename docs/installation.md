@@ -32,8 +32,6 @@ les paramètres, les thèmes et les règles par site. Le script d'arrière-plan 
 le placement et la taille des fenêtres compactes se basent sur la fenêtre du
 navigateur, y compris sur un écran secondaire. Le mode plein écran compact
 remplit cette fenêtre avec des marges ; il ne passe pas le navigateur en plein écran.
-La vue partagée conserve le contrôle de disponibilité de l'API native et affiche
-le message explicatif si celle-ci est absente.
 
 Les permissions d'accès aux sites peuvent être ajustées dans `about:addons`.
 Les pages internes du navigateur et certains sites protégés par Firefox ne

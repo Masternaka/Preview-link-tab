@@ -113,7 +113,6 @@
   }
 
   const ROOT_ID = "peek-preview-extension-root";
-  const COMPACT_MENU_ID = "peek-compact-menu-root";
   const ACTIONS_BAR_GUTTER = 64;
   const STATE = {
     root: null,
@@ -134,9 +133,6 @@
     settingsPanel: null,
     settingsButton: null,
     helpEl: null,
-    compactMenu: null,
-    compactSettings: null,
-    compactSettingsButton: null,
     compactWindowId: null,
     settings: { ...PEEK_DEFAULT_SETTINGS },
     currentUrl: "",
@@ -189,10 +185,6 @@
         applySettings();
         syncControls();
       }
-      if (STATE.compactMenu) {
-        applyCompactMenuSettings();
-        syncCompactControls();
-      }
     });
   }
 
@@ -200,14 +192,6 @@
     chrome.runtime.onMessage.addListener(message => {
       if (message?.type === "SITE_PAUSE_CHANGED" && message.hostname === new URL(window.location.href).hostname) {
         STATE.isPaused = message.paused === true;
-        return;
-      }
-      if (message?.type === "ENABLE_COMPACT_MENU") {
-        if (window.top !== window.self) {
-          return;
-        }
-        STATE.compactWindowId = message.windowId ?? null;
-        ensureCompactMenu();
         return;
       }
       if (message?.type === "PREVIEW_URL" && message.url) {
@@ -226,6 +210,13 @@
   }
 
   if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
+    try {
+      chrome.runtime.sendMessage({ type: "GET_COMPACT_CONTEXT" }, response => {
+        if (!chrome.runtime.lastError && response?.ok && response.windowId != null) {
+          STATE.compactWindowId = response.windowId;
+        }
+      });
+    } catch { /* A stale extension context must not interrupt the host page. */ }
     try {
       chrome.runtime.sendMessage({ type: "GET_SITE_PAUSE" }, response => {
         if (!chrome.runtime.lastError && response?.ok) STATE.isPaused = response.paused === true;
@@ -278,7 +269,6 @@
               <select name="openMode">
                 <option value="overlay">Aperçu intégré</option>
                 <option value="compact">Fenêtre compacte</option>
-                <option value="split">Vue partagée (Split View)</option>
               </select>
             </label>
             <label>
@@ -374,7 +364,6 @@
                   <option value="default">Réglage général / règle héritée</option>
                   <option value="overlay">Aperçu intégré</option>
                   <option value="compact">Fenêtre compacte</option>
-                  <option value="split">Vue partagée native</option>
                   <option value="blocked">Désactivé</option>
                 </select>
               </label>
@@ -434,14 +423,13 @@
       </div>
       </section>
       <div class="peek-actions">
-        ${peekIconButton("peek-settings-button", "settings", "Paramètres", "Paramètres")}
+        ${peekIconButton("peek-settings-button", "settings", "Paramètres de l’aperçu", "Paramètres de l’aperçu")}
         ${peekIconButton("peek-back", "back", "Page précédente", "Page précédente")}
         ${peekIconButton("peek-forward", "forward", "Page suivante", "Page suivante")}
         ${peekIconButton("peek-refresh", "refresh", "Actualiser", "Actualiser")}
         ${peekIconButton("peek-copy", "copy", "Copier l'URL", "Copier l'URL")}
         ${peekIconButton("peek-pin", "pin", "Épingler l'aperçu", "Épingler l'aperçu")}
         ${peekIconButton("peek-popup", "popup", "Fenêtre compacte", "Fenêtre compacte")}
-        ${peekIconButton("peek-split", "split", "Ouvrir à côté de cet onglet", "Ouvrir en vue partagée")}
         ${peekIconButton("peek-open", "external", "Nouvel onglet", "Nouvel onglet")}
         ${peekIconButton("peek-close", "close", "Fermer", "Fermer")}
       </div>
@@ -482,7 +470,6 @@
       }
     });
     STATE.openButton.addEventListener("click", openCurrentInTab);
-    root.querySelector(".peek-split").addEventListener("click", () => openUrlInSplitView(STATE.currentUrl, true));
     STATE.helpOpenButton.addEventListener("click", openCurrentInTab);
     root.querySelector(".peek-help-retry").addEventListener("click", refreshPreview);
     STATE.popupButton.addEventListener("click", () => openCurrentInPopup(true));
@@ -611,10 +598,6 @@
       return;
     }
     const domainRule = getDomainRule(url.hostname, STATE.settings);
-    if (domainRule?.mode === "split" || (!domainRule && STATE.settings.openMode === "split")) {
-      openUrlInSplitView(url.href);
-      return;
-    }
     if (domainRule?.mode !== "overlay" && (domainRule?.mode === "compact" || STATE.settings.openMode === "compact" || shouldAutoCompact(url, STATE.settings))) {
       STATE.currentUrl = url.href;
       openUrlInPopup(url.href, false);
@@ -1121,22 +1104,6 @@
     showPreviewNotice.timer = window.setTimeout(() => notice.remove(), 8000);
   }
 
-  function openUrlInSplitView(url, closeAfterOpen = false) {
-    if (!url) return;
-    const failed = "Impossible d’ouvrir la vue partagée. Rechargez l’extension et la page, puis réessayez.";
-    try {
-      chrome.runtime.sendMessage({ type: "OPEN_URL_IN_SPLIT_VIEW", url }, response => {
-        if (chrome.runtime.lastError || !response?.ok) {
-          showPreviewNotice(response?.error || failed);
-          return;
-        }
-        if (closeAfterOpen) closePreview();
-      });
-    } catch {
-      showPreviewNotice(failed);
-    }
-  }
-
   function openCurrentInTab() {
     if (!STATE.currentUrl) {
       return;
@@ -1169,6 +1136,7 @@
   }
 
   function openUrlInPopup(url, closeAfterOpen) {
+    const failed = () => showPreviewNotice("Impossible d’ouvrir la fenêtre compacte. Rechargez cette page, puis réessayez.");
     const launch = () => {
       const payload = {
         type: "OPEN_COMPACT_WINDOW",
@@ -1192,18 +1160,26 @@
         return;
       }
 
-      chrome.runtime.sendMessage(payload, response => {
-        if (chrome.runtime.lastError || !response?.ok) {
-          chrome.runtime.sendMessage({ type: "OPEN_URL_IN_TAB", url }, fallback => {
-            if (chrome.runtime.lastError || !fallback?.ok) {
-              window.open(url, "_blank", "noopener,noreferrer");
+      try {
+        chrome.runtime.sendMessage(payload, response => {
+          if (chrome.runtime.lastError || !response?.ok) {
+            try {
+              chrome.runtime.sendMessage({ type: "OPEN_URL_IN_TAB", url }, fallback => {
+                if (chrome.runtime.lastError || !fallback?.ok) {
+                  window.open(url, "_blank", "noopener,noreferrer");
+                }
+              });
+            } catch {
+              failed();
             }
-          });
-        }
-        if (closeAfterOpen) {
-          closePreview();
-        }
-      });
+          }
+          if (closeAfterOpen) {
+            closePreview();
+          }
+        });
+      } catch {
+        failed();
+      }
     };
 
     if (STATE.root?.classList.contains("peek-visible") && getAnimationMs() > 0) {
@@ -1233,126 +1209,6 @@
     if (STATE.root.classList.contains("peek-visible")) {
       window.setTimeout(() => applyOverlayPositionOnly(), 0);
     }
-  }
-
-  function ensureCompactMenu() {
-    if (window.top !== window.self) {
-      return null;
-    }
-    if (STATE.compactMenu) {
-      return STATE.compactMenu;
-    }
-
-    const menu = document.createElement("div");
-    menu.id = COMPACT_MENU_ID;
-    menu.innerHTML = `
-      <form class="peek-compact-settings">
-        <label>
-          <span>Mode</span>
-          <select name="openMode">
-            <option value="overlay">Aperçu intégré</option>
-            <option value="compact">Fenêtre compacte</option>
-                <option value="split">Vue partagée (Split View)</option>
-          </select>
-        </label>
-        <label>
-          <span>Taille</span>
-          <select name="size">
-            <option value="relative">75 % du navigateur</option>
-            <option value="small">Petite</option>
-            <option value="medium">Moyenne</option>
-            <option value="large">Grande</option>
-            <option value="full">Plein écran</option>
-            <option value="custom">Personnalisée</option>
-          </select>
-        </label>
-        <label>
-          <span>Position</span>
-          <select name="position">
-            <option value="topRight">En haut à droite</option>
-            <option value="bottomRight">En bas à droite</option>
-            <option value="topLeft">En haut à gauche</option>
-            <option value="bottomLeft">En bas à gauche</option>
-            <option value="center">Centre</option>
-            <option value="custom">Personnalisée</option>
-          </select>
-        </label>
-        <label>
-          <span>Thème</span>
-          <select name="theme">
-              <option value="catppuccin">Catppuccin</option>
-              <option value="nordic">Nordic</option>
-              <option value="nord">Nord</option>
-              <option value="gruvbox">Gruvbox</option>
-              <option value="tokyoNight">Tokyo Night</option>
-              <option value="dracula">Dracula</option>
-              <option value="everforest">Everforest</option>
-              <option value="custom">Personnalisé</option>
-            </select>
-        </label>
-        <label class="peek-compact-check">
-          <input type="checkbox" name="closeWithEsc">
-          <span>Fermer avec Échap</span>
-        </label>
-      </form>
-      <div class="peek-compact-actions">
-        ${peekIconButton("peek-compact-settings-button", "settings", "Paramètres", "Paramètres")}
-        ${peekIconButton("peek-compact-open", "external", "Nouvel onglet", "Nouvel onglet")}
-        ${peekIconButton("peek-compact-close", "close", "Fermer la fenêtre", "Fermer la fenêtre")}
-      </div>
-    `;
-
-    document.documentElement.appendChild(menu);
-    STATE.compactMenu = menu;
-    STATE.compactSettings = menu.querySelector(".peek-compact-settings");
-    STATE.compactSettingsButton = menu.querySelector(".peek-compact-settings-button");
-
-    STATE.compactSettingsButton.addEventListener("click", () => {
-      const isOpen = menu.classList.toggle("peek-compact-settings-open");
-      STATE.compactSettingsButton.setAttribute("aria-expanded", String(isOpen));
-    });
-    menu.querySelector(".peek-compact-open").addEventListener("click", () => {
-      window.open(window.location.href, "_blank", "noopener,noreferrer");
-    });
-    menu.querySelector(".peek-compact-close").addEventListener("click", requestCompactWindowClose);
-    STATE.compactSettings.addEventListener("change", handleCompactSettingsChange);
-
-    applyCompactMenuSettings();
-    syncCompactControls();
-    return menu;
-  }
-
-  function applyCompactMenuSettings() {
-    if (!STATE.compactMenu) {
-      return;
-    }
-    STATE.compactMenu.dataset.theme = STATE.settings.theme;
-    applyPeekTheme(STATE.compactMenu, STATE.settings.theme, STATE.settings);
-  }
-
-  function syncCompactControls() {
-    if (!STATE.compactSettings) {
-      return;
-    }
-    STATE.compactSettings.elements.openMode.value = STATE.settings.openMode;
-    STATE.compactSettings.elements.size.value = STATE.settings.size;
-    STATE.compactSettings.elements.position.value = STATE.settings.position;
-    populatePeekSavedThemes(STATE.compactSettings.elements.theme, STATE.settings);
-    STATE.compactSettings.elements.theme.value = STATE.settings.theme;
-    STATE.compactSettings.elements.closeWithEsc.checked = STATE.settings.closeWithEsc;
-  }
-
-  function handleCompactSettingsChange(event) {
-    const field = event.target;
-    if (!Object.hasOwn(PEEK_DEFAULT_SETTINGS, field.name) || (!(field instanceof HTMLInputElement) && !(field instanceof HTMLSelectElement))) {
-      return;
-    }
-    STATE.settings = {
-      ...STATE.settings,
-      [field.name]: field.type === "checkbox" ? field.checked : field.value
-    };
-    applyCompactMenuSettings();
-    saveSettings(STATE.settings);
   }
 
   function shouldOpenWithModifier(event) {
@@ -1654,7 +1510,7 @@
         STATE.settingsButton?.setAttribute("aria-expanded", "false");
         return;
       }
-      if (STATE.compactMenu && !STATE.root?.classList.contains("peek-visible")) {
+      if (STATE.compactWindowId != null && !STATE.root?.classList.contains("peek-visible")) {
         requestCompactWindowClose();
         return;
       }

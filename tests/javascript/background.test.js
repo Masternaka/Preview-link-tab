@@ -215,6 +215,35 @@ test('deux ouvertures simultanées restent reconnues après redémarrage du work
   assert.equal(await restarted.api.isCompactWindow(99), false);
 });
 
+test('une page prête retrouve sa fenêtre compacte après redirection et redémarrage du worker', async () => {
+  for (const firefox of [false, true]) {
+    const storage = storageHarness();
+    const worker = loadWorker(storage, { firefox });
+    await worker.api.openCompactWindow(request, { tab: { windowId: 7, incognito: true } });
+    // No activation push is delivered to the new document. Session storage is
+    // the sole source of truth in the restarted worker, including private tabs.
+    const restarted = loadWorker(storage, { firefox });
+    const response = await new Promise(resolve => {
+      assert.equal(restarted.chrome.runtime.onMessage.listener(
+        { type: 'GET_COMPACT_CONTEXT' }, { tab: { id: 100, windowId: 10, incognito: true }, frameId: 0 }, resolve
+      ), true);
+    });
+    assert.equal(response.ok, true);
+    assert.equal(response.windowId, 10);
+  }
+});
+
+test('le contexte compact ignore les identifiants fournis par le message et les sous-frames', async () => {
+  const worker = loadWorker(storageHarness({ 10: 100 }));
+  for (const sender of [{}, { tab: { id: 1, windowId: 7 }, frameId: 0 }, { tab: { id: 100, windowId: 10 }, frameId: 3 }]) {
+    const response = await new Promise(resolve => worker.chrome.runtime.onMessage.listener(
+      { type: 'GET_COMPACT_CONTEXT', windowId: 10, tabId: 100 }, sender, resolve
+    ));
+    assert.equal(response.ok, true);
+    assert.equal(response.windowId, null);
+  }
+});
+
 test('suppression et ajout simultanés ne perdent aucune mise à jour', async () => {
   const storage = storageHarness({ 1: 101, 2: 202 });
   const { api } = loadWorker(storage);
@@ -278,19 +307,6 @@ test('la suppression par fenêtre ou onglet nettoie les deux caches', async () =
   assert.equal(await api.isCompactTab(110), false);
 });
 
-test('la vue partagée ouvre le lien avec l’onglet émetteur dans sa fenêtre', async () => {
-  const { api, chrome } = loadWorker(storageHarness());
-  chrome.tabs.createSplit = async () => {};
-  chrome.tabs.get = async id => ({ id, windowId: 7, splitViewId: -1 });
-  let created;
-  chrome.tabs.create = async options => { created = options; return { id: 123 }; };
-  const result = await api.openUrlInSplitView('https://example.com/', { tab: { id: 42 } });
-  assert.equal(result.id, 123);
-  assert.deepEqual(JSON.parse(JSON.stringify(created)), {
-    url: 'https://example.com/', splitWithTabId: 42, windowId: 7, active: true
-  });
-});
-
 test('ouvrir dans un onglet reste dans la fenêtre privée de l’onglet émetteur', async () => {
   const { chrome } = loadWorker(storageHarness());
   const created = [];
@@ -304,31 +320,15 @@ test('ouvrir dans un onglet reste dans la fenêtre privée de l’onglet émette
   assert.equal(created[1].windowId, undefined);
 });
 
-test('une vue partagée indisponible ou déjà active ne crée pas d’onglet supplémentaire', async () => {
-  const { api, chrome } = loadWorker(storageHarness());
-  let creations = 0;
-  chrome.tabs.create = async () => { creations++; };
-  await assert.rejects(api.openUrlInSplitView('https://example.com/', { tab: { id: 1 } }), /Ce navigateur/);
-  chrome.tabs.createSplit = async () => {};
-  await assert.rejects(api.openUrlInSplitView('javascript:alert(1)', { tab: { id: 1 } }), /Ce lien/);
-  await assert.rejects(api.openUrlInSplitView('https://example.com/', {}), /depuis un onglet/);
-  chrome.tabs.get = async () => ({ id: 1, splitViewId: 0 });
-  await assert.rejects(api.openUrlInSplitView('https://example.com/', { tab: { id: 1 } }), /déjà/);
-  assert.equal(creations, 0);
-});
-
-test('un échec de création split est transmis au script sans ouverture de secours', async () => {
+test('le worker ignore une ancienne demande de vue partagée sans ouvrir d’onglet', () => {
   const { chrome } = loadWorker(storageHarness());
-  chrome.tabs.createSplit = async () => {};
-  chrome.tabs.get = async () => ({ id: 1, windowId: 7, splitViewId: -1 });
-  let creations = 0;
-  chrome.tabs.create = async () => { creations++; throw new Error('not supported'); };
-  const response = await new Promise(resolve => {
-    assert.equal(chrome.runtime.onMessage.listener({ type: 'OPEN_URL_IN_SPLIT_VIEW', url: 'https://example.com/' }, { tab: { id: 1 } }, resolve), true);
-  });
-  assert.equal(response.ok, false);
-  assert.match(response.error, /Impossible/);
-  assert.equal(creations, 1);
+  chrome.tabs.create = async () => assert.fail('aucun onglet pour une fonction retirée');
+  chrome.tabs.createSplit = async () => assert.fail('aucun appel natif pour une fonction retirée');
+  const handled = chrome.runtime.onMessage.listener(
+    { type: 'OPEN_URL_IN_SPLIT_VIEW', url: 'https://example.com/' },
+    { tab: { id: 42 } }, () => assert.fail('aucune réussite pour ce message retiré')
+  );
+  assert.equal(handled, false);
 });
 
 function siteHarness(options) {
@@ -411,11 +411,11 @@ test('les règles rapides sont fusionnées avec les dernières règles enregistr
   const { message, local } = siteHarness();
   await Promise.all([
     message({ type: 'SET_DOMAIN_RULE', url: 'https://example.com/path', mode: 'compact' }),
-    message({ type: 'SET_DOMAIN_RULE', url: 'https://sub.example.com/', mode: 'split' })
+    message({ type: 'SET_DOMAIN_RULE', url: 'https://sub.example.com/', mode: 'overlay' })
   ]);
   assert.match(local.domainRules, /other.example = overlay/);
   assert.match(local.domainRules, /example.com = compact/);
-  assert.match(local.domainRules, /sub.example.com = split/);
+  assert.match(local.domainRules, /sub.example.com = overlay/);
   await message({ type: 'SET_DOMAIN_RULE', url: 'https://sub.example.com/', mode: 'default' });
   assert.doesNotMatch(local.domainRules, /sub.example/);
   assert.equal((await message({ type: 'SET_DOMAIN_RULE', url: 'javascript:alert(1)', mode: 'blocked' })).ok, false);
@@ -469,11 +469,7 @@ test('Firefox : le menu contextuel et la commande utilisent les API à promesses
   api.commands.onCommand.listener('preview-link');
   await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(sent.map(item => item.type), ['PREVIEW_URL', 'PREVIEW_HOVERED_LINK']);
-  const response = await new Promise(resolve => {
-    api.runtime.onMessage.listener({ type: 'OPEN_URL_IN_SPLIT_VIEW', url: request.url }, { tab: { id: 42 } }, resolve);
-  });
-  assert.equal(response.ok, false);
-  assert.match(response.error, /vue partagée native/);
+
 });
 
 test('Firefox : pause de site, règles et stockage de session après redémarrage', async () => {
@@ -547,10 +543,10 @@ test('deux règles simultanées sur des domaines différents sont conservées', 
   const { local, message } = mutationHarness();
   await Promise.all([
     message({ type: 'MUTATE_SETTINGS', domainRules: [{ domain: 'one.example', mode: 'compact', expected: null }] }),
-    message({ type: 'MUTATE_SETTINGS', domainRules: [{ domain: 'two.example', mode: 'split', expected: null }] })
+    message({ type: 'MUTATE_SETTINGS', domainRules: [{ domain: 'two.example', mode: 'overlay', expected: null }] })
   ]);
   assert.match(local.snapshot().domainRules, /one\.example = compact/);
-  assert.match(local.snapshot().domainRules, /two\.example = split/);
+  assert.match(local.snapshot().domainRules, /two\.example = overlay/);
 });
 
 test('une modification scalaire fondée sur un état ancien signale un conflit sans écraser', async () => {
@@ -566,7 +562,7 @@ test('une modification scalaire fondée sur un état ancien signale un conflit s
 test('une règle modifiée ailleurs produit un conflit de domaine', async () => {
   const { local, message } = mutationHarness();
   await message({ type: 'MUTATE_SETTINGS', domainRules: [{ domain: 'example.com', mode: 'compact', expected: null }] });
-  const conflict = await message({ type: 'MUTATE_SETTINGS', domainRules: [{ domain: 'example.com', mode: 'split', expected: null }] });
+  const conflict = await message({ type: 'MUTATE_SETTINGS', domainRules: [{ domain: 'example.com', mode: 'overlay', expected: null }] });
   assert.equal(conflict.conflict.kind, 'domainRule');
   assert.match(local.snapshot().domainRules, /example\.com = compact/);
 });
@@ -606,10 +602,10 @@ test('après redémarrage du worker, une mutation repart de l’état réellemen
   const first = mutationHarness();
   await first.message({ type: 'MUTATE_SETTINGS', scalars: [{ key: 'theme', value: 'nord', expected: 'catppuccin' }] });
   const restarted = mutationHarness(undefined, first.local);
-  const result = await restarted.message({ type: 'MUTATE_SETTINGS', scalars: [{ key: 'openMode', value: 'split', expected: 'overlay' }] });
+  const result = await restarted.message({ type: 'MUTATE_SETTINGS', scalars: [{ key: 'openMode', value: 'compact', expected: 'overlay' }] });
   assert.equal(result.ok, true);
   assert.equal(first.local.snapshot().theme, 'nord');
-  assert.equal(first.local.snapshot().openMode, 'split');
+  assert.equal(first.local.snapshot().openMode, 'compact');
 });
 
 test('un import ou une réinitialisation remplace l’état dans la même file', async () => {

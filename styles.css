@@ -1,3 +1,15 @@
+/* Lock only while the integrated preview is visible. Removing peek-visible
+   restores the site's own overflow rules without changing its inline styles. */
+html:has(> #peek-preview-extension-root.peek-visible) {
+  overflow: hidden !important;
+  scrollbar-gutter: stable;
+}
+
+#peek-preview-extension-root .peek-backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
 #peek-preview-extension-root {
   --peek-accent: #2563eb;
   --peek-backdrop: rgba(14, 18, 24, 0.32);
@@ -107,6 +119,7 @@
   flex-direction: column;
   max-height: calc(100vh - 48px);
   overflow: hidden;
+  overscroll-behavior: contain;
   padding: var(--peek-frame-padding);
   position: fixed;
   right: 32px;
@@ -382,6 +395,8 @@
   flex-direction: column;
   flex: 0 0 auto;
   gap: 4px;
+  overflow: hidden;
+  overscroll-behavior: contain;
   padding: 6px;
   position: fixed;
   z-index: 2147483646;
@@ -736,126 +751,6 @@
 
 #peek-preview-extension-root .peek-help-popup:hover {
   filter: brightness(0.95);
-}
-
-#peek-compact-menu-root {
-  --peek-accent: #2563eb;
-  --peek-bg: #f8fafc;
-  --peek-border: rgba(15, 23, 42, 0.18);
-  --peek-button-bg: #f1f5f9;
-  --peek-button-hover: #e2e8f0;
-  --peek-header-bg: #ffffff;
-  --peek-muted: #64748b;
-  --peek-text: #0f172a;
-  color-scheme: light;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  left: 0;
-  pointer-events: none;
-  position: fixed;
-  top: 50%;
-  transform: translate(calc(-100% - 10px), -50%);
-  z-index: 2147483647;
-}
-
-#peek-compact-menu-root .peek-compact-actions,
-#peek-compact-menu-root .peek-compact-settings {
-  pointer-events: auto;
-}
-
-#peek-compact-menu-root,
-#peek-compact-menu-root * {
-  box-sizing: border-box;
-}
-
-#peek-compact-menu-root .peek-compact-actions {
-  align-items: center;
-  backdrop-filter: blur(16px);
-  background: color-mix(in srgb, var(--peek-header-bg) 88%, transparent);
-  border: 1px solid var(--peek-border);
-  border-radius: 999px;
-  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.28);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 6px;
-  position: relative;
-}
-
-#peek-compact-menu-root .peek-icon-btn svg {
-  display: block;
-  pointer-events: none;
-}
-
-#peek-compact-menu-root button {
-  align-items: center;
-  appearance: none;
-  background: var(--peek-button-bg);
-  border: 1px solid var(--peek-border);
-  border-radius: 10px;
-  color: var(--peek-text);
-  cursor: pointer;
-  display: inline-flex;
-  font: inherit;
-  height: 34px;
-  justify-content: center;
-  line-height: 1;
-  margin: 0;
-  padding: 0;
-  transition: background 140ms ease;
-  width: 34px;
-}
-
-#peek-compact-menu-root button:hover {
-  background: var(--peek-button-hover);
-}
-
-#peek-compact-menu-root .peek-compact-settings {
-  background: var(--peek-header-bg);
-  border: 1px solid var(--peek-border);
-  border-radius: 12px;
-  box-shadow: 0 20px 56px rgba(15, 23, 42, 0.28);
-  color: var(--peek-text);
-  display: none;
-  gap: 8px;
-  left: 0;
-  padding: 10px;
-  position: absolute;
-  top: 0;
-  transform: translate(calc(-100% - 12px), 0);
-  width: 220px;
-}
-
-#peek-compact-menu-root.peek-compact-settings-open .peek-compact-settings {
-  display: grid;
-}
-
-#peek-compact-menu-root label {
-  color: var(--peek-muted);
-  display: grid;
-  font-size: 12px;
-  gap: 4px;
-}
-
-#peek-compact-menu-root select {
-  appearance: none;
-  background: var(--peek-bg);
-  border: 1px solid var(--peek-border);
-  border-radius: 6px;
-  color: var(--peek-text);
-  font: inherit;
-  height: 30px;
-  padding: 0 8px;
-  width: 100%;
-}
-
-#peek-compact-menu-root .peek-compact-check {
-  align-items: center;
-  grid-template-columns: 15px 1fr;
-}
-
-#peek-compact-menu-root input {
-  accent-color: var(--peek-accent);
-  margin: 0;
 }
 
 /* Show the blocked-site message when the iframe couldn't load the page */

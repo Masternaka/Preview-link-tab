@@ -38,7 +38,7 @@ const PEEK_DEFAULT_SETTINGS = {
 };
 
 const PEEK_SETTING_OPTIONS = {
-  openMode: ["overlay", "compact", "split"],
+  openMode: ["overlay", "compact"],
   size: ["relative", "small", "medium", "large", "full", "custom"],
   position: ["topRight", "bottomRight", "topLeft", "bottomLeft", "center", "custom"],
   trigger: ["alt", "meta", "shift"],
@@ -253,6 +253,7 @@ function cleanPeekSettings(settings) {
   }
 
   next.savedThemes = cleanPeekSavedThemes(next.savedThemes);
+  if (next.openMode === "split") next.openMode = "overlay";
   for (const [key, values] of Object.entries(PEEK_SETTING_OPTIONS)) {
     if (key === "theme" && next.savedThemes.some(item => `saved:${item.id}` === next.theme)) continue;
     if (!values.includes(next[key])) {
@@ -267,7 +268,7 @@ function cleanPeekSettings(settings) {
   next.middleClick = cleanBoolean(next.middleClick, PEEK_DEFAULT_SETTINGS.middleClick);
   next.autoCompactFallback = cleanBoolean(next.autoCompactFallback, PEEK_DEFAULT_SETTINGS.autoCompactFallback);
   next.domainList = typeof next.domainList === "string" ? next.domainList : PEEK_DEFAULT_SETTINGS.domainList;
-  next.domainRules = typeof next.domainRules === "string" ? next.domainRules : PEEK_DEFAULT_SETTINGS.domainRules;
+  next.domainRules = migratePeekDomainRules(typeof next.domainRules === "string" ? next.domainRules : PEEK_DEFAULT_SETTINGS.domainRules);
   next.compactFallbackDomains = typeof next.compactFallbackDomains === "string" ? next.compactFallbackDomains : PEEK_DEFAULT_SETTINGS.compactFallbackDomains;
   next.backdropOpacity = clampNumber(next.backdropOpacity, 0, 100, PEEK_DEFAULT_SETTINGS.backdropOpacity);
   next.backdropBlur = clampNumber(next.backdropBlur, 0, 100, PEEK_DEFAULT_SETTINGS.backdropBlur);
@@ -365,15 +366,21 @@ function normalizeDomainEntry(value) {
   }
 }
 
+function migratePeekDomainRules(value) {
+  // Preserve old site choices explicitly instead of falling back to a possibly
+  // different global mode. Keep all unrelated text and formatting intact.
+  return value.replace(/((?:^|[\n,;])\s*[^\n,;]+?(?:=|:)\s*)split(?=\s*(?:$|[\n,;]))/gi, "$1overlay");
+}
+
 function parseDomainRules(value) {
   if (typeof value !== "string" || !value.trim()) {
     return [];
   }
-  return value
+  return migratePeekDomainRules(value)
     .split(/[\n,;]+/)
     .map(line => line.trim())
     .map(line => {
-      const match = line.match(/^(.+?)\s*(?:=|:)\s*(overlay|compact|split|blocked)\s*$/i);
+      const match = line.match(/^(.+?)\s*(?:=|:)\s*(overlay|compact|blocked)\s*$/i);
       if (!match) {
         return null;
       }
@@ -386,7 +393,7 @@ function parseDomainRules(value) {
 
 function setPeekDomainRule(value, hostname, mode) {
   const domain = normalizeDomainEntry(hostname);
-  if (!domain || !["default", "overlay", "compact", "split", "blocked"].includes(mode)) {
+  if (!domain || !["default", "overlay", "compact", "blocked"].includes(mode)) {
     throw new Error("Règle de site invalide.");
   }
   const lines = (typeof value === "string" ? value : "").split(/[\n,;]+/).filter(line => {
@@ -664,7 +671,7 @@ function applySettingsMutation(current, message) {
     if (!domain || domain.length > 253) {
       throw new Error("Domaine de règle invalide.");
     }
-    if (!["default", "overlay", "compact", "split", "blocked"].includes(operation.mode)) {
+    if (!["default", "overlay", "compact", "blocked"].includes(operation.mode)) {
       throw new Error("Mode de règle invalide.");
     }
     const actual = peekMutationDomainRuleMode(current.domainRules, domain);

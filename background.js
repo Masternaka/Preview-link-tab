@@ -104,6 +104,19 @@ extensionApi.commands.onCommand.addListener(command => {
 });
 
 extensionApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === "GET_COMPACT_CONTEXT") {
+    // Restore compact-window keyboard actions after navigation.
+    // Only browser-supplied sender data can identify the compact window.
+    const windowId = sender.tab?.windowId;
+    if (windowId == null || (sender.frameId != null && sender.frameId !== 0)) {
+      sendResponse({ ok: true, windowId: null });
+      return true;
+    }
+    isCompactWindow(windowId)
+      .then(compact => sendResponse({ ok: true, windowId: compact ? windowId : null }))
+      .catch(() => sendResponse({ ok: false }));
+    return true;
+  }
   if (["GET_READING_POSITION", "SAVE_READING_POSITION"].includes(message?.type)) {
     const operation = readingPositionsQueue.then(() => handleReadingPosition(message, sender));
     readingPositionsQueue = operation.catch(() => {});
@@ -127,12 +140,6 @@ extensionApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "MUTATE_SETTINGS") {
     const operation = queueSettingsMutation(() => mutateSettings(message));
     operation.then(result => sendResponse({ ok: true, ...result }))
-      .catch(error => sendResponse({ ok: false, error: error.message }));
-    return true;
-  }
-  if (message?.type === "OPEN_URL_IN_SPLIT_VIEW") {
-    openUrlInSplitView(message.url, sender)
-      .then(tab => sendResponse({ ok: true, tabId: tab.id }))
       .catch(error => sendResponse({ ok: false, error: error.message }));
     return true;
   }
@@ -167,27 +174,6 @@ extensionApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return false;
 });
 
-async function openUrlInSplitView(url, sender) {
-  if (!isHttpUrl(url)) {
-    throw new Error("Ce lien ne peut pas être ouvert en vue partagée.");
-  }
-  if (typeof extensionApi.tabs.createSplit !== "function") {
-    throw new Error("Ce navigateur ne permet pas encore aux extensions d’ouvrir une vue partagée native. Ouvrez le lien dans un nouvel onglet, puis utilisez la commande « Vue partagée / Split View » du menu contextuel des onglets, si elle est disponible.");
-  }
-  if (sender.tab?.id == null) {
-    throw new Error("Ouvrez la vue partagée depuis un onglet.");
-  }
-  const source = await extensionApi.tabs.get(sender.tab.id);
-  if (source.splitViewId != null && source.splitViewId !== -1) {
-    throw new Error("Cet onglet est déjà en vue partagée. Séparez les onglets avant de réessayer.");
-  }
-  try {
-    return await extensionApi.tabs.create({ url, splitWithTabId: source.id, windowId: source.windowId, active: true });
-  } catch {
-    throw new Error("Impossible d’ouvrir la vue partagée dans cette fenêtre. Réessayez depuis un onglet d’une fenêtre normale.");
-  }
-}
-
 async function openCompactWindow(message, sender) {
   const sourceWindow = sender.tab?.windowId
     ? await extensionApi.windows.get(sender.tab.windowId)
@@ -216,7 +202,6 @@ async function openCompactWindow(message, sender) {
   if (tabId) {
     compactTabIds.add(tabId);
     await rememberCompactWindow(windowId, tabId);
-    enableCompactMenu(tabId, windowId);
   }
   return { windowId, tabId };
 }
@@ -241,14 +226,6 @@ extensionApi.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.url || changeInfo.status === "complete") {
     updatePauseBadge(tab).catch(() => {});
   }
-  if (changeInfo.status !== "complete") {
-    return;
-  }
-  isCompactTab(tabId).then(isCompact => {
-    if (isCompact) {
-      enableCompactMenu(tabId, tab.windowId);
-    }
-  }).catch(() => {});
 });
 
 extensionApi.tabs.onRemoved.addListener(tabId => {
@@ -332,15 +309,6 @@ async function forgetCompactTab(tabId) {
       compactTabIds.delete(tabId);
     }
   });
-}
-
-function enableCompactMenu(tabId, windowId) {
-  extensionApi.tabs
-    .sendMessage(tabId, {
-      type: "ENABLE_COMPACT_MENU",
-      windowId: windowId ?? null
-    })
-    .catch(() => {});
 }
 
 function isHttpUrl(value) {

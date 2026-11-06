@@ -1,5 +1,195 @@
 # Vérifications
 
+## Révision du code — 6 novembre 2026
+
+- `tools/local-runtime/node --test` avec Node.js `24.10.0` : 171 tests réussis,
+  aucun échec ni test ignoré. Les tests de build et d’archives utilisent leurs
+  sorties temporaires.
+- Huit scénarios ciblés exécutés avec les harnais Node.js/VM et des API
+  simulées : six défauts et le comportement de liste blanche vide reproduits.
+  Voir les preuves, références de code et corrections suggérées dans la
+  [révision du code](revue-code-2026-11-06.md).
+- `git diff --check` et contrôle des liens documentaires ajoutés réussis.
+- Aucun correctif applicatif appliqué. Aucun contrôle Playwright, lint Firefox,
+  essai d’extension chargée, CI distante ou publication effectué pour cette revue.
+
+Les sections suivantes conservent leurs résultats antérieurs.
+
+## Icône des paramètres de l’aperçu — 6 novembre 2026
+
+Remplacement du pictogramme ressemblant à un soleil par une roue dentée SVG.
+L’infobulle et le nom accessible indiquent « Paramètres de l’aperçu ».
+Le contrôle Chrome avec API simulées vérifie l’ouverture et la fermeture des
+paramètres au clic, ainsi que `aria-expanded`. Capture inspectée dans
+`/tmp/preview-settings-gear/preview-rounded.png`. Les 171 tests Node.js et le
+contrôle navigateur ciblé `QA_FLOW=tab` réussissent; builds et ZIP Chrome/Firefox
+actualisés par `npm run package`, `git diff --check` réussi. Aucun nouvel essai
+réel dans Vivaldi ou Firefox pour cette icône, ni commit, push ou publication.
+
+## Retrait de la vue partagée — 6 novembre 2026
+
+À la demande de l’utilisateur, retrait du bouton, des modes et règles de vue
+partagée, de l’icône SVG correspondante, du message et du code du worker.
+L’aperçu intégré et les fenêtres compactes restent disponibles. Les recherches
+et essais antérieurs sont conservés dans le
+[diagnostic archivé](archives/diagnostic-vue-partagee-2026-11-06.md).
+
+Les anciens réglages `openMode: "split"` et règles de domaine `split` sont
+convertis en `overlay` lors de la lecture ou de l’import. Les autres réglages,
+thèmes, règles et textes sont préservés. Les nouvelles règles `split` sont
+refusées, et le worker ne traite plus les anciennes demandes de vue partagée.
+Les tests de concurrence utilisent maintenant les positions ou les modes
+restants pour conserver leurs scénarios de conflit.
+
+Le contrôle navigateur vérifie l’absence du bouton et des options dans l’aperçu
+et les paramètres, puis les parcours conservés : fermeture, défilement limité
+à l’aperçu, reprise de lecture, redimensionnement et paramètres concurrents.
+Les API sont simulées dans Chrome; les essais avec extension réellement
+chargée dans Vivaldi et Firefox restent à faire pour ce retrait.
+
+Résultats : 171 tests Node.js réussis sous Node.js 24.10.0, contrôle Chrome
+complet réussi, builds et ZIP Chrome/Firefox `1.0.1` régénérés,
+`git diff --check` réussi. Capture sans bouton de vue partagée inspectée dans
+`/tmp/preview-without-split/preview-rounded.png`, hors dépôt. Aucun commit,
+push, changement de version ni publication.
+
+## Défilement contenu dans l’aperçu — 6 novembre 2026
+
+Le comportement demandé est le blocage de la page principale pendant toute
+l’ouverture de l’aperçu intégré, même lorsque le curseur est en dehors ou que
+l’aperçu est épinglé. Le premier correctif, qui autorisait le défilement en
+dehors du panneau, est remplacé à la suite de la précision de l’utilisateur.
+
+`styles.css` contient les gestes dans le panneau, sa barre et le fond extérieur.
+Une règle `html:has(> #peek-preview-extension-root.peek-visible)` applique
+`overflow: hidden` et conserve une gouttière de scrollbar stable pendant
+l’ouverture. La fermeture retire la condition : les styles du site reprennent
+sans modifier ses attributs en ligne. Le corps du document n’est pas modifié,
+pour éviter un changement de mise en page et de position lié aux marges.
+Le verrouillage reste actif pendant l’animation de fermeture et ne concerne
+pas les fenêtres compactes.
+
+Le contrôle navigateur utilise une page principale longue et une iframe d’une
+autre origine. Il vérifie le défilement de l’article, ses limites haute et basse,
+les gestes sur l’en-tête et la barre, puis la molette hors du panneau épinglé et
+la touche Page suivante. La page principale conserve sa position à 300 px
+pendant ces gestes et à la fermeture; elle défile de nouveau après fermeture.
+Le parcours continue avec la reprise de lecture de l’article et le redimensionnement.
+Les contrôles utilisent Chrome installé et des API d’extension simulées;
+Vivaldi et Firefox avec extension réellement chargée restent à vérifier.
+
+Le navigateur intégré reste inaccessible dans cette session; le contrôle
+Playwright prévu par le dépôt est utilisé. Le confinement sur les conteneurs
+sans débordement peut dépendre de la version du navigateur, comme le précise
+le [guide Chrome](https://developer.chrome.com/docs/modern-web-guidance/guides/ui-behaviors/prevent-page-scroll-under-modal-dialog).
+
+Résultats : 174 tests Node.js réussis sous Node.js 24.10.0, contrôle Chrome
+complet réussi (verrouillage à la molette et au clavier, restauration après
+fermeture, article, navigation, reprise de lecture, tailles et paramètres),
+builds et ZIP Chrome/Firefox `1.0.1` régénérés, `git diff --check` réussi.
+Captures dans `/tmp/preview-host-scroll-locked`, hors dépôt. Aucun commit,
+push, changement de version ni publication.
+
+## Retrait de la barre compacte — 6 novembre 2026
+
+À la demande de l’utilisateur, suppression du menu compact de `content.js`,
+de ses styles et du message d’activation du worker. Le contexte compact reste
+utilisé uniquement pour les actions clavier de la fenêtre, dont Échap selon
+la préférence enregistrée. L’aperçu intégré conserve sa barre d’outils.
+
+Le contrôle navigateur vérifie l’absence de barre à 1040 × 844 et 390 × 844,
+après redirection HTTP et rechargement, puis l’envoi de la demande de fermeture
+par Échap. Le parcours existant contrôle toujours la barre de l’aperçu intégré.
+Les API de l’extension sont simulées; aucun essai réel supplémentaire dans
+Vivaldi ou Firefox n’est effectué pour ce retrait.
+
+Résultats : 174 tests Node.js réussis, contrôle Chrome complet réussi,
+builds et ZIP Chrome/Firefox `1.0.1` régénérés, `git diff --check` réussi.
+Capture sans barre inspectée dans
+`/tmp/preview-without-compact-toolbar/compact-without-toolbar.png`.
+Le test des thèmes attend désormais les deux sélecteurs conservés (paramètres
+principaux et aperçu intégré). Aucun changement de version, commit, push ou
+publication.
+
+## Historique de la barre compacte — 6 novembre 2026
+
+**Statut :** les corrections de barre décrites ci-dessous ont été remplacées
+par le retrait demandé ensuite par l’utilisateur. Elles ne décrivent plus
+l’interface courante.
+
+Signalement utilisateur : barre flottante absente dans Vivaldi, problème observé
+sur Google Actualités. Les liens passant par `news.google.com` relèvent du
+repli compact automatique de `google.com` lorsque celui-ci est activé.
+
+Le nouveau contrôle de `tests/browser/check-browser.cjs` reproduit le défaut
+sur une page locale avec Chrome : la barre compacte de 48 px commence à
+`x = -58 px`, entièrement hors écran. Après correction de `styles.css`, elle
+est ancrée à droite; ses boutons et ses paramètres sont accessibles à
+1040 × 844 et 390 × 844. Le test simule le message `ENABLE_COMPACT_MENU` et
+les API de l’extension; il ne charge pas une extension réelle et ne visite pas
+Google Actualités.
+
+Le navigateur intégré était inaccessible (outil d’exécution absent). Le
+lancement automatisé de Vivaldi 8.3.4191.30 n’a pas répondu et a été interrompu;
+les contrôles de rendu utilisent donc Chrome installé avec un profil temporaire.
+La validation réelle dans Vivaldi sur Google Actualités reste nécessaire.
+
+Résultats : 170 tests Node.js réussis sous Node.js 24.10.0, contrôle navigateur
+complet réussi (barre compacte, aperçu intégré, navigation, reprise de lecture,
+refus d’iframe et paramètres), builds Chrome/Firefox et ZIP `1.0.1` régénérés,
+`git diff --check` réussi. Les refus d’iframe journalisés appartiennent au cas
+de test prévu; aucune erreur JavaScript de page détectée. Captures inspectées
+dans `/tmp/preview-compact-fixed`, hors dépôt. Aucun changement de version,
+commit, push ou publication.
+
+### Complément après retour utilisateur : disparition après chargement
+
+La capture suivante de l’utilisateur confirme la barre visible au départ dans
+Vivaldi, puis sa disparition au chargement de l’article. Le test de navigation
+locale reproduit l’absence de barre après redirection lorsque le message
+d’activation n’est pas livré au nouveau document. Le déclenchement du worker
+sur `tabs.onUpdated` ne garantit pas que le script `document_idle` écoute déjà.
+
+`content.js` demande maintenant `GET_COMPACT_CONTEXT` dès qu’il est prêt.
+Le worker déduit la fenêtre depuis `sender.tab.windowId` et le suivi en session;
+les identifiants fournis dans le message et les demandes des sous-frames ne
+permettent pas d’activer la barre. Les paramètres compacts sont également
+resynchronisés si leur lecture initiale se termine après la création du menu.
+
+Les nouveaux tests Node.js couvrent la récupération du contexte après
+redémarrage du worker, les API Chrome/Firefox simulées, le contexte privé et le
+refus d’un contexte compact pour une fenêtre ordinaire ou une sous-frame.
+Le contrôle navigateur vérifie une redirection HTTP, puis un rechargement et
+l’ouverture des paramètres, sans renvoyer de message d’activation à la page
+d’arrivée. Il utilise Chrome et des API simulées; le second correctif reste à
+confirmer dans Vivaldi sur Google Actualités.
+
+Validation du complément : 172 tests Node.js réussis sous Node.js 24.10.0,
+contrôle navigateur complet réussi, builds et ZIP Chrome/Firefox `1.0.1`
+régénérés, `git diff --check` réussi. Capture après redirection et rechargement
+inspectée dans `/tmp/preview-compact-navigation/compact-toolbar.png`.
+Aucun commit, push, changement de version ni publication.
+
+### Erreur signalée après mise à jour
+
+La capture fournie montre `content.js:1195` et la ligne
+`customTop: STATE.settings.customTop`, mais pas le texte de l’exception. La
+cause du signalement ne peut donc pas être confirmée à partir de cette trace.
+
+Le test d’un contexte d’extension invalidé reproduit une exception non
+interceptée dans `openUrlInPopup`. Les appels d’ouverture compacte et de secours
+sont maintenant protégés contre cette exception : une notification invite à
+recharger la page. Le test couvre l’exception immédiate et celle du secours
+déclenché par une réponse différée; aucune ouverture directe n’est tentée après
+cette invalidation. La confirmation de la cause dans Vivaldi reste nécessaire.
+
+Validation de cette protection : 173 tests Node.js réussis, contrôle Chrome
+ciblé `QA_FLOW=tab` réussi (barre compacte après redirection/rechargement,
+reprise de lecture, redimensionnement et ouverture d’onglet), builds et ZIP
+Chrome/Firefox régénérés par `npm run package`, `git diff --check` réussi.
+L’invalidation est simulée dans les tests Node.js; elle n’a pas été provoquée
+dans une extension réellement chargée. Aucun commit, push ni publication.
+
 Exécuter les commandes depuis la racine du dépôt. Les résultats courants sont résumés dans [l’état du projet](etat-projet.md); les validations détaillées et leurs limites sont conservées ci-dessous.
 
 ## Tests automatisés Node.js
@@ -79,7 +269,7 @@ Charger les paquets selon [Installation](installation.md), puis relever le navig
 | Pause | Le même hôte partage sa pause dans un contexte, avec séparation normal/privé. |
 | Redimensionnement | Après réduction puis agrandissement, panneau et barre d’actions restent accessibles; tester aussi les gestes manuels et le zoom. |
 | Plusieurs paramètres | Des modifications indépendantes restent conservées; un conflit sur le même élément ne doit pas effacer un brouillon silencieusement. |
-| Vue partagée | Seule l’API native est utilisée; l’indisponibilité affiche une aide sans créer de fenêtres de remplacement. |
+| Ancienne vue partagée | Retirée le 6 novembre 2026; les anciens réglages et règles sont repris en aperçu intégré. |
 | Données et apparence | Import/export, annulation, thèmes personnels et réduction des animations restent cohérents. |
 
 Ne cocher une vérification réelle que lorsqu’elle a été effectuée. Un test avec des API simulées ne confirme ni le contexte privé réel, ni les permissions, ni le focus, ni l’exposition de l’API native.

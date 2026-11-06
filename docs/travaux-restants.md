@@ -9,6 +9,14 @@ Les tâches terminées ont été retirées. Le fonctionnement courant des améli
 
 ## Prochaines étapes conseillées
 
+**Révision du 6 novembre 2026 :** consulter le [rapport actuel](revue-code-2026-11-06.md)
+avant de choisir le prochain lot. Il confirme six défauts encore présents :
+concurrence du panneau intégré (C1), secours dans le stockage du site (C2),
+vérification de la source des règles rapides (C3), export en erreur (C4),
+règles importées en double (C5) et Échap depuis une iframe compacte (C7).
+La liste blanche vide reste une décision produit (C6). Corriger d’abord C1
+et C2; ces recommandations ne sont pas encore implémentées.
+
 1. Valider les corrections existantes et celles de la revue locale, notamment les parcours privés, le redimensionnement et les paramètres concurrents avec les extensions chargées. Le [plan initial archivé](archives/corrections-revue-2026-10-21.md) est réalisé côté code; les essais réels restants sont décrits dans [Vérifications](verifications.md).
 2. Valider la version Firefox dans le navigateur, puis vérifier les archives générées par GitHub Actions.
 3. Corriger les réglages de secours et clarifier la liste d’autorisation vide.
@@ -48,7 +56,6 @@ Ces points ont été reproduits le 1er octobre 2026 en exécutant le code avec d
 ## Vérifications complémentaires
 
 - [ ] **P1 — Chargement et navigation.** Tester une page lente, une redirection, un site refusant l’intégration et une confirmation de chargement tardive. Vérifier précédent/suivant, les liens internes et les changements d’URL sans rechargement ; Copier et Ouvrir dans un onglet doivent viser la page réellement affichée.
-- [ ] **P1 — Vue partagée native.** Tester les navigateurs ciblés, les onglets déjà en vue partagée, épinglés ou groupés, ainsi que les fenêtres privées et compactes. Vérifier qu’un échec ne crée pas d’onglet supplémentaire et que l’aide s’affiche lorsque l’API est indisponible.
 - [ ] **P1 — Fenêtres et contexte de site.** Tester les ouvertures/fermetures rapides des fenêtres compactes et le redémarrage du service worker. Vérifier aussi les paramètres depuis un onglet fermé ou une fenêtre privée, et leur placement sur plusieurs écrans.
 - [ ] **P2 — Clavier et accessibilité.** Parcourir les interfaces avec Tab et Maj + Tab, entrer/sortir de l’iframe et vérifier le retour du focus à la fermeture. Tester les champs éditables, la composition IME, les contrastes et la réduction des animations.
 - [ ] **P2 — Petits écrans et zoom.** Vérifier les huit directions de redimensionnement, les fenêtres étroites et le zoom à 125 % et 150 %. Le panneau, la miniature des paramètres et les commandes doivent rester accessibles.
@@ -63,4 +70,4 @@ Pour chaque anomalie, noter : navigateur/version, URL si partageable, réglages 
 - [ ] **P2 — Licence et stockage.** Ajouter une licence et une description claire du stockage des préférences et des connexions réalisées lors d’un aperçu.
 - [ ] **P2 — Préparation finale.** Terminer les vérifications prioritaires, documenter les limites restantes dans les guides de docs/ et vérifier que les permissions du manifeste correspondent aux fonctions conservées.
 
-**Décisions produit à conserver :** utiliser uniquement la vue partagée native selon l’API disponible ; ne pas ajouter de remplacement par deux fenêtres ou par des panneaux intégrés. Ne pas réintroduire l’ouverture automatique au survol.
+**Décisions produit à conserver :** la vue partagée est retirée depuis le 6 novembre 2026, à la demande de l’utilisateur; ne pas la réintroduire sans nouvelle demande. Ne pas réintroduire l’ouverture automatique au survol.
