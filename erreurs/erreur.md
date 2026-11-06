@@ -1,0 +1,1 @@
+- Sur vivaldi, on ne vois pas la barre d'outils
