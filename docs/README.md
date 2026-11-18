@@ -15,7 +15,7 @@ Depuis le 21 octobre 2026, les fichiers Markdown du dépôt sont la référence 
 | [Vérifications](verifications.md) | Contrôles automatiques et essais réels. |
 | [Distribution](distribution.md) | ZIP, empreintes, CI et publication. |
 | [Travaux restants](travaux-restants.md) | Priorités ouvertes et évolutions à réévaluer. |
-| [Révision du code du 6 novembre 2026](revue-code-2026-11-06.md) | Six défauts reproduits, une décision produit et recommandations; corrections non appliquées. |
+| [Révision du code du 6 novembre 2026](revue-code-2026-11-06.md) | Six défauts reproduits et une décision produit. C1 et C2 corrigés localement le 18 novembre. |
 | [AGENTS.md](../AGENTS.md) | Règles des assistants pour ce dépôt. |
 
 ## Archives des travaux réalisés

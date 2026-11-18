@@ -71,7 +71,13 @@ Les préférences persistantes et les thèmes utilisent le stockage local de l�
 
 La copie de travail présente à la réorganisation contient déjà une file de mutations des préférences dans le worker. Les fenêtres de paramètres transmettent des modifications et gèrent un état de référence, des brouillons et des conflits. Les corrections de la [revue locale](archives/revue-locale-2026-10-21.md) séparent la dernière version stockée des références des entrées modifiées localement. Une seule mutation de préférences ou de règle rapide est envoyée à la fois par fenêtre; les notifications reçues pendant la requête sont rejouées après sa réponse pour respecter les écritures plus récentes; les réponses réconcilient les entrées soumises en préservant les brouillons ultérieurs. Le réducteur pur `applySettingsMutation`, placé dans `settings.js`, fournit la même validation au worker et aux deux harnais. Les tests simulés ne remplacent pas la validation avec les extensions chargées.
 
-Les documents historiques signalent aussi un secours des préférences dans le `localStorage` du site et une liste d’autorisation vide permissive. Leur suivi reste dans [Travaux restants](travaux-restants.md); cette réorganisation ne change pas ces comportements.
+Le panneau intégré conserve une valeur attendue par champ modifié et envoie
+une seule mutation de préférences à la fois. Les notifications actualisent les
+valeurs enregistrées tout en préservant les modifications en cours. Une
+réponse confirme uniquement les valeurs soumises. Après un conflit, le panneau
+demande une confirmation avant de renvoyer la saisie. Les brouillons restent
+en mémoire de la page et le worker assure la persistance via `MUTATE_SETTINGS`.
+Le panneau ne lit et n’écrit plus de préférences dans le stockage du site.
 
 ## Outils, tests et livraison
 

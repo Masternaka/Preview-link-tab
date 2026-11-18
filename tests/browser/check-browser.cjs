@@ -42,7 +42,12 @@ const server = http.createServer((req, res) => {
     const context = await browser.newContext({ viewport: { width: 1040, height: 760 } });
     const positions = new Map();
     let saved = settingsApi.cleanPeekSettings({ animation: 'none', autoCompactFallback: false, closeAfterOpen: false });
+    let competingPosition = null;
     const mutateSavedSettings = message => {
+      if (competingPosition && message.scalars?.some(change => change.key === 'position')) {
+        saved = settingsApi.cleanPeekSettings({ ...saved, position: competingPosition });
+        competingPosition = null;
+      }
       const result = settingsApi.applySettingsMutation(saved, message);
       if (!result.conflict) saved = result.settings;
       return { ok: true, ...result };
@@ -172,6 +177,28 @@ const server = http.createServer((req, res) => {
     await settingsButton.click();
     assert.equal(await settingsButton.getAttribute('aria-expanded'), 'true');
     assert(await page.locator('.peek-settings').isVisible());
+    const position = page.locator('.peek-settings select[name="position"]');
+    const initialPosition = await position.inputValue();
+    competingPosition = 'bottomRight';
+    await position.selectOption('topLeft');
+    const retrySettings = page.getByRole('button', { name: 'Enregistrer mes modifications' });
+    await retrySettings.waitFor({ state: 'visible' });
+    assert.equal(saved.position, 'bottomRight');
+    assert.equal(await position.inputValue(), 'topLeft');
+    const settingsStatus = page.locator('.peek-settings-status');
+    assert.match(await settingsStatus.innerText(), /ont changé ailleurs/);
+    assert(await settingsStatus.evaluate(status =>
+      getComputedStyle(status).color === getComputedStyle(status.closest('form').elements.position).color),
+    'le message doit utiliser la couleur de texte du thème');
+    if (process.env.QA_SCREENSHOT_DIR) {
+      fs.mkdirSync(process.env.QA_SCREENSHOT_DIR, { recursive: true });
+      await page.screenshot({ path: path.join(process.env.QA_SCREENSHOT_DIR, 'preview-settings-conflict.png') });
+    }
+    await retrySettings.click();
+    await page.locator('.peek-settings-retry').waitFor({ state: 'hidden' });
+    assert.equal(saved.position, 'topLeft');
+    await position.selectOption(initialPosition);
+    await page.waitForFunction(async expected => (await window.previewTestApi({ type: 'READ_SETTINGS' })).position === expected, initialPosition);
     await settingsButton.click();
     assert.equal(await settingsButton.getAttribute('aria-expanded'), 'false');
     // Depuis le panneau, l'ordre natif de tabulation peut passer par l'iframe selon la plateforme.

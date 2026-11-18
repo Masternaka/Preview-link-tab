@@ -116,7 +116,7 @@ function baseContext() {
   return { context, window, timers };
 }
 
-async function contentHarness({ embedded = false } = {}) {
+async function contentHarness({ embedded = false, configure = () => {} } = {}) {
   const harness = baseContext();
   const { context } = harness;
   class Element {
@@ -152,6 +152,7 @@ async function contentHarness({ embedded = false } = {}) {
       } }
     }
   });
+  configure(context);
   const runFrames = () => {
     let remaining = 50;
     while (frames.size && remaining-- > 0) {
@@ -165,7 +166,7 @@ async function contentHarness({ embedded = false } = {}) {
     vm.runInContext(source('content.js'), context);
     return { ...harness, document, messages, runFrames, frames, store, mutations };
   }
-  const script = source('content.js').replace(/\}\)\(\);\s*$/, 'this.testApi = { STATE, startPreviewLoadTimer, doClose, openPreview, panelGestureRect, initResizeListeners, applyOverlayLayout, scheduleOverlayLayout, saveSettings, recordPreviewNavigation, navigatePreviewHistory, openCurrentInTab, refreshPreview }; })();');
+  const script = source('content.js').replace(/\}\)\(\);\s*$/, 'this.testApi = { STATE, startPreviewLoadTimer, doClose, openPreview, panelGestureRect, initResizeListeners, applyOverlayLayout, scheduleOverlayLayout, editSettings, scheduleSettingsSave, saveSettings, retrySettingsSave, discardSettingsDraft, updateSettingsSaveStatus, recordPreviewNavigation, navigatePreviewHistory, openCurrentInTab, refreshPreview }; })();');
   vm.runInContext(script, context);
   await Promise.resolve();
   const { STATE } = context.testApi;
@@ -683,12 +684,185 @@ async function overlayLayoutHarness() {
 }
 
 test('les réglages de l’aperçu n’envoient au worker que les champs modifiés', async () => {
-  const { context, STATE, store, mutations } = await contentHarness();
-  context.testApi.saveSettings({ ...STATE.settings, position: 'topLeft' });
+  const { context, store, mutations } = await contentHarness();
+  context.testApi.editSettings({ position: 'topLeft' });
+  context.testApi.saveSettings();
   assert.equal(mutations.length, 1);
   assert.deepEqual(mutations[0].scalars.map(change => change.key), ['position']);
   assert.equal(mutations[0].scalars[0].value, 'topLeft');
   assert.equal(store.position, 'topLeft');
+});
+
+async function previewSettingsHarness(backend, { readFailure, writeFailure } = {}) {
+  const requests = [];
+  let pageStorageAccesses = 0;
+  const harness = await contentHarness({ configure(context) {
+    Object.defineProperty(context.window, 'localStorage', {
+      get() {
+        pageStorageAccesses++;
+        return { getItem: () => '{"trigger":"shift"}', setItem() {} };
+      }
+    });
+    const { chrome } = context;
+    if (readFailure === 'missing') {
+      delete chrome.storage;
+    } else {
+      chrome.storage.onChanged = { addListener: backend.subscribe };
+      chrome.storage.local.get = (defaults, callback) => {
+        if (readFailure === 'throw') throw new Error('Extension context invalidated');
+        if (readFailure === 'callback') chrome.runtime.lastError = { message: 'Read error' };
+        callback(backend.read());
+        delete chrome.runtime.lastError;
+      };
+      chrome.storage.local.set = () => assert.fail('Le panneau doit écrire via le worker');
+    }
+    const send = chrome.runtime.sendMessage;
+    if (writeFailure === 'missing') {
+      delete chrome.runtime.sendMessage;
+    } else {
+      chrome.runtime.sendMessage = (message, callback) => {
+        if (message.type !== 'MUTATE_SETTINGS') return send(message, callback);
+        if (writeFailure === 'throw') throw new Error('Extension context invalidated');
+        requests.push({ message, callback, runtime: chrome.runtime });
+      };
+    }
+  } });
+  const { context, STATE, timers } = harness;
+  const api = context.testApi;
+  const controls = Object.fromEntries(['status', 'retry', 'discard'].map(name => [name, element()]));
+  STATE.root = element();
+  STATE.root.querySelector = selector => controls[selector.replace('.peek-settings-', '')] || null;
+  api.updateSettingsSaveStatus();
+  return {
+    api, controls, requests, STATE,
+    pageStorageAccesses: () => pageStorageAccesses,
+    edit(updates) { api.editSettings(updates); api.saveSettings(); },
+    finishDebounce() {
+      for (const [id, callback] of timers) {
+        timers.delete(id);
+        callback();
+      }
+    },
+    reply({ error = false, runtimeError = false } = {}) {
+      const { message, callback, runtime } = requests.shift();
+      if (runtimeError) {
+        runtime.lastError = { message: 'Connection closed' };
+        callback();
+        delete runtime.lastError;
+        return;
+      }
+      const result = error ? { ok: false } : { ok: true, ...backend.applyMutation(message) };
+      callback(result);
+    }
+  };
+}
+
+test('deux panneaux conservent leurs modifications sur des champs différents', async () => {
+  const backend = settingsBackend();
+  const first = await previewSettingsHarness(backend);
+  const second = await previewSettingsHarness(backend);
+  first.edit({ position: 'topLeft' });
+  second.edit({ size: 'medium' });
+  first.reply();
+  second.reply();
+  for (const { STATE } of [first, second]) {
+    assert.equal(STATE.settings.position, 'topLeft');
+    assert.equal(STATE.settings.size, 'medium');
+  }
+  assert.equal(backend.data.position, 'topLeft');
+  assert.equal(backend.data.size, 'medium');
+});
+
+test('un changement concurrent conserve le brouillon et exige une confirmation avant de remplacer le réglage', async () => {
+  const backend = settingsBackend();
+  const { edit, reply, requests, controls, api, STATE } = await previewSettingsHarness(backend);
+  edit({ position: 'topLeft' });
+  backend.setDirect({ position: 'bottomRight' });
+  reply();
+  assert.equal(backend.data.position, 'bottomRight');
+  assert.equal(STATE.settings.position, 'topLeft');
+  assert.equal(requests.length, 0);
+  assert.match(controls.status.textContent, /ont changé ailleurs/);
+  assert.equal(controls.retry.textContent, 'Enregistrer mes modifications');
+
+  api.retrySettingsSave();
+  assert.equal(requests[0].message.scalars[0].expected, 'bottomRight');
+  reply();
+  assert.equal(backend.data.position, 'topLeft');
+  assert.equal(controls.retry.hidden, true);
+});
+
+test('une notification reçue pendant le délai du curseur conserve sa valeur et sa référence', async () => {
+  const backend = settingsBackend();
+  const { api, requests, reply, finishDebounce, STATE, controls } = await previewSettingsHarness(backend);
+  api.editSettings({ backdropOpacity: 80 });
+  api.scheduleSettingsSave();
+  backend.setDirect({ backdropOpacity: 20, theme: 'nord' });
+  assert.equal(STATE.settings.backdropOpacity, 80);
+  assert.equal(STATE.settings.theme, 'nord');
+  finishDebounce();
+  const [change] = requests[0].message.scalars;
+  assert.equal(change.value, 80);
+  assert.equal(change.expected, 35);
+  reply();
+  assert.equal(backend.data.backdropOpacity, 20);
+  assert.equal(STATE.settings.backdropOpacity, 80);
+  api.discardSettingsDraft();
+  assert.equal(STATE.settings.backdropOpacity, 20);
+  assert.equal(controls.status.textContent, '');
+});
+
+test('une réponse retardée préserve les nouvelles saisies et les notifications plus récentes', async () => {
+  const backend = settingsBackend();
+  const { edit, requests, reply, STATE } = await previewSettingsHarness(backend);
+  edit({ position: 'topLeft' });
+  const first = requests.shift();
+  const result = backend.applyMutation(first.message);
+  edit({ position: 'bottomLeft', size: 'medium' });
+  assert.equal(requests.length, 0);
+  backend.setDirect({ theme: 'nord' });
+  first.callback({ ok: true, ...result });
+  assert.equal(STATE.settings.theme, 'nord');
+  assert.equal(STATE.settings.position, 'bottomLeft');
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].message.scalars[0].expected, 'topLeft');
+  reply();
+  assert.equal(backend.data.position, 'bottomLeft');
+  assert.equal(backend.data.size, 'medium');
+});
+
+test('un échec de sauvegarde conserve le brouillon jusqu’à une nouvelle tentative', async () => {
+  for (const error of [{ error: true }, { runtimeError: true }]) {
+    const backend = settingsBackend();
+    const { edit, reply, controls, api, STATE, pageStorageAccesses } = await previewSettingsHarness(backend);
+    edit({ position: 'topLeft' });
+    reply(error);
+    assert.match(controls.status.textContent, /sauvegarde a échoué/);
+    assert.notEqual(backend.data.position, 'topLeft');
+    assert.equal(STATE.settings.position, 'topLeft');
+    api.retrySettingsSave();
+    reply();
+    assert.equal(backend.data.position, 'topLeft');
+    assert.equal(controls.status.textContent, '');
+    assert.equal(pageStorageAccesses(), 0);
+  }
+});
+
+test('un contexte indisponible conserve le brouillon sans accéder au stockage de la page', async () => {
+  for (const failure of ['missing', 'throw', 'callback']) {
+    const backend = settingsBackend();
+    const { STATE, edit, controls, pageStorageAccesses, reply } = await previewSettingsHarness(backend, {
+      readFailure: failure, writeFailure: failure === 'callback' ? null : failure
+    });
+    assert.notEqual(STATE.settings.trigger, 'shift');
+    assert.match(controls.status.textContent, /Impossible de lire/);
+    edit({ position: 'topLeft' });
+    if (failure === 'callback') reply({ runtimeError: true });
+    assert.match(controls.status.textContent, /[Rr]echargez la page/);
+    assert.equal(STATE.settings.position, 'topLeft');
+    assert.notEqual(backend.data.position, 'topLeft');
+    assert.equal(pageStorageAccesses(), 0);
+  }
 });
 
 test('un redimensionnement du viewport recalcule les dimensions du panneau', async () => {

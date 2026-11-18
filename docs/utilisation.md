@@ -42,6 +42,13 @@ l’espace disponible. Elle est redimensionnable et reste ouverte quand on revie
 à une page web. Un nouveau clic depuis le même onglet ramène la fenêtre existante
 au premier plan sans perdre les modifications en cours.
 
+La roue dentée de l’aperçu intégré enregistre ses réglages automatiquement.
+Si le même réglage change ailleurs pendant une modification, l’aperçu conserve
+la saisie et propose **Enregistrer mes modifications** ou **Abandonner les
+modifications** pour revenir aux valeurs enregistrées. En cas d’échec, choisir
+**Réessayer**. Les modifications en attente sont conservées dans la page
+ouverte et sont perdues si elle est rechargée.
+
 Les paramètres sont regroupés dans quatre rubriques : **Utilisation**, **Apparence**,
 **Sites** et **Données**. Le bouton de sauvegarde reste toujours visible ; les
 options détaillées se déplient au besoin. Les réglages disponibles comprennent :

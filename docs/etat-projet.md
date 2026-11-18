@@ -1,11 +1,12 @@
 # État du projet
 
-**Revue du 6 novembre 2026 :** la [révision du code](revue-code-2026-11-06.md)
-de la copie de travail `1.0.1` identifie six défauts reproduits avec des API
-simulées et une décision à prendre sur la liste blanche vide. Les 171 tests
-existants passent. Aucun correctif appliqué dans cette revue; traiter d’abord
-la concurrence du panneau intégré et le secours des réglages. Les résultats
-historiques ci-dessous restent distincts de cette nouvelle vérification.
+**Sauvegarde du panneau intégré — 18 novembre 2026.** Les corrections C1 et C2
+de la [revue du 6 novembre](revue-code-2026-11-06.md) sont en place localement.
+Le panneau préserve les saisies concurrentes, signale les conflits et garde les
+modifications en attente en mémoire. Les préférences sont enregistrées par le
+worker dans le stockage de l’extension. Voir les
+[vérifications](verifications.md#sauvegarde-du-panneau-intégré--18-novembre-2026).
+Les essais avec l’extension chargée restent à faire.
 
 État local au 21 octobre 2026. Version actuelle de `manifest.json` et `package.json` : `1.0.1`. Les sources étaient à cette version au début de la tâche d’automatisation. `npm run package` actualise maintenant les dossiers chargeables et les archives en une commande; `npm run dev` maintient ces sorties à jour tant que le terminal reste actif. Recharger l’extension dans le navigateur reste nécessaire. Les sections suivantes conservent les résultats historiques du même jour. Aucun changement de version, commit, push ou publication effectué pour cette automatisation.
 
@@ -135,7 +136,9 @@ Aucun essai navigateur supplémentaire n’a été exécuté pour ce ménage. Le
 
 ## Prochaine étape
 
-Valider l’extension réellement chargée dans Chrome et Firefox : navigation privée, plusieurs fenêtres de paramètres, focus et gestes. Reprendre ensuite les sujets ouverts du [suivi](travaux-restants.md), notamment le secours des réglages et la liste d’autorisation vide, après vérification du code courant.
+Valider l’extension chargée dans Chrome et Firefox, notamment les modifications
+concurrentes entre deux panneaux, la navigation privée, le focus et les gestes.
+Reprendre ensuite les autres sujets ouverts du [suivi](travaux-restants.md).
 
 ## Hooks locaux de génération
 

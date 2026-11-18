@@ -1,6 +1,8 @@
 # Révision du code — 6 novembre 2026
 
-**Statut : revue terminée, corrections proposées non appliquées.**
+**Suivi au 18 novembre 2026.** C1 et C2 ont été corrigés localement. Voir les
+[vérifications de la sauvegarde](verifications.md#sauvegarde-du-panneau-intégré--18-novembre-2026).
+Les constats et références ci-dessous décrivent la copie examinée le 6 novembre.
 
 La révision porte sur la copie de travail locale en version `1.0.1`, à partir
 de `d502e65`, avec les modifications non commitées déjà présentes. Elle inclut

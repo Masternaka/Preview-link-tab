@@ -155,15 +155,11 @@
   let previewLoadTimer = 0;
   let settingsSaveTimer = 0;
   let persistedSettings = null;
-
-  loadSettings().then(settings => {
-    persistedSettings = settings;
-    STATE.settings = settings;
-    if (STATE.root) {
-      applySettings();
-      syncControls();
-    }
-  });
+  const settingsDraft = new Map();
+  const deferredSettingsChanges = [];
+  let settingsInFlight = null;
+  let settingsReadFailed = false;
+  let settingsSaveIssue = null;
 
   if (typeof chrome !== "undefined" && chrome.storage?.onChanged) {
     chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -179,14 +175,19 @@
       if (Object.keys(next).length === 0) {
         return;
       }
-      persistedSettings = cleanSettings({ ...(persistedSettings || STATE.settings), ...next });
-      STATE.settings = cleanSettings({ ...STATE.settings, ...next });
-      if (STATE.root) {
-        applySettings();
-        syncControls();
+      if (!persistedSettings || settingsInFlight) {
+        deferredSettingsChanges.push(changes);
+      } else {
+        reconcileSettings({ ...persistedSettings, ...next });
       }
     });
   }
+
+  loadSettings().then(settings => {
+    settingsReadFailed = !settings;
+    reconcileSettings(settings || PEEK_DEFAULT_SETTINGS, !settingsReadFailed);
+    saveSettings();
+  });
 
   if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) {
     chrome.runtime.onMessage.addListener(message => {
@@ -262,6 +263,11 @@
           <div class="peek-settings-tabs" role="tablist">
             <button type="button" class="peek-settings-tab peek-settings-tab-active" data-tab="display" role="tab" aria-selected="true">Affichage</button>
             <button type="button" class="peek-settings-tab" data-tab="behavior" role="tab" aria-selected="false">Comportement</button>
+          </div>
+          <div class="peek-settings-notice">
+            <span class="peek-settings-status" role="status"></span>
+            <button type="button" class="peek-settings-retry" hidden>Réessayer</button>
+            <button type="button" class="peek-settings-discard" hidden>Abandonner les modifications</button>
           </div>
           <div class="peek-settings-panel peek-settings-panel-active" data-panel="display">
             <label>
@@ -481,13 +487,14 @@
     STATE.refreshButton.addEventListener("click", refreshPreview);
     STATE.settingsButton.addEventListener("click", toggleSettings);
     STATE.settingsPanel.addEventListener("change", handleSettingsChange);
+    root.querySelector(".peek-settings-retry").addEventListener("click", retrySettingsSave);
+    root.querySelector(".peek-settings-discard").addEventListener("click", discardSettingsDraft);
     root.addEventListener("keydown", trapFocus);
 
     // Backdrop mode buttons
     root.querySelectorAll(".peek-backdrop-mode-btn").forEach(btn => {
       btn.addEventListener("click", () => {
-        const mode = btn.dataset.mode;
-        STATE.settings = { ...STATE.settings, backdropMode: mode };
+        editSettings({ backdropMode: btn.dataset.mode });
         applySettings();
         syncControls();
         scheduleSettingsSave();
@@ -504,11 +511,7 @@
         backdropSlider.style.setProperty("--peek-slider-pct", `${pct}%`);
         const valueEl = backdropSlider.closest(".peek-backdrop-slider-row")?.querySelector(".peek-backdrop-value");
         if (valueEl) valueEl.textContent = `${val}%`;
-        if (mode === "blur") {
-          STATE.settings = { ...STATE.settings, backdropBlur: val };
-        } else {
-          STATE.settings = { ...STATE.settings, backdropOpacity: val };
-        }
+        editSettings({ [mode === "blur" ? "backdropBlur" : "backdropOpacity"]: val });
         applySettings();
         scheduleSettingsSave();
       });
@@ -520,6 +523,7 @@
 
     applySettings();
     syncControls();
+    updateSettingsSaveStatus();
 
     return root;
   }
@@ -1295,15 +1299,14 @@
 
   function handleSettingsChange(event) {
     const field = event.target;
-    if (!Object.hasOwn(PEEK_DEFAULT_SETTINGS, field.name) || (!(field instanceof HTMLInputElement) && !(field instanceof HTMLSelectElement))) {
+    if (!PEEK_MUTATION_SCALAR_KEYS.has(field.name) || (!(field instanceof HTMLInputElement) && !(field instanceof HTMLSelectElement))) {
       return;
     }
-    STATE.settings = {
-      ...STATE.settings,
+    editSettings({
       [field.name]: field.type === "checkbox" ? field.checked : field.value
-    };
+    });
     applySettings();
-    saveSettings(STATE.settings);
+    flushSettingsSave();
     if (field.name === "position" || field.name === "customLeft" || field.name === "customTop") {
       scheduleOverlayLayout({ updateDimensions: false });
     } else if (field.name === "size") {
@@ -1313,97 +1316,146 @@
 
   function loadSettings() {
     return new Promise(resolve => {
-      if (typeof chrome === "undefined" || !chrome.storage?.local) {
-        resolve(readLocalStorageSettings());
-        return;
-      }
       try {
+        if (typeof chrome === "undefined" || !chrome.storage?.local) {
+          resolve(null);
+          return;
+        }
         chrome.storage.local.get(PEEK_DEFAULT_SETTINGS, stored => {
-          if (chrome.runtime.lastError) {
-            resolve(readLocalStorageSettings());
-            return;
-          }
-          resolve(cleanSettings(stored));
+          resolve(chrome.runtime?.lastError ? null : cleanSettings(stored));
         });
-      } catch (err) {
-        console.warn("loadSettings: failed to read from chrome.storage", err.message);
-        resolve(readLocalStorageSettings());
+      } catch {
+        resolve(null);
       }
     });
   }
 
-  function saveSettings(settings) {
-    if (typeof chrome === "undefined" || !chrome.storage?.local) {
-      try {
-        window.localStorage.setItem("peek-preview-settings", JSON.stringify(settings));
-      } catch (e) {
-        /* ignore */
+  function editSettings(updates) {
+    const edited = cleanSettings({ ...STATE.settings, ...updates });
+    for (const key of Object.keys(updates)) {
+      if (samePeekMutationValue(edited[key], STATE.settings[key])) continue;
+      const expected = settingsDraft.get(key)?.expected ?? (persistedSettings || PEEK_DEFAULT_SETTINGS)[key];
+      if (!settingsInFlight?.has(key) && samePeekMutationValue(edited[key], persistedSettings?.[key])) {
+        settingsDraft.delete(key);
+      } else {
+        settingsDraft.set(key, { key, value: edited[key], expected });
       }
-      return;
     }
-    const reference = persistedSettings || STATE.settings;
-    const changes = Object.keys(PEEK_DEFAULT_SETTINGS)
-      .filter(key => key !== "savedThemes" && key !== "domainRules")
-      .filter(key => JSON.stringify(settings[key]) !== JSON.stringify(reference[key]))
-      .map(key => ({
-        key,
-        value: settings[key],
-        expected: Object.hasOwn(reference, key) ? reference[key] : null
-      }));
-    if (changes.length === 0) {
-      return;
-    }
-    const fallbackToLocalStorage = err => {
-      console.warn("saveSettings: extension context might be invalidated, falling back to localStorage", err.message);
-      try {
-        window.localStorage.setItem("peek-preview-settings", JSON.stringify(settings));
-      } catch (e) {
-        /* ignore */
+    STATE.settings = edited;
+    if (!settingsDraft.size) settingsSaveIssue = null;
+    updateSettingsSaveStatus();
+  }
+
+  function reconcileSettings(settings, hasSnapshot = true) {
+    let next = cleanSettings(settings);
+    for (const changes of deferredSettingsChanges.splice(0)) {
+      const keys = Object.keys(PEEK_DEFAULT_SETTINGS).filter(key => changes[key]);
+      const previous = cleanSettings({
+        ...next,
+        ...Object.fromEntries(keys.map(key => [key, changes[key].oldValue]))
+      });
+      for (const key of keys) {
+        // A read or reply can already include an earlier queued notification.
+        if (!hasSnapshot || samePeekMutationValue(next[key], previous[key])) {
+          next[key] = changes[key].newValue;
+        }
       }
+      next = cleanSettings(next);
+    }
+    persistedSettings = next;
+    const draft = { ...persistedSettings };
+    for (const { key, value } of settingsDraft.values()) draft[key] = value;
+    const merged = cleanSettings(draft);
+    if (!samePeekMutationValue(STATE.settings, merged)) {
+      STATE.settings = merged;
+      applySettings();
+      syncControls();
+    }
+    updateSettingsSaveStatus();
+  }
+
+  function saveSettings() {
+    if (!persistedSettings || !settingsDraft.size || settingsInFlight || settingsSaveTimer || settingsSaveIssue) return;
+    const submitted = new Map(settingsDraft);
+    settingsInFlight = submitted;
+
+    const failed = issue => {
+      settingsInFlight = null;
+      settingsSaveIssue = issue;
+      reconcileSettings(persistedSettings, false);
     };
-    const send = (mutation, retried = false) => {
-      chrome.runtime.sendMessage({ type: "MUTATE_SETTINGS", ...mutation }, response => {
-        if (chrome.runtime.lastError || !response?.ok) {
-          console.warn("saveSettings: error saving to storage", chrome.runtime.lastError?.message || response?.error);
+    try {
+      if (typeof chrome === "undefined" || !chrome.runtime?.sendMessage) {
+        failed("unavailable");
+        return;
+      }
+      chrome.runtime.sendMessage({ type: "MUTATE_SETTINGS", scalars: [...submitted.values()] }, response => {
+        if (chrome.runtime.lastError || !response?.ok || !response.settings) {
+          failed("failed");
           return;
         }
+        settingsInFlight = null;
+        settingsReadFailed = false;
         const confirmed = cleanSettings(response.settings);
         if (response.conflict) {
-          persistedSettings = confirmed;
-          if (!retried) {
-            send({
-              scalars: mutation.scalars.map(change => ({ ...change, expected: confirmed[change.key] ?? null }))
-            }, true);
+          settingsSaveIssue = "conflict";
+        } else {
+          for (const [key, change] of submitted) {
+            const draft = settingsDraft.get(key);
+            if (draft === change || samePeekMutationValue(draft.value, confirmed[key])) {
+              settingsDraft.delete(key);
+            } else {
+              draft.expected = confirmed[key];
+            }
           }
-          return;
         }
-        persistedSettings = confirmed;
+        reconcileSettings(confirmed);
+        saveSettings();
       });
+    } catch {
+      failed("unavailable");
+    }
+  }
+
+  function retrySettingsSave() {
+    if (settingsSaveIssue === "conflict") {
+      for (const draft of settingsDraft.values()) draft.expected = persistedSettings[draft.key];
+    }
+    settingsSaveIssue = null;
+    updateSettingsSaveStatus();
+    flushSettingsSave();
+  }
+
+  function discardSettingsDraft() {
+    settingsDraft.clear();
+    settingsSaveIssue = null;
+    reconcileSettings(persistedSettings);
+  }
+
+  function updateSettingsSaveStatus() {
+    const status = STATE.root?.querySelector(".peek-settings-status");
+    if (!status) return;
+    const retry = STATE.root.querySelector(".peek-settings-retry");
+    const discard = STATE.root.querySelector(".peek-settings-discard");
+    const messages = {
+      conflict: "Des réglages ont changé ailleurs. Vos modifications sont encore en attente.",
+      failed: "La sauvegarde a échoué. Réessayez ou rechargez la page si le problème persiste.",
+      unavailable: "L’extension est indisponible. Rechargez la page pour rétablir la sauvegarde."
     };
-    if (typeof chrome.runtime?.sendMessage === "function") {
-      try {
-        send({ scalars: changes });
-      } catch (err) {
-        fallbackToLocalStorage(err);
-      }
-      return;
-    }
-    try {
-      chrome.storage.local.set(settings, () => {
-        if (chrome.runtime.lastError) {
-          console.warn("saveSettings: error saving to storage", chrome.runtime.lastError.message);
-        }
-      });
-    } catch (err) {
-      fallbackToLocalStorage(err);
-    }
+    const message = messages[settingsSaveIssue] || (settingsReadFailed
+      ? "Impossible de lire les réglages enregistrés. Rechargez la page si le problème persiste."
+      : "");
+    if (status.textContent !== message) status.textContent = message;
+    retry.textContent = settingsSaveIssue === "conflict" ? "Enregistrer mes modifications" : "Réessayer";
+    retry.hidden = !settingsSaveIssue;
+    discard.hidden = !settingsSaveIssue;
   }
 
   function scheduleSettingsSave() {
     window.clearTimeout(settingsSaveTimer);
     settingsSaveTimer = window.setTimeout(() => {
       settingsSaveTimer = 0;
-      saveSettings(STATE.settings);
+      saveSettings();
     }, 180);
   }
 
@@ -1412,16 +1464,7 @@
       window.clearTimeout(settingsSaveTimer);
       settingsSaveTimer = 0;
     }
-    saveSettings(STATE.settings);
-  }
-
-  function readLocalStorageSettings() {
-    try {
-      const stored = JSON.parse(window.localStorage.getItem("peek-preview-settings"));
-      return cleanPeekSettings({ ...PEEK_DEFAULT_SETTINGS, ...stored });
-    } catch {
-      return { ...PEEK_DEFAULT_SETTINGS };
-    }
+    saveSettings();
   }
 
   function cleanSettings(settings) {
@@ -1665,10 +1708,10 @@
           if (direction) Object.assign(updates, {
             size: "custom", customWidth: Math.round(current.width), customHeight: Math.round(current.height)
           });
-          STATE.settings = cleanSettings({ ...STATE.settings, ...updates });
+          editSettings(updates);
           applySettings();
           syncControls();
-          saveSettings(STATE.settings);
+          flushSettingsSave();
         };
         finishPanelGesture = finish;
         handle.addEventListener("pointermove", move);

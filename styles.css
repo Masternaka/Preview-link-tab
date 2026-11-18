@@ -468,6 +468,34 @@ html:has(> #peek-preview-extension-root.peek-visible) {
   grid-column: 1 / -1;
 }
 
+#peek-preview-extension-root .peek-settings-notice {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  grid-column: 1 / -1;
+  font-size: 12px;
+}
+
+#peek-preview-extension-root .peek-settings-notice:has(.peek-settings-status:empty) {
+  position: absolute;
+}
+
+#peek-preview-extension-root .peek-settings-status {
+  color: var(--peek-text);
+  flex-basis: 100%;
+}
+
+#peek-preview-extension-root .peek-settings-notice button {
+  width: auto;
+  height: auto;
+  padding: 4px 8px;
+}
+
+#peek-preview-extension-root .peek-settings-notice button[hidden] {
+  display: none;
+}
+
 #peek-preview-extension-root .peek-settings-tab {
   background: var(--peek-button-bg);
   border: 1px solid var(--peek-border);

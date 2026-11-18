@@ -1,5 +1,26 @@
 # Vérifications
 
+## Sauvegarde du panneau intégré — 18 novembre 2026
+
+- Node.js 24.10.0 : 177 tests réussis. Les scénarios ciblés couvrent deux
+  panneaux, un conflit sur le même champ, une notification pendant la saisie
+  au curseur, une réponse retardée, les erreurs de sauvegarde et l’absence
+  d’accès au stockage du site.
+- Le contrôle Playwright dans Chrome a ouvert les paramètres de l’aperçu,
+  déclenché un conflit simulé sur la position et vérifié le message dans les
+  couleurs du thème, la conservation de la sélection et son enregistrement
+  après confirmation. Le test utilise une page locale et les API d’extension
+  simulées. L’outil du navigateur intégré était indisponible.
+- Builds et ZIP Chrome et Firefox `1.0.1` régénérés. Le lint Firefox a signalé
+  deux avertissements (compatibilité Android et usage d’`innerHTML`) et
+  aucune erreur.
+- Les essais avec l’extension chargée dans Chrome et Firefox restent à faire.
+  Ouvrir deux aperçus dans deux onglets, modifier des réglages différents,
+  puis comparer les valeurs. Pour déclencher un conflit, modifier un curseur
+  tout en enregistrant une autre valeur pour le même réglage depuis l’autre
+  onglet. Vérifier que le panneau conserve la saisie et propose de
+  l’enregistrer ou de l’abandonner.
+
 ## Révision du code — 6 novembre 2026
 
 - `tools/local-runtime/node --test` avec Node.js `24.10.0` : 171 tests réussis,

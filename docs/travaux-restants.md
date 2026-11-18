@@ -9,17 +9,17 @@ Les tâches terminées ont été retirées. Le fonctionnement courant des améli
 
 ## Prochaines étapes conseillées
 
-**Révision du 6 novembre 2026 :** consulter le [rapport actuel](revue-code-2026-11-06.md)
-avant de choisir le prochain lot. Il confirme six défauts encore présents :
-concurrence du panneau intégré (C1), secours dans le stockage du site (C2),
-vérification de la source des règles rapides (C3), export en erreur (C4),
-règles importées en double (C5) et Échap depuis une iframe compacte (C7).
-La liste blanche vide reste une décision produit (C6). Corriger d’abord C1
-et C2; ces recommandations ne sont pas encore implémentées.
+La [revue du 6 novembre](revue-code-2026-11-06.md) a identifié six défauts.
+La concurrence du panneau intégré (C1) et le secours dans le stockage du site
+(C2) ont été corrigés localement le 18 novembre. Les sujets ouverts sont la
+source des règles rapides (C3), l’export en erreur (C4), les règles importées
+en double (C5) et Échap depuis une iframe compacte (C7). La liste blanche vide
+reste une décision produit (C6).
 
 1. Valider les corrections existantes et celles de la revue locale, notamment les parcours privés, le redimensionnement et les paramètres concurrents avec les extensions chargées. Le [plan initial archivé](archives/corrections-revue-2026-10-21.md) est réalisé côté code; les essais réels restants sont décrits dans [Vérifications](verifications.md).
 2. Valider la version Firefox dans le navigateur, puis vérifier les archives générées par GitHub Actions.
-3. Corriger les réglages de secours et clarifier la liste d’autorisation vide.
+3. Fiabiliser l’export en cas d’erreur et la reprise des règles importées en
+   double, puis clarifier la liste d’autorisation vide.
 
 Le bouton d’annulation et l’interface visuelle des règles par site sont en place.
 Les suppressions de règles et thèmes peuvent être annulées pendant 10 secondes.
@@ -41,7 +41,6 @@ Les profils ne font pas partie du chantier retenu ; leur utilité reste à réé
 
 Ces points ont été reproduits le 1er octobre 2026 en exécutant le code avec des API simulées. Les corrections restent à faire ; cette vérification n’a pas utilisé de navigateur réel.
 
-- [ ] **P2 — Réglages de secours.** Vérification confirmée : si l’API de stockage est absente ou lève une exception, le script lit et écrit les réglages dans le `localStorage` du site. Une erreur de lecture signalée par callback lit aussi ce stockage ; une erreur d’écriture signalée par callback est seulement journalisée. Avec le stockage de l’extension disponible, le stockage du site n’est pas utilisé. Remplacer ce secours par un état temporaire en mémoire et une invitation à recharger la page ; garder les préférences persistantes dans l’extension.
 - [ ] **P2 — Liste d’autorisation vide.** Vérification confirmée : une liste vide, ou composée seulement d’espaces et de virgules, autorise tous les domaines en mode liste d’autorisation. Les règles de domaine explicites restent prioritaires, notamment les règles de blocage. Une liste renseignée filtre correctement les domaines et leurs sous-domaines. Choix recommandé : une liste d’autorisation vide n’autorise aucun domaine via cette liste. Clarifier l’interface et couvrir ce comportement par un test de non-régression.
 
 ## Améliorations techniques et de l’interface
